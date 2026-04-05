@@ -1,17 +1,18 @@
 import { useState } from 'react'
 import { registerPasskey } from './webauthn'
 import { ApiError } from '../api/client'
-import { LogoSvg } from '../App'
+import { TenantLogo } from '../App'
 
 interface Props {
   tenantSlug: string
   authorizedUserId: string
   displayName: string
   pin: string
+  logoUrl: string
   onRegistered: () => void
 }
 
-export default function RegisterScreen({ tenantSlug, authorizedUserId, displayName, pin, onRegistered }: Props) {
+export default function RegisterScreen({ tenantSlug, authorizedUserId, displayName, pin, logoUrl, onRegistered }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -38,9 +39,7 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
 
   return (
     <div className="auth-screen">
-      <div className="auth-logo">
-        <LogoSvg />
-      </div>
+      <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Fingerabdruck<br />registrieren</div>
       <div className="auth-sub">
         Hallo {displayName.split(' ')[0]}! Registriere deinen Fingerabdruck für zukünftige Anmeldungen.
@@ -49,7 +48,7 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
       {error && <p className="error-msg">{error}</p>}
 
       <button className="btn-fingerprint" onClick={handleRegister} disabled={loading}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
           <path d="M12 6c-3.31 0-6 2.69-6 6"/>
           <path d="M12 8c-2.21 0-4 1.79-4 4"/>

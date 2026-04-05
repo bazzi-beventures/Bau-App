@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { lookupUser, validatePin } from '../api/auth'
 import { ApiError } from '../api/client'
-import { LogoSvg } from '../App'
+import { TenantLogo } from '../App'
 
 interface Props {
+  logoUrl: string
   onPinValid: (tenantSlug: string, authorizedUserId: string, displayName: string, pin: string) => void
 }
 
-export default function PinScreen({ onPinValid }: Props) {
+export default function PinScreen({ logoUrl, onPinValid }: Props) {
   const [tenantSlug, setTenantSlug] = useState(() => localStorage.getItem('tenantSlug') ?? '')
   const [name, setName] = useState(() => localStorage.getItem('displayName') ?? '')
   const [pin, setPin] = useState('')
@@ -40,9 +41,7 @@ export default function PinScreen({ onPinValid }: Props) {
 
   return (
     <div className="auth-screen">
-      <div className="auth-logo">
-        <LogoSvg />
-      </div>
+      <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Willkommen zur<br />Bau-App</div>
       <div className="auth-sub">Erstmalige Anmeldung mit PIN.</div>
 

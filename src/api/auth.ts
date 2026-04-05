@@ -30,3 +30,14 @@ export async function getMe(): Promise<UserInfo> {
 export async function logout(): Promise<void> {
   await apiFetch('/pwa/auth/logout', { method: 'POST' })
 }
+
+export interface TenantInfo {
+  name: string
+  brand_color: string
+  brand_color_dark: string
+  logo_url: string
+}
+
+export async function getTenantInfo(tenantSlug: string): Promise<TenantInfo> {
+  return apiFetch(`/pwa/tenant-info?tenant_slug=${encodeURIComponent(tenantSlug)}`) as Promise<TenantInfo>
+}
