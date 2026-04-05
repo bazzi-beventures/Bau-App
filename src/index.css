@@ -546,5 +546,18 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .chat-mic-btn.recording {
   background: var(--accent-red-dim);
   border-color: rgba(239,68,68,0.4);
+  width: 72px;
+  border-radius: 20px;
 }
 .chat-mic-btn svg { width: 16px; height: 16px; }
+.chat-mic-recording-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.5px;
+  animation: rec-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes rec-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
