@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // GitHub Pages serves at https://<user>.github.io/bau-app/
 // Update BASE_PATH if the repo name is different.
-const BASE_PATH = '/bau-app/'
+const BASE_PATH = '/Bau-App/'
 
 export default defineConfig({
   base: BASE_PATH,
