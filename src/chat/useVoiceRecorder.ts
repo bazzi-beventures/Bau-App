@@ -1,19 +1,40 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
 const MAX_DURATION_MS = 120_000
 const MIN_DURATION_MS = 500
 
 export function useVoiceRecorder(onAudioReady: (blob: Blob) => void) {
   const [isRecording, setIsRecording] = useState(false)
+  const [isLocked, setIsLocked] = useState(false)
+  const [seconds, setSeconds] = useState(0)
+
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
+  const discardedRef = useRef(false)
+
+  // Tick the timer while recording
+  useEffect(() => {
+    if (isRecording) {
+      setSeconds(0)
+      intervalRef.current = setInterval(() => {
+        setSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      }, 500)
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      setSeconds(0)
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [isRecording])
 
   async function startRecording() {
+    if (isRecording) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Prefer webm/opus (Chrome/Android), fallback to mp4 (iOS/Safari), then default
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm')
@@ -23,6 +44,7 @@ export function useVoiceRecorder(onAudioReady: (blob: Blob) => void) {
         : ''
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       chunksRef.current = []
+      discardedRef.current = false
       startTimeRef.current = Date.now()
 
       recorder.ondataavailable = e => {
@@ -31,46 +53,55 @@ export function useVoiceRecorder(onAudioReady: (blob: Blob) => void) {
 
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop())
-        // Use the actual recorded MIME type (important for iOS/Safari)
+        if (discardedRef.current) return
         const actualType = recorder.mimeType || mimeType || 'audio/webm'
         const blob = new Blob(chunksRef.current, { type: actualType })
-        if (blob.size > 0) {
-          onAudioReady(blob)
-        }
+        if (blob.size > 0) onAudioReady(blob)
       }
 
       recorder.start()
       recorderRef.current = recorder
       setIsRecording(true)
+      setIsLocked(false)
 
-      // Auto-stop after MAX_DURATION_MS
-      timerRef.current = setTimeout(stopRecording, MAX_DURATION_MS)
+      autoStopRef.current = setTimeout(sendRecording, MAX_DURATION_MS)
     } catch {
-      // Microphone permission denied or unavailable
+      // Mikrofon-Zugriff verweigert
     }
   }
 
-  function stopRecording() {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    const elapsed = Date.now() - startTimeRef.current
+  function _stopMediaRecorder() {
+    if (autoStopRef.current) clearTimeout(autoStopRef.current)
+    if (intervalRef.current) clearInterval(intervalRef.current)
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      if (elapsed < MIN_DURATION_MS) {
-        // Too short — wait for minimum duration before stopping
-        const remaining = MIN_DURATION_MS - elapsed
-        setTimeout(() => {
-          if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-            recorderRef.current.stop()
-          }
-          recorderRef.current = null
-          setIsRecording(false)
-        }, remaining)
-        return
-      }
       recorderRef.current.stop()
     }
     recorderRef.current = null
     setIsRecording(false)
+    setIsLocked(false)
   }
 
-  return { isRecording, startRecording, stopRecording }
+  function sendRecording() {
+    const elapsed = Date.now() - startTimeRef.current
+    if (elapsed < MIN_DURATION_MS) {
+      setTimeout(() => {
+        discardedRef.current = false
+        _stopMediaRecorder()
+      }, MIN_DURATION_MS - elapsed)
+      return
+    }
+    discardedRef.current = false
+    _stopMediaRecorder()
+  }
+
+  function discardRecording() {
+    discardedRef.current = true
+    _stopMediaRecorder()
+  }
+
+  function lockRecording() {
+    setIsLocked(true)
+  }
+
+  return { isRecording, isLocked, seconds, startRecording, sendRecording, discardRecording, lockRecording }
 }

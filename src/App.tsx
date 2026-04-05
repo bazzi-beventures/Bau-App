@@ -7,8 +7,9 @@ import LoginScreen from './auth/LoginScreen'
 import HomeScreen from './screens/HomeScreen'
 import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
+import ProfileScreen from './screens/ProfileScreen'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'home' | 'rapport' | 'arbeitszeit'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'home' | 'rapport' | 'arbeitszeit' | 'profile'
 
 interface PinState {
   tenantSlug: string
@@ -47,10 +48,11 @@ function LogoSvg() {
 
 // Tenant-aware logo: shows company logo if available, else geometric fallback
 export function TenantLogo({ logoUrl }: { logoUrl: string }) {
-  if (logoUrl) {
+  const [imgError, setImgError] = useState(false)
+  if (logoUrl && !imgError) {
     return (
       <div className="auth-logo-img">
-        <img src={logoUrl} alt="Firmenlogo" />
+        <img src={logoUrl} alt="Firmenlogo" onError={() => setImgError(true)} />
       </div>
     )
   }
@@ -146,6 +148,19 @@ export default function App() {
         displayName={user.display_name}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  }
+
+  if (screen === 'profile' && user) {
+    const tenantSlug = localStorage.getItem('tenantSlug') ?? ''
+    return (
+      <ProfileScreen
+        displayName={user.display_name}
+        tenantSlug={tenantSlug}
+        onBack={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { logout } from '../api/auth'
 import { apiFetch, ApiError } from '../api/client'
 
 interface Props {
   displayName: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
+  onNavProfile: () => void
   onLoggedOut: () => void
 }
 
@@ -33,7 +33,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit, onLoggedOut }: Props) {
+export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
   const firstName = displayName.split(' ')[0]
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
@@ -52,11 +52,6 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
     return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
-  async function handleLogout() {
-    await logout().catch(() => {})
-    onLoggedOut()
-  }
-
   return (
     <div className="app-screen">
       {/* Header */}
@@ -73,7 +68,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
       <div className="tiles">
         <div className="tile tile-blue" onClick={onNavRapport}>
           <div className="tile-icon tile-icon-blue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
               <line x1="16" y1="13" x2="8" y2="13"/>
@@ -93,7 +88,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
 
         <div className="tile tile-green" onClick={onNavArbeitszeit}>
           <div className="tile-icon tile-icon-green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" strokeWidth="1.8">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
@@ -147,7 +142,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
       {/* Nav bar */}
       <div className="nav-bar">
         <div className="nav-item active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           </svg>
           <span>Home</span>
@@ -166,7 +161,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
           </svg>
           <span>Arbeitszeit</span>
         </div>
-        <div className="nav-item" onClick={handleLogout}>
+        <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
             <circle cx="12" cy="7" r="4"/>
