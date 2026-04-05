@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { sendMessage } from '../api/chat'
-import { ApiError } from '../api/client'
+import { ApiError, apiBlobFetch } from '../api/client'
 
 interface Props {
   displayName: string
@@ -90,35 +90,12 @@ const ACTIONS: Action[] = [
       </svg>
     ),
   },
-  {
-    label: 'Ferienantrag',
-    sub: 'Urlaub beantragen',
-    msg: 'Ich möchte Ferien nehmen',
-    iconColor: '#22c55e',
-    iconClass: 'menu-icon-green',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-      </svg>
-    ),
-  },
-  {
-    label: 'Überstunden',
-    sub: 'Saldo abfragen',
-    msg: 'Wie viele Überstunden habe ich?',
-    iconColor: '#22c55e',
-    iconClass: 'menu-icon-green',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>
-    ),
-  },
 ]
 
 export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
 
   async function handleAction(action: Action, idx: number) {
     setResult(null)
@@ -134,6 +111,29 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
       setResult({ text: 'Fehler beim Senden. Bitte erneut versuchen.', isError: true })
     } finally {
       setLoadingIdx(null)
+    }
+  }
+
+  async function handleArbeitszeitbericht() {
+    setResult(null)
+    setReportLoading(true)
+    try {
+      const { blob, filename } = await apiBlobFetch('/pwa/report/monthly-pdf')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      setResult({ text: 'Bericht wird heruntergeladen…', isError: false })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onLoggedOut()
+        return
+      }
+      setResult({ text: 'Bericht konnte nicht erstellt werden. Bitte erneut versuchen.', isError: true })
+    } finally {
+      setReportLoading(false)
     }
   }
 
@@ -168,8 +168,8 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
           <div
             key={action.label}
             className="menu-item"
-            onClick={() => loadingIdx === null && handleAction(action, idx)}
-            style={{ opacity: loadingIdx !== null && loadingIdx !== idx ? 0.5 : 1 }}
+            onClick={() => loadingIdx === null && !reportLoading && handleAction(action, idx)}
+            style={{ opacity: (loadingIdx !== null && loadingIdx !== idx) || reportLoading ? 0.5 : 1 }}
           >
             <div className={`menu-icon ${action.iconClass}`}>
               {action.icon}
@@ -183,6 +183,27 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
             <div className="menu-chevron">›</div>
           </div>
         ))}
+
+        {/* Arbeitszeitbericht — PDF download */}
+        <div
+          className="menu-item"
+          onClick={() => !reportLoading && loadingIdx === null && handleArbeitszeitbericht()}
+          style={{ opacity: reportLoading || loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="8 13 12 17 16 13"/>
+              <line x1="12" y1="17" x2="12" y2="9"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">{reportLoading ? '…' : 'Arbeitszeitbericht'}</div>
+            <div className="menu-sub">Monatszeiten &amp; Überstunden als PDF</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
       </div>
 
       {/* Nav bar */}
@@ -205,7 +226,7 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Zeit</span>
+          <span>Arbeitszeit</span>
         </div>
         <div className="nav-item" onClick={onLoggedOut}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

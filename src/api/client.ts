@@ -28,6 +28,27 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   return res.json()
 }
 
+export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail ?? detail
+    } catch {}
+    throw new ApiError(res.status, detail)
+  }
+
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'download.pdf'
+
+  return { blob: await res.blob(), filename }
+}
+
 export async function apiFormFetch(path: string, form: FormData): Promise<unknown> {
   // No Content-Type header — browser sets it with the multipart boundary
   const res = await fetch(`${BASE_URL}${path}`, {

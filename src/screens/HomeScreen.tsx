@@ -1,10 +1,18 @@
+import { useEffect, useState } from 'react'
 import { logout } from '../api/auth'
+import { apiFetch, ApiError } from '../api/client'
 
 interface Props {
   displayName: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onLoggedOut: () => void
+}
+
+interface SessionStatus {
+  status: 'active' | 'inactive' | 'on_break'
+  clock_in: string | null
+  since_minutes: number
 }
 
 function getGreeting() {
@@ -20,8 +28,29 @@ function getDateStr() {
   })
 }
 
+function formatClockIn(isoUtc: string): string {
+  const dt = new Date(isoUtc)
+  return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
+}
+
 export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit, onLoggedOut }: Props) {
   const firstName = displayName.split(' ')[0]
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchStatus() {
+      try {
+        const data = await apiFetch('/pwa/status') as SessionStatus
+        if (!cancelled) setSessionStatus(data)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) onLoggedOut()
+      }
+    }
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 30_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
 
   async function handleLogout() {
     await logout().catch(() => {})
@@ -86,10 +115,32 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
         <div className="status-card">
           <div className="status-left">
             <div className="status-label">Status</div>
-            <div className="status-value" style={{ fontSize: 16, color: 'var(--muted)' }}>—</div>
-            <div className="status-label" style={{ marginTop: 2 }}>Noch nicht eingestempelt</div>
+            {sessionStatus?.status === 'active' && (
+              <>
+                <div className="status-value" style={{ fontSize: 16, color: '#22c55e' }}>
+                  {sessionStatus.clock_in ? formatClockIn(sessionStatus.clock_in) : '—'}
+                </div>
+                <div className="status-label" style={{ marginTop: 2 }}>Eingestempelt</div>
+              </>
+            )}
+            {sessionStatus?.status === 'on_break' && (
+              <>
+                <div className="status-value" style={{ fontSize: 16, color: '#f59e0b' }}>
+                  {sessionStatus.clock_in ? formatClockIn(sessionStatus.clock_in) : '—'}
+                </div>
+                <div className="status-label" style={{ marginTop: 2 }}>In Pause</div>
+              </>
+            )}
+            {(!sessionStatus || sessionStatus.status === 'inactive') && (
+              <>
+                <div className="status-value" style={{ fontSize: 16, color: 'var(--muted)' }}>—</div>
+                <div className="status-label" style={{ marginTop: 2 }}>Noch nicht eingestempelt</div>
+              </>
+            )}
           </div>
-          <div className="status-badge-inactive">Inaktiv</div>
+          {sessionStatus?.status === 'active' && <div className="status-badge-active">Aktiv</div>}
+          {sessionStatus?.status === 'on_break' && <div className="status-badge-inactive" style={{ background: '#fef3c7', color: '#92400e' }}>In Pause</div>}
+          {(!sessionStatus || sessionStatus.status === 'inactive') && <div className="status-badge-inactive">Inaktiv</div>}
         </div>
       </div>
 
@@ -113,7 +164,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Zeit</span>
+          <span>Arbeitszeit</span>
         </div>
         <div className="nav-item" onClick={handleLogout}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
