@@ -107,21 +107,6 @@ const ACTIONS: Action[] = [
       </svg>
     ),
   },
-  {
-    label: 'Überstunden-Saldo',
-    sub: 'Aktueller Stundensaldo',
-    action: 'query_overtime',
-    iconColor: '#a78bfa',
-    iconClass: 'menu-icon-purple',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="1.8">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 6 12 12 16 14"/>
-        <line x1="2" y1="12" x2="5" y2="12"/>
-        <line x1="19" y1="12" x2="22" y2="12"/>
-      </svg>
-    ),
-  },
 ]
 
 const today = () => new Date().toISOString().slice(0, 10)
