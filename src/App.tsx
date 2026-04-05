@@ -68,6 +68,7 @@ export default function App() {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [pinState, setPinState] = useState<PinState | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
+  const [tenantName, setTenantName] = useState('')
 
   const hasStoredIdentity = Boolean(
     localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
@@ -80,6 +81,7 @@ export default function App() {
       ? getTenantInfo(tenantSlug).then(info => {
           applyTenantBranding(info)
           setLogoUrl(info.logo_url)
+          setTenantName(info.name)
         }).catch(() => undefined)
       : Promise.resolve(undefined)
 
@@ -155,11 +157,12 @@ export default function App() {
   }
 
   if (screen === 'profile' && user) {
-    const tenantSlug = localStorage.getItem('tenantSlug') ?? ''
     return (
       <ProfileScreen
         displayName={user.display_name}
-        tenantSlug={tenantSlug}
+        email={user.email}
+        role={user.role}
+        tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
         onBack={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />

@@ -530,6 +530,33 @@ input, textarea { font-family: var(--font); color: var(--text); }
   40% { opacity: 1; transform: scale(1); }
 }
 
+.confirm-buttons {
+  display: flex;
+  gap: 10px;
+  padding: 4px 16px 12px;
+  justify-content: flex-start;
+}
+.confirm-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.confirm-btn:active { opacity: 0.75; }
+.confirm-btn-yes {
+  background: var(--accent-green);
+  color: #0f172a;
+}
+.confirm-btn-no {
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
 .chat-input-bar {
   display: flex;
   align-items: flex-end;

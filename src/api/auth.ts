@@ -3,6 +3,7 @@ import { apiFetch } from './client'
 export interface UserInfo {
   authorized_user_id: string
   display_name: string
+  email: string | null
   staff_id: string | null
   staff_name: string
   tenant_id: string

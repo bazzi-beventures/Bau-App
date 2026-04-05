@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessage, sendVoice, ChatResponse } from '../api/chat'
+import { sendMessage, sendVoice, confirmReport, cancelReport, ChatResponse } from '../api/chat'
 import { ApiError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
@@ -10,6 +10,7 @@ interface Message {
   text: string
   transcription?: string
   timestamp: string
+  action_taken?: string | null
 }
 
 interface Props {
@@ -37,6 +38,7 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
     },
   ])
   const [loading, setLoading] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -57,7 +59,13 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
         text: res.reply,
         transcription: res.transcription,
         timestamp: now(),
+        action_taken: res.action_taken,
       })
+      if (res.action_taken === 'confirm_pending') {
+        setPendingConfirm(true)
+      } else {
+        setPendingConfirm(false)
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLoggedOut()
@@ -69,11 +77,41 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
     }
   }
 
+  async function handleConfirm() {
+    setPendingConfirm(false)
+    setLoading(true)
+    try {
+      const res = await confirmReport()
+      addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      addMessage({ role: 'bot', text: 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCancel() {
+    setPendingConfirm(false)
+    setLoading(true)
+    try {
+      const res = await cancelReport()
+      addMessage({ role: 'bot', text: res.reply, timestamp: now() })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      addMessage({ role: 'bot', text: 'Abgebrochen.', timestamp: now() })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function onSendText(text: string) {
+    if (pendingConfirm) return  // block new messages while awaiting confirmation
     handleResponse(text, sendMessage(text))
   }
 
   function onSendVoice(blob: Blob) {
+    if (pendingConfirm) return
     handleResponse('🎤 Sprachnachricht', sendVoice(blob))
   }
 
@@ -110,11 +148,24 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
             </div>
           </div>
         )}
+
+        {/* Confirmation buttons — shown below the pending summary message */}
+        {pendingConfirm && !loading && (
+          <div className="confirm-buttons">
+            <button className="confirm-btn confirm-btn-yes" onClick={handleConfirm}>
+              Speichern
+            </button>
+            <button className="confirm-btn confirm-btn-no" onClick={handleCancel}>
+              Abbrechen
+            </button>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} disabled={loading} />
+      {/* Input — disabled while awaiting confirmation */}
+      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} disabled={loading || pendingConfirm} />
 
       {/* Nav bar */}
       <div className="nav-bar">

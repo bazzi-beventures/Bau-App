@@ -2,12 +2,23 @@ import { logout } from '../api/auth'
 
 interface Props {
   displayName: string
-  tenantSlug: string
+  email: string | null
+  role: string
+  tenantName: string
   onBack: () => void
   onLoggedOut: () => void
 }
 
-export default function ProfileScreen({ displayName, tenantSlug, onBack, onLoggedOut }: Props) {
+function roleLabel(role: string): string {
+  switch (role) {
+    case 'admin': return 'Administrator'
+    case 'manager': return 'Manager'
+    case 'user': return 'Mitarbeiter'
+    default: return role
+  }
+}
+
+export default function ProfileScreen({ displayName, email, role, tenantName, onBack, onLoggedOut }: Props) {
   async function handleLogout() {
     await logout().catch(() => {})
     onLoggedOut()
@@ -24,20 +35,65 @@ export default function ProfileScreen({ displayName, tenantSlug, onBack, onLogge
         <div className="inner-title">Profil</div>
       </div>
 
+      {/* Avatar + Name */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 0 20px' }}>
+        <div style={{
+          width: 72, height: 72, borderRadius: '50%',
+          background: 'var(--accent-blue-dim)',
+          border: '2px solid var(--accent-blue-20)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 28, fontWeight: 600, color: 'var(--accent-blue)',
+        }}>
+          {displayName.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{displayName}</div>
+        <div style={{ marginTop: 4, fontSize: 13, color: 'var(--muted)' }}>{roleLabel(role)}</div>
+      </div>
+
       <div className="menu-list">
+        {/* E-Mail */}
         <div className="menu-item" style={{ cursor: 'default' }}>
           <div className="menu-icon menu-icon-blue">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M2 7l10 7 10-7"/>
             </svg>
           </div>
           <div className="menu-text">
-            <div className="menu-label">{displayName}</div>
-            <div className="menu-sub">{tenantSlug}</div>
+            <div className="menu-sub">E-Mail</div>
+            <div className="menu-label">{email ?? '—'}</div>
           </div>
         </div>
 
+        {/* Firma */}
+        <div className="menu-item" style={{ cursor: 'default' }}>
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
+              <rect x="2" y="7" width="20" height="15" rx="1"/>
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-sub">Firma</div>
+            <div className="menu-label">{tenantName}</div>
+          </div>
+        </div>
+
+        {/* Rolle */}
+        <div className="menu-item" style={{ cursor: 'default' }}>
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
+              <path d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2z"/>
+              <path d="M2 20c0-4 4-7 10-7s10 3 10 7"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-sub">Rolle</div>
+            <div className="menu-label">{roleLabel(role)}</div>
+          </div>
+        </div>
+
+        {/* Abmelden */}
         <div className="menu-item" onClick={handleLogout} style={{ marginTop: 16 }}>
           <div className="menu-icon menu-icon-red">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-red)" strokeWidth="1.8">

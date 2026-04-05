@@ -4,6 +4,13 @@ export interface ChatResponse {
   reply: string
   action_taken: string | null
   transcription?: string
+  report_id?: number | string
+  pending_summary?: {
+    project: string
+    date: string
+    staff: { name: string; hours: number }[]
+    items: { name: string; amount: number; unit?: string; art_nr?: string }[]
+  }
 }
 
 export async function sendMessage(text: string): Promise<ChatResponse> {
@@ -45,4 +52,12 @@ export async function submitCorrectionRequest(payload: CorrectionPayload): Promi
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<ChatResponse>
+}
+
+export async function confirmReport(): Promise<ChatResponse> {
+  return apiFetch('/pwa/chat/confirm', { method: 'POST' }) as Promise<ChatResponse>
+}
+
+export async function cancelReport(): Promise<ChatResponse> {
+  return apiFetch('/pwa/chat/cancel', { method: 'POST' }) as Promise<ChatResponse>
 }
