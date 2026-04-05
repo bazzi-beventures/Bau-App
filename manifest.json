@@ -1,0 +1,24 @@
+{
+  "name": "Bau-App",
+  "short_name": "BauApp",
+  "description": "Zeiterfassung & Rapporte für Bauarbeiter",
+  "start_url": "/bau-app/",
+  "scope": "/bau-app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/bau-app/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/bau-app/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
