@@ -29,10 +29,10 @@ export default function ChatInput({ onSendText, onSendVoice, disabled }: Props) 
   }
 
   return (
-    <div style={styles.container}>
+    <div className="chat-input-bar">
       <textarea
         ref={textareaRef}
-        style={styles.textarea}
+        className="chat-textarea"
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -41,67 +41,28 @@ export default function ChatInput({ onSendText, onSendVoice, disabled }: Props) 
         disabled={disabled || isRecording}
       />
       {text.trim() ? (
-        <button style={styles.sendBtn} onClick={submit} disabled={disabled}>
-          ➤
+        <button className="chat-send-btn" onClick={submit} disabled={disabled}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
         </button>
       ) : (
         <button
-          style={{ ...styles.micBtn, ...(isRecording ? styles.micRecording : {}) }}
+          className={`chat-mic-btn${isRecording ? ' recording' : ''}`}
           onPointerDown={startRecording}
           onPointerUp={stopRecording}
           onPointerLeave={stopRecording}
           disabled={disabled}
         >
-          {isRecording ? '⏹' : '🎤'}
+          <svg viewBox="0 0 24 24" fill="none" stroke={isRecording ? '#f87171' : 'var(--muted)'} strokeWidth="1.8">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
         </button>
       )}
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '0.5rem',
-    padding: '0.6rem 0.75rem',
-    background: '#fff',
-    borderTop: '1px solid #e4e6ea',
-    paddingBottom: 'calc(0.6rem + env(safe-area-inset-bottom, 0px))',
-  },
-  textarea: {
-    flex: 1,
-    resize: 'none',
-    border: '1.5px solid #ddd',
-    borderRadius: '1.2rem',
-    padding: '0.6rem 0.9rem',
-    fontSize: '0.95rem',
-    lineHeight: 1.4,
-    outline: 'none',
-    maxHeight: '7rem',
-    overflowY: 'auto',
-  },
-  sendBtn: {
-    background: '#1a73e8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '50%',
-    width: '2.5rem',
-    height: '2.5rem',
-    fontSize: '1rem',
-    flexShrink: 0,
-  },
-  micBtn: {
-    background: '#f0f2f5',
-    border: 'none',
-    borderRadius: '50%',
-    width: '2.5rem',
-    height: '2.5rem',
-    fontSize: '1.1rem',
-    flexShrink: 0,
-    transition: 'background 0.15s',
-  },
-  micRecording: {
-    background: '#d93025',
-  },
 }

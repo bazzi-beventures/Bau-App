@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { registerPasskey } from './webauthn'
 import { ApiError } from '../api/client'
+import { LogoSvg } from '../App'
 
 interface Props {
   tenantSlug: string
@@ -36,57 +37,33 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.icon}>🔐</div>
-        <h2 style={styles.title}>Fingerabdruck registrieren</h2>
-        <p style={styles.name}>Hallo, <strong>{displayName}</strong></p>
-        <p style={styles.desc}>
-          Tippe auf den Button und halte deinen Finger auf den Sensor.
-          Danach kannst du dich immer mit deinem Fingerabdruck anmelden.
-        </p>
-
-        {error && <p style={styles.error}>{error}</p>}
-
-        <button style={styles.button} onClick={handleRegister} disabled={loading}>
-          {loading ? '⏳ Warte auf Fingerabdruck...' : '👆 Fingerabdruck registrieren'}
-        </button>
+    <div className="auth-screen">
+      <div className="auth-logo">
+        <LogoSvg />
       </div>
+      <div className="auth-title">Fingerabdruck<br />registrieren</div>
+      <div className="auth-sub">
+        Hallo {displayName.split(' ')[0]}! Registriere deinen Fingerabdruck für zukünftige Anmeldungen.
+      </div>
+
+      {error && <p className="error-msg">{error}</p>}
+
+      <button className="btn-fingerprint" onClick={handleRegister} disabled={loading}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
+          <path d="M12 6c-3.31 0-6 2.69-6 6"/>
+          <path d="M12 8c-2.21 0-4 1.79-4 4"/>
+          <path d="M12 10c-1.1 0-2 .9-2 2"/>
+          <circle cx="12" cy="12" r="1"/>
+          <path d="M12 14v4"/>
+          <path d="M10 16h4"/>
+        </svg>
+        {loading ? 'Warte auf Fingerabdruck…' : 'Fingerabdruck jetzt registrieren'}
+      </button>
+
+      <p className="auth-footer" style={{ marginTop: 16 }}>
+        Tippe auf den Button und halte deinen Finger auf den Sensor.
+      </p>
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100dvh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '1rem',
-    background: '#f0f2f5',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '1rem',
-    padding: '2rem 1.5rem',
-    width: '100%',
-    maxWidth: '380px',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
-    textAlign: 'center',
-  },
-  icon: { fontSize: '3.5rem', marginBottom: '0.75rem' },
-  title: { fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem' },
-  name: { fontSize: '1rem', color: '#444', marginBottom: '1rem' },
-  desc: { fontSize: '0.9rem', color: '#65676b', lineHeight: 1.5, marginBottom: '1.5rem' },
-  error: { color: '#d93025', fontSize: '0.85rem', marginBottom: '0.75rem' },
-  button: {
-    padding: '1rem',
-    background: '#1a73e8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '0.5rem',
-    fontSize: '1rem',
-    fontWeight: 600,
-    width: '100%',
-  },
 }

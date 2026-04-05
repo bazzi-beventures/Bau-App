@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { lookupUser, validatePin } from '../api/auth'
 import { ApiError } from '../api/client'
+import { LogoSvg } from '../App'
 
 interface Props {
   onPinValid: (tenantSlug: string, authorizedUserId: string, displayName: string, pin: string) => void
@@ -38,37 +39,44 @@ export default function PinScreen({ onPinValid }: Props) {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.logo}>🏗️</div>
-        <h1 style={styles.title}>Bau-App</h1>
-        <p style={styles.subtitle}>Erstmalige Anmeldung</p>
+    <div className="auth-screen">
+      <div className="auth-logo">
+        <LogoSvg />
+      </div>
+      <div className="auth-title">Willkommen zur<br />Bau-App</div>
+      <div className="auth-sub">Erstmalige Anmeldung mit PIN.</div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <label style={styles.label}>Firmen-Kürzel</label>
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label className="field-label">Firmen-Kürzel</label>
           <input
-            style={styles.input}
+            className="input"
             type="text"
             value={tenantSlug}
             onChange={e => setTenantSlug(e.target.value)}
             placeholder="z.B. gehlhaar"
             autoCapitalize="none"
+            autoCorrect="off"
             required
           />
+        </div>
 
-          <label style={styles.label}>Dein Name</label>
+        <div className="field">
+          <label className="field-label">Dein Name</label>
           <input
-            style={styles.input}
+            className="input"
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="z.B. Hans Muster"
             required
           />
+        </div>
 
-          <label style={styles.label}>PIN (vom Admin erhalten)</label>
+        <div className="field">
+          <label className="field-label">PIN (vom Admin erhalten)</label>
           <input
-            style={{ ...styles.input, letterSpacing: '0.3em', textAlign: 'center', fontSize: '1.4rem' }}
+            className="input input-pin"
             type="tel"
             inputMode="numeric"
             pattern="[0-9]{6}"
@@ -78,59 +86,16 @@ export default function PinScreen({ onPinValid }: Props) {
             placeholder="000000"
             required
           />
+        </div>
 
-          {error && <p style={styles.error}>{error}</p>}
+        {error && <p className="error-msg">{error}</p>}
 
-          <button style={styles.button} type="submit" disabled={loading}>
-            {loading ? 'Prüfe...' : 'Weiter →'}
-          </button>
-        </form>
-      </div>
+        <button className="btn-primary" type="submit" disabled={loading}>
+          {loading ? 'Prüfe…' : 'Weiter →'}
+        </button>
+      </form>
+
+      <p className="auth-footer">Alle Daten verschlüsselt übertragen</p>
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100dvh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '1rem',
-    background: '#f0f2f5',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '1rem',
-    padding: '2rem 1.5rem',
-    width: '100%',
-    maxWidth: '380px',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
-    textAlign: 'center',
-  },
-  logo: { fontSize: '3rem', marginBottom: '0.5rem' },
-  title: { fontSize: '1.8rem', fontWeight: 700, color: '#1a73e8' },
-  subtitle: { color: '#65676b', marginBottom: '1.5rem', fontSize: '0.9rem' },
-  form: { display: 'flex', flexDirection: 'column', gap: '0.5rem', textAlign: 'left' },
-  label: { fontSize: '0.85rem', fontWeight: 600, color: '#444', marginTop: '0.5rem' },
-  input: {
-    padding: '0.75rem 1rem',
-    border: '1.5px solid #ddd',
-    borderRadius: '0.5rem',
-    fontSize: '1rem',
-    outline: 'none',
-    width: '100%',
-  },
-  error: { color: '#d93025', fontSize: '0.85rem', marginTop: '0.25rem' },
-  button: {
-    marginTop: '1rem',
-    padding: '0.9rem',
-    background: '#1a73e8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '0.5rem',
-    fontSize: '1rem',
-    fontWeight: 600,
-    width: '100%',
-  },
 }

@@ -4,15 +4,27 @@ import { ApiError } from './api/client'
 import PinScreen from './auth/PinScreen'
 import RegisterScreen from './auth/RegisterScreen'
 import LoginScreen from './auth/LoginScreen'
+import HomeScreen from './screens/HomeScreen'
 import ChatScreen from './chat/ChatScreen'
+import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'chat'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'home' | 'rapport' | 'arbeitszeit'
 
 interface PinState {
   tenantSlug: string
   authorizedUserId: string
   displayName: string
   pin: string
+}
+
+// Logo SVG shared across auth screens
+export function LogoSvg() {
+  return (
+    <svg viewBox="0 0 28 28" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+      <path d="M14 3L25 9v10L14 25 3 19V9z"/>
+      <path d="M14 8v12M9 11l5 3 5-3"/>
+    </svg>
+  )
 }
 
 export default function App() {
@@ -25,15 +37,13 @@ export default function App() {
   )
 
   useEffect(() => {
-    // Try to restore session from cookie
     getMe()
       .then(u => {
         setUser(u)
-        setScreen('chat')
+        setScreen('home')
       })
       .catch(err => {
         if (err instanceof ApiError && err.status === 401) {
-          // Session expired or not set — go to login or pin
           setScreen(hasStoredIdentity ? 'login' : 'pin')
         } else {
           setScreen(hasStoredIdentity ? 'login' : 'pin')
@@ -43,9 +53,11 @@ export default function App() {
 
   if (screen === 'loading') {
     return (
-      <div style={loadingStyle}>
-        <div style={{ fontSize: '3rem' }}>🏗️</div>
-        <p style={{ color: '#65676b', marginTop: '0.5rem' }}>Laden…</p>
+      <div className="loading-screen">
+        <div className="auth-logo" style={{ margin: 0 }}>
+          <LogoSvg />
+        </div>
+        <p className="loading-text">Laden…</p>
       </div>
     )
   }
@@ -66,8 +78,7 @@ export default function App() {
       <RegisterScreen
         {...pinState}
         onRegistered={() => {
-          // After registration, server set cookie — reload user
-          getMe().then(u => { setUser(u); setScreen('chat') }).catch(() => setScreen('login'))
+          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('login'))
         }}
       />
     )
@@ -77,32 +88,45 @@ export default function App() {
     return (
       <LoginScreen
         onLoggedIn={() => {
-          getMe().then(u => { setUser(u); setScreen('chat') }).catch(() => setScreen('pin'))
+          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('pin'))
         }}
       />
     )
   }
 
-  if (screen === 'chat' && user) {
+  if (screen === 'home' && user) {
+    return (
+      <HomeScreen
+        displayName={user.display_name}
+        onNavRapport={() => setScreen('rapport')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  }
+
+  if (screen === 'rapport' && user) {
     return (
       <ChatScreen
         displayName={user.display_name}
-        onLoggedOut={() => {
-          setUser(null)
-          setScreen(hasStoredIdentity ? 'login' : 'pin')
-        }}
+        activeNav="rapport"
+        onNavHome={() => setScreen('home')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  }
+
+  if (screen === 'arbeitszeit' && user) {
+    return (
+      <ArbeitsZeitScreen
+        displayName={user.display_name}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   }
 
   return null
-}
-
-const loadingStyle: React.CSSProperties = {
-  minHeight: '100dvh',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: '#f0f2f5',
 }
