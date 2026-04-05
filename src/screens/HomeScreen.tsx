@@ -44,7 +44,7 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
         const data = await apiFetch('/pwa/status') as SessionStatus
         if (!cancelled) setSessionStatus(data)
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) onLoggedOut()
+        if (!cancelled && err instanceof ApiError && err.status === 401) onLoggedOut()
       }
     }
     fetchStatus()
