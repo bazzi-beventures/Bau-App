@@ -370,6 +370,37 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .menu-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .menu-chevron { color: var(--muted); opacity: 0.4; font-size: 18px; line-height: 1; }
 
+/* ── KORREKTUR FORMULAR ─────────────────────────── */
+.correction-form {
+  margin: 0 16px 4px;
+  background: var(--surface);
+  border: 1px solid var(--accent-amber-dim);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.corr-row { display: flex; align-items: center; gap: 10px; }
+.corr-label { font-size: 12px; color: var(--muted); width: 90px; flex-shrink: 0; }
+.corr-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+}
+.corr-input:focus { border-color: var(--accent-amber); }
+.corr-actions { display: flex; gap: 8px; margin-top: 4px; }
+.corr-btn {
+  flex: 1; padding: 9px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; cursor: pointer; border: none;
+}
+.corr-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.corr-btn-cancel { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+.corr-btn-submit { background: var(--accent-amber); color: #000; }
+
 /* ── ARBEITSZEIT SCREEN ─────────────────────────── */
 .time-card {
   margin: 0 24px 16px;

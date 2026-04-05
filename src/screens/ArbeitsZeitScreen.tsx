@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { sendMessage } from '../api/chat'
+import { zeitAction, ZeitAction, submitCorrectionRequest, CorrectionPayload } from '../api/chat'
 import { ApiError, apiBlobFetch } from '../api/client'
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 interface Action {
   label: string
   sub: string
-  msg: string
+  action: ZeitAction
   iconColor: string
   iconClass: string
   icon: React.ReactNode
@@ -22,7 +22,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Einstempeln',
     sub: 'Arbeitsbeginn erfassen',
-    msg: 'Ich starte',
+    action: 'clock_in',
     iconColor: '#22c55e',
     iconClass: 'menu-icon-green',
     icon: (
@@ -34,7 +34,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Ausstempeln',
     sub: 'Arbeitsende erfassen',
-    msg: 'Feierabend',
+    action: 'clock_out',
     iconColor: '#22c55e',
     iconClass: 'menu-icon-green',
     icon: (
@@ -48,7 +48,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Pause starten',
     sub: 'Beginn der Pause',
-    msg: 'Pause',
+    action: 'start_break',
     iconColor: '#f59e0b',
     iconClass: 'menu-icon-amber',
     icon: (
@@ -64,7 +64,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Pause beenden',
     sub: 'Ende der Pause',
-    msg: 'Pause Ende',
+    action: 'end_break',
     iconColor: '#f59e0b',
     iconClass: 'menu-icon-amber',
     icon: (
@@ -78,7 +78,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Absenz melden',
     sub: 'Krankheit, Unfall, etc.',
-    msg: 'Ich bin krank',
+    action: 'report_sick',
     iconColor: '#f87171',
     iconClass: 'menu-icon-red',
     icon: (
@@ -93,7 +93,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Absenz stornieren',
     sub: 'Krankmeldung zurückziehen',
-    msg: 'Krankmeldung stornieren',
+    action: 'cancel_sick',
     iconColor: '#f87171',
     iconClass: 'menu-icon-red',
     icon: (
@@ -110,7 +110,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Urlaubssaldo',
     sub: 'Verbleibende Ferientage',
-    msg: 'Wie viele Urlaubstage habe ich noch?',
+    action: 'query_vacation',
     iconColor: '#60a5fa',
     iconClass: 'menu-icon-blue',
     icon: (
@@ -125,7 +125,7 @@ const ACTIONS: Action[] = [
   {
     label: 'Überstunden-Saldo',
     sub: 'Aktueller Stundensaldo',
-    msg: 'Was ist mein Überstundensaldo?',
+    action: 'query_overtime',
     iconColor: '#a78bfa',
     iconClass: 'menu-icon-purple',
     icon: (
@@ -139,16 +139,42 @@ const ACTIONS: Action[] = [
   },
 ]
 
+const today = () => new Date().toISOString().slice(0, 10)
+
 export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
 
+  // Korrektur-Formular
+  const [showCorrection, setShowCorrection] = useState(false)
+  const [corrForm, setCorrForm] = useState<CorrectionPayload>({
+    date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '',
+  })
+  const [corrLoading, setCorrLoading] = useState(false)
+
+  async function handleCorrectionSubmit() {
+    if (!corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()) return
+    setCorrLoading(true)
+    setResult(null)
+    try {
+      const res = await submitCorrectionRequest(corrForm)
+      setResult({ text: res.reply, isError: !res.action_taken })
+      setShowCorrection(false)
+      setCorrForm({ date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '' })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      setResult({ text: 'Fehler beim Einreichen. Bitte erneut versuchen.', isError: true })
+    } finally {
+      setCorrLoading(false)
+    }
+  }
+
   async function handleAction(action: Action, idx: number) {
     setResult(null)
     setLoadingIdx(idx)
     try {
-      const res = await sendMessage(action.msg)
+      const res = await zeitAction(action.action)
       setResult({ text: res.reply, isError: false })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -251,6 +277,94 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
           </div>
           <div className="menu-chevron">›</div>
         </div>
+
+        {/* Arbeitszeit korrigieren */}
+        <div
+          className="menu-item"
+          onClick={() => { setShowCorrection(v => !v); setResult(null) }}
+          style={{ opacity: loadingIdx !== null || reportLoading ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">Arbeitszeit korrigieren</div>
+            <div className="menu-sub">Korrekturantrag einreichen</div>
+          </div>
+          <div className="menu-chevron">{showCorrection ? '∨' : '›'}</div>
+        </div>
+
+        {/* Korrektur-Formular */}
+        {showCorrection && (
+          <div className="correction-form">
+            <div className="corr-row">
+              <label className="corr-label">Datum</label>
+              <input
+                className="corr-input"
+                type="date"
+                value={corrForm.date}
+                onChange={e => setCorrForm(f => ({ ...f, date: e.target.value }))}
+              />
+            </div>
+            <div className="corr-row">
+              <label className="corr-label">Einstempel</label>
+              <input
+                className="corr-input"
+                type="time"
+                value={corrForm.clock_in}
+                onChange={e => setCorrForm(f => ({ ...f, clock_in: e.target.value }))}
+              />
+            </div>
+            <div className="corr-row">
+              <label className="corr-label">Ausstempel</label>
+              <input
+                className="corr-input"
+                type="time"
+                value={corrForm.clock_out}
+                onChange={e => setCorrForm(f => ({ ...f, clock_out: e.target.value }))}
+              />
+            </div>
+            <div className="corr-row">
+              <label className="corr-label">Pause (Min)</label>
+              <input
+                className="corr-input"
+                type="number"
+                min="0"
+                value={corrForm.break_minutes}
+                onChange={e => setCorrForm(f => ({ ...f, break_minutes: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="corr-row">
+              <label className="corr-label">Grund</label>
+              <input
+                className="corr-input"
+                type="text"
+                placeholder="Vergessen einzustempeln, etc."
+                value={corrForm.reason}
+                onChange={e => setCorrForm(f => ({ ...f, reason: e.target.value }))}
+              />
+            </div>
+            <div className="corr-actions">
+              <button
+                className="corr-btn corr-btn-cancel"
+                onClick={() => setShowCorrection(false)}
+                disabled={corrLoading}
+              >
+                Abbrechen
+              </button>
+              <button
+                className="corr-btn corr-btn-submit"
+                onClick={handleCorrectionSubmit}
+                disabled={corrLoading || !corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()}
+              >
+                {corrLoading ? '…' : 'Einreichen'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Nav bar */}
