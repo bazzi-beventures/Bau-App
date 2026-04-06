@@ -38,7 +38,6 @@ export async function sendVoice(blob: Blob): Promise<ChatResponse> {
 export type ZeitAction =
   | 'clock_in' | 'clock_out'
   | 'start_break' | 'end_break'
-  | 'report_sick' | 'cancel_sick'
   | 'query_vacation' | 'query_overtime'
 
 export async function zeitAction(action: ZeitAction, date?: string): Promise<ChatResponse> {
