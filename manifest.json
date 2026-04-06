@@ -1,6 +1,6 @@
 {
-  "name": "Bau-App",
-  "short_name": "BauApp",
+  "name": "KI Assistent",
+  "short_name": "KI Assistent",
   "description": "Zeiterfassung & Rapporte für Bauarbeiter",
   "start_url": "/Bau-App/",
   "scope": "/Bau-App/",
