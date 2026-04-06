@@ -38,7 +38,8 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
           setError(`Biometrie-Fehler (${err.name}). Bitte Seite neu laden und nochmals versuchen.`)
         }
       } else {
-        setError('Unbekannter Fehler. Bitte Seite neu laden und nochmals versuchen.')
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(`Fehler: ${msg}`)
       }
     } finally {
       setLoading(false)
