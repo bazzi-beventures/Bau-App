@@ -7,7 +7,7 @@ DO $$
 DECLARE
   v_email        text    := 'achim.eckert@beventures.ch';
   v_display_name text    := 'Achim Eckert';
-  v_role         text    := 'user';
+  v_role         text    := 'admin';
   v_pin          text    := '123456';  -- << PIN anpassen falls gewünscht (6 Ziffern)
   v_tenant_id    uuid;
   v_user_id      uuid;
@@ -22,7 +22,7 @@ BEGIN
     RAISE EXCEPTION 'Tenant gehlhaar_test nicht gefunden.';
   END IF;
 
-  -- Authorized User einfügen (oder bestehenden reaktivieren)
+  -- Authorized User einfuegen (oder bestehenden reaktivieren)
   INSERT INTO public.authorized_users (tenant_id, email, display_name, role, is_active)
   VALUES (v_tenant_id, v_email, v_display_name, v_role, true)
   ON CONFLICT (tenant_id, email) DO UPDATE SET
@@ -36,7 +36,7 @@ BEGIN
   -- PIN hashen: sha256(authorized_user_id + ":" + pin)
   v_pin_hash := encode(digest(v_user_id::text || ':' || v_pin, 'sha256'), 'hex');
 
-  -- PWA-PIN einfügen (oder bestehenden ersetzen)
+  -- PWA-PIN einfuegen (oder bestehenden ersetzen)
   INSERT INTO public.pwa_registration_pins
     (tenant_id, authorized_user_id, pin_hash, is_used, expires_at)
   VALUES
@@ -48,5 +48,5 @@ BEGIN
     expires_at = now() + interval '30 days',
     used_at    = null;
 
-  RAISE NOTICE 'PWA-PIN erstellt für % – PIN zum Eingeben: %', v_email, v_pin;
+  RAISE NOTICE 'PWA-PIN erstellt fuer % - PIN zum Eingeben: %', v_email, v_pin;
 END $$;
