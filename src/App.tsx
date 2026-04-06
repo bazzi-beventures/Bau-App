@@ -10,12 +10,9 @@ import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
-import KpiHubScreen from './screens/KpiHubScreen'
-import KpiDashboardScreen from './screens/KpiDashboardScreen'
 import AdminApp from './admin/AdminApp'
-import type { KpiCategory } from './api/kpis'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'admin' | 'kpi-hub' | 'kpi-dashboard'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'admin'
 
 interface PinState {
   tenantSlug: string
@@ -85,7 +82,6 @@ export default function App() {
   const [logoUrl, setLogoUrl] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
-  const [kpiCategory, setKpiCategory] = useState<KpiCategory>('projekte')
 
   const hasStoredIdentity = Boolean(
     localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
@@ -186,11 +182,9 @@ export default function App() {
       <HomeScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
-        role={user.role}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
-        onNavKennzahlen={() => setScreen('kpi-hub')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
@@ -246,31 +240,6 @@ export default function App() {
         onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
-      />
-    )
-  }
-
-  if (screen === 'kpi-hub' && user) {
-    return (
-      <KpiHubScreen
-        onSelectCategory={(cat) => { setKpiCategory(cat); setScreen('kpi-dashboard') }}
-        onBack={() => setScreen('home')}
-        onNavRapport={() => setScreen('rapport')}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
-        onNavProfile={() => setScreen('profile')}
-      />
-    )
-  }
-
-  if (screen === 'kpi-dashboard' && user) {
-    return (
-      <KpiDashboardScreen
-        category={kpiCategory}
-        onBack={() => setScreen('kpi-hub')}
-        onNavRapport={() => setScreen('rapport')}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />

@@ -78,6 +78,9 @@ function IconKey() {
 function IconUpload() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1zM6.293 6.707a1 1 0 0 1 0-1.414l3-3a1 1 0 0 1 1.414 0l3 3a1 1 0 0 1-1.414 1.414L11 5.414V13a1 1 0 1 1-2 0V5.414L7.707 6.707a1 1 0 0 1-1.414 0z" clipRule="evenodd"/></svg>
 }
+function IconChart() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-5zm6-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V7zm6-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V4z"/></svg>
+}
 function IconLogout() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 0 0-1 1v12a1 1 0 1 0 2 0V5h10v11a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H3zm7 9a1 1 0 0 0 1-1V7.414l1.293 1.293a1 1 0 1 0 1.414-1.414l-3-3a1 1 0 0 0-1.414 0l-3 3a1 1 0 1 0 1.414 1.414L9 7.414V11a1 1 0 0 0 1 1z" clipRule="evenodd"/></svg>
 }
@@ -117,6 +120,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
         <NavItem label="Offerten" target="quotes" current={screen} onNav={onNav} icon={<IconReceipt />} />
         <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} badge={badges?.invoices} />
         <NavItem label="Lieferantenpreise" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
+
+        <div className="admin-nav-group-label">Analyse</div>
+        <NavItem label="Kennzahlen" target="kpis" current={screen} onNav={onNav} icon={<IconChart />} />
 
         <div className="admin-nav-group-label">System</div>
         <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />

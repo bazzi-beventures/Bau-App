@@ -735,3 +735,87 @@
     padding: 20px 16px;
   }
 }
+
+/* ── KPI SCREEN ─────────────────────────────────── */
+.kpi-admin-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--admin-border);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.kpi-admin-tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--admin-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.kpi-admin-tab:hover { color: var(--admin-text); }
+.kpi-admin-tab.active { color: var(--admin-accent); border-bottom-color: var(--admin-accent); }
+
+.kpi-admin-content { flex: 1; overflow-y: auto; }
+
+.kpi-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.kpi-admin-card {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  padding: 20px 20px 16px;
+  position: relative;
+}
+
+.kpi-admin-card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--admin-muted);
+  margin-bottom: 8px;
+}
+
+.kpi-admin-card-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-family: 'DM Mono', monospace;
+  word-break: break-word;
+}
+
+.kpi-admin-card-unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--admin-muted);
+}
+
+.kpi-admin-card-dot {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.kpi-admin-spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--admin-border);
+  border-top-color: var(--admin-accent);
+  animation: kpi-admin-spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+@keyframes kpi-admin-spin { to { transform: rotate(360deg); } }

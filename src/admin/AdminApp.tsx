@@ -15,6 +15,7 @@ import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import UsersScreen from './system/UsersScreen'
 import ImportScreen from './system/ImportScreen'
+import KpiScreen from './kpis/KpiScreen'
 import './admin.css'
 
 function ComingSoon({ title }: { title: string }) {
@@ -56,6 +57,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'pricing-rules': 'Lieferantenpreise',
   'users': 'Benutzerverwaltung',
   'import': 'Import / Upload',
+  'kpis': 'Kennzahlen',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Props) {
@@ -89,6 +91,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
       case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
       case 'import':       return <ImportScreen />
+      case 'kpis':         return <KpiScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
