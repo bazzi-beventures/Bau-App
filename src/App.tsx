@@ -176,6 +176,7 @@ export default function App() {
         activeNav="rapport"
         onNavHome={() => setScreen('home')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
@@ -187,6 +188,7 @@ export default function App() {
         displayName={user.display_name}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )

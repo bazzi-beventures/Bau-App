@@ -6,6 +6,7 @@ interface Props {
   displayName: string
   onNavHome: () => void
   onNavRapport: () => void
+  onNavProfile: () => void
   onLoggedOut: () => void
 }
 
@@ -111,7 +112,7 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut }: Props) {
+export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -359,7 +360,7 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onLoggedOut
           </svg>
           <span>Arbeitszeit</span>
         </div>
-        <div className="nav-item" onClick={onLoggedOut}>
+        <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
             <circle cx="12" cy="7" r="4"/>
