@@ -74,12 +74,11 @@ export default function StaffScreen({ onNav }: Props) {
                 <th>Funktion</th>
                 <th>E-Mail</th>
                 <th>Rolle</th>
-                <th>Stundenlohn</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} className="admin-table-empty">Keine Mitarbeiter gefunden.</td></tr>
+                <tr><td colSpan={5} className="admin-table-empty">Keine Mitarbeiter gefunden.</td></tr>
               ) : filtered.map(s => (
                 <tr key={s.id} onClick={() => setSelected(s)}>
                   <td><strong>{s.name}</strong></td>
@@ -92,7 +91,6 @@ export default function StaffScreen({ onNav }: Props) {
                       : <span className="admin-badge admin-badge-draft">—</span>
                     }
                   </td>
-                  <td>{s.hourly_rate ? `CHF ${s.hourly_rate.toFixed(2)}/h` : '—'}</td>
                 </tr>
               ))}
             </tbody>

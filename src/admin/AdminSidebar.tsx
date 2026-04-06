@@ -98,11 +98,11 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
   return (
     <aside className="admin-sidebar">
       <div className="admin-sidebar-header">
+        <span className="admin-sidebar-tenant">{tenantName || 'Admin'}</span>
         {logoUrl && !imgError
           ? <img className="admin-sidebar-logo" src={logoUrl} alt="Logo" onError={() => setImgError(true)} />
           : <div className="admin-sidebar-logo-fallback">{tenantInitial}</div>
         }
-        <span className="admin-sidebar-tenant">{tenantName || 'Admin'}</span>
       </div>
 
       <nav className="admin-nav">
