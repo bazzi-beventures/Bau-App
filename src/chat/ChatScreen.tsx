@@ -297,7 +297,6 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
                   a.download = filename
                   a.click()
                   URL.revokeObjectURL(url)
-                  setDownloadReportId(null)
                 } catch (err) {
                   if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
                 } finally {
