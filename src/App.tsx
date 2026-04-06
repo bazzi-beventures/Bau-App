@@ -10,8 +10,9 @@ import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
+import AdminApp from './admin/AdminApp'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'admin'
 
 interface PinState {
   tenantSlug: string
@@ -69,7 +70,9 @@ export function TenantLogo({ logoUrl }: { logoUrl: string }) {
 }
 
 function nextScreenAfterLogin(u: UserInfo): Screen {
-  return u.consent_required ? 'consent' : 'home'
+  if (u.consent_required) return 'consent'
+  if (u.role === 'admin' || u.role === 'superadmin') return 'admin'
+  return 'home'
 }
 
 export default function App() {
@@ -235,6 +238,17 @@ export default function App() {
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  }
+
+  if (screen === 'admin' && user) {
+    return (
+      <AdminApp
+        user={user}
+        logoUrl={logoUrl}
+        tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
