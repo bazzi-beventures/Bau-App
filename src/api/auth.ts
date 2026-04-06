@@ -8,6 +8,8 @@ export interface UserInfo {
   staff_name: string
   tenant_id: string
   role: string
+  consent_version: string | null
+  consent_required: boolean
 }
 
 export async function lookupUser(tenantSlug: string, displayName: string): Promise<{ authorized_user_id: string; display_name: string }> {
@@ -30,6 +32,10 @@ export async function getMe(): Promise<UserInfo> {
 
 export async function logout(): Promise<void> {
   await apiFetch('/pwa/auth/logout', { method: 'POST' })
+}
+
+export async function acceptConsent(): Promise<void> {
+  await apiFetch('/pwa/auth/accept-consent', { method: 'POST' })
 }
 
 export interface TenantInfo {

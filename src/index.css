@@ -181,6 +181,29 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .auth-footer { font-size: 12px; color: var(--muted); text-align: center; margin-top: 20px; }
 .error-msg { font-size: 13px; color: var(--accent-red); margin: 8px 0; }
 
+.auth-screen.consent-screen {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding-top: 40px;
+}
+
+.consent-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 16px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  overflow-y: auto;
+  max-height: 45dvh;
+}
+
+.consent-box p { margin: 8px 0 4px; }
+.consent-box ul { margin: 0 0 8px; padding-left: 18px; }
+.consent-box li { margin-bottom: 2px; }
+
 /* ── HEADER LOGO ────────────────────────────────── */
 .header-logo {
   height: 28px;

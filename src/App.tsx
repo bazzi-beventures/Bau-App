@@ -4,12 +4,13 @@ import { ApiError } from './api/client'
 import PinScreen from './auth/PinScreen'
 import RegisterScreen from './auth/RegisterScreen'
 import LoginScreen from './auth/LoginScreen'
+import ConsentScreen from './auth/ConsentScreen'
 import HomeScreen from './screens/HomeScreen'
 import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'home' | 'rapport' | 'arbeitszeit' | 'profile'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile'
 
 interface PinState {
   tenantSlug: string
@@ -66,6 +67,10 @@ export function TenantLogo({ logoUrl }: { logoUrl: string }) {
   )
 }
 
+function nextScreenAfterLogin(u: UserInfo): Screen {
+  return u.consent_required ? 'consent' : 'home'
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [user, setUser] = useState<UserInfo | null>(null)
@@ -98,8 +103,9 @@ export default function App() {
       if ('error' in (userResult as object)) {
         setScreen(hasStoredIdentity ? 'login' : 'pin')
       } else {
-        setUser(userResult as UserInfo)
-        setScreen('home')
+        const u = userResult as UserInfo
+        setUser(u)
+        setScreen(nextScreenAfterLogin(u))
       }
     })
   }, [])
@@ -134,7 +140,7 @@ export default function App() {
         {...pinState}
         logoUrl={logoUrl}
         onRegistered={() => {
-          getMe().then(u => { setUser(u); loadBranding(); setScreen('home') }).catch(() => setScreen('login'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('login'))
         }}
       />
     )
@@ -145,7 +151,19 @@ export default function App() {
       <LoginScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
-          getMe().then(u => { setUser(u); loadBranding(); setScreen('home') }).catch(() => setScreen('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
+        }}
+      />
+    )
+  }
+
+  if (screen === 'consent' && user) {
+    return (
+      <ConsentScreen
+        logoUrl={logoUrl}
+        displayName={user.display_name}
+        onAccepted={() => {
+          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('home'))
         }}
       />
     )
