@@ -1,4 +1,4 @@
-import { apiFetch, apiFormFetch } from './client'
+import { apiFetch, apiBlobFetch, apiFormFetch } from './client'
 
 export interface DisambiguationOption {
   name: string
@@ -82,6 +82,10 @@ export async function signReport(reportId: number, signatureBase64: string): Pro
     method: 'POST',
     body: JSON.stringify({ signature_base64: signatureBase64 }),
   })
+}
+
+export async function downloadRapportPdf(reportId: number): Promise<{ blob: Blob; filename: string }> {
+  return apiBlobFetch(`/pwa/chat/report/${reportId}/pdf`)
 }
 
 export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {

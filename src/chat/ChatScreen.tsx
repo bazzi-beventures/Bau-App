@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, ChatResponse, DisambiguationOption } from '../api/chat'
+import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
 import { ApiError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
@@ -46,6 +46,8 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
   const [pendingDisambiguation, setPendingDisambiguation] = useState(false)
   const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(false)
   const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(null)
+  const [downloadReportId, setDownloadReportId] = useState<number | null>(null)
+  const [pdfDownloading, setPdfDownloading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -271,9 +273,44 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
         {pendingSignReportId !== null && (
           <SignaturePad
             reportId={pendingSignReportId}
-            onDone={() => setPendingSignReportId(null)}
+            onDone={() => {
+              setDownloadReportId(pendingSignReportId)
+              setPendingSignReportId(null)
+            }}
             onLoggedOut={onLoggedOut}
           />
+        )}
+
+        {/* PDF Download button — shown after signature is done or skipped */}
+        {downloadReportId !== null && (
+          <div className="confirm-buttons">
+            <button
+              className="confirm-btn confirm-btn-yes"
+              disabled={pdfDownloading}
+              onClick={async () => {
+                setPdfDownloading(true)
+                try {
+                  const { blob, filename } = await downloadRapportPdf(downloadReportId)
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = filename
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  setDownloadReportId(null)
+                } catch (err) {
+                  if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+                } finally {
+                  setPdfDownloading(false)
+                }
+              }}
+            >
+              {pdfDownloading ? 'PDF wird erstellt…' : '📄 Rapport als PDF'}
+            </button>
+            <button className="confirm-btn confirm-btn-no" onClick={() => setDownloadReportId(null)}>
+              Schliessen
+            </button>
+          </div>
         )}
 
         <div ref={bottomRef} />
