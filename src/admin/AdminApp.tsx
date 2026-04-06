@@ -4,6 +4,10 @@ import { getAdminDashboard, AdminDashboard } from '../api/admin'
 import AdminSidebar from './AdminSidebar'
 import { useAdminNav, AdminScreen } from './useAdminNav'
 import DashboardScreen from './dashboard/DashboardScreen'
+import StaffScreen from './personal/StaffScreen'
+import AbsencesScreen from './personal/AbsencesScreen'
+import CorrectionsScreen from './personal/CorrectionsScreen'
+import HrReportsScreen from './personal/HrReportsScreen'
 import './admin.css'
 
 // Lazy placeholder for screens not yet built
@@ -52,9 +56,18 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
   const { screen, detailId, nav } = useAdminNav()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
 
+  async function loadDashboard() {
+    try {
+      setDashboard(await getAdminDashboard())
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { loadDashboard() }, [])
+
+  // Reload dashboard when returning to it
   useEffect(() => {
-    getAdminDashboard().then(setDashboard).catch(() => {})
-  }, [])
+    if (screen === 'dashboard') loadDashboard()
+  }, [screen])
 
   const badges = {
     corrections: dashboard?.pending_corrections ?? 0,
@@ -66,6 +79,14 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
     switch (screen) {
       case 'dashboard':
         return <DashboardScreen dashboard={dashboard} onNav={nav} />
+      case 'staff':
+        return <StaffScreen />
+      case 'absences':
+        return <AbsencesScreen />
+      case 'corrections':
+        return <CorrectionsScreen />
+      case 'hr-reports':
+        return <HrReportsScreen />
       default:
         return <ComingSoon title={SCREEN_TITLES[screen]} />
     }

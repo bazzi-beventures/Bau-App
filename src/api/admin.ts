@@ -172,3 +172,26 @@ export async function getInvoicePdf(id: string): Promise<Blob> {
   if (!resp.ok) throw new Error('PDF-Download fehlgeschlagen')
   return resp.blob()
 }
+
+// ─── HR Timesheet ───────────────────────────────────────────
+
+export interface WorkSession {
+  id: string
+  staff_name: string
+  date: string
+  clock_in: string
+  clock_out: string | null
+  break_minutes: number
+  total_minutes: number | null
+}
+
+export interface LaborHourRow {
+  staff_name: string
+  project_name: string
+  hours: number
+  date: string
+}
+
+export async function getAdminHrTimesheet(dateFrom: string, dateTo: string): Promise<{ sessions: WorkSession[]; labor_hours: LaborHourRow[] }> {
+  return apiFetch(`/pwa/admin/hr/timesheet?date_from=${dateFrom}&date_to=${dateTo}`) as Promise<{ sessions: WorkSession[]; labor_hours: LaborHourRow[] }>
+}
