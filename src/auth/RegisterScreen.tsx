@@ -27,10 +27,18 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
         if (err.message === 'invalid_pin') setError('PIN ungültig oder abgelaufen. Bitte Admin um neuen PIN bitten.')
         else if (err.message === 'verification_failed') setError('Biometrie-Verifizierung fehlgeschlagen. Bitte erneut versuchen.')
         else setError(`Fehler: ${err.message}`)
-      } else if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        setError('Registrierung abgebrochen.')
+      } else if (err instanceof DOMException) {
+        if (err.name === 'NotAllowedError') {
+          setError('Registrierung abgebrochen oder Biometrie fehlgeschlagen. Bitte nochmals versuchen.')
+        } else if (err.name === 'InvalidStateError') {
+          setError('Dieses Gerät ist bereits registriert. Bitte Admin kontaktieren.')
+        } else if (err.name === 'SecurityError') {
+          setError('Sicherheitsfehler. Bitte die Seite neu laden (Cache leeren).')
+        } else {
+          setError(`Biometrie-Fehler (${err.name}). Bitte Seite neu laden und nochmals versuchen.`)
+        }
       } else {
-        setError('Unbekannter Fehler. Bitte erneut versuchen.')
+        setError('Unbekannter Fehler. Bitte Seite neu laden und nochmals versuchen.')
       }
     } finally {
       setLoading(false)
