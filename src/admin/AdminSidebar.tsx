@@ -102,8 +102,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
 
         <div className="admin-nav-group-label">Personal</div>
         <NavItem label="Mitarbeiter" target="staff" current={screen} onNav={onNav} icon={<IconUsers />} />
-        <NavItem label="Absenzen" target="absences" current={screen} onNav={onNav} icon={<IconCalendar />} badge={badges?.absences} />
-        <NavItem label="Zeitkorrekturen" target="corrections" current={screen} onNav={onNav} icon={<IconClock />} badge={badges?.corrections} />
+<NavItem label="Zeitkorrekturen" target="corrections" current={screen} onNav={onNav} icon={<IconClock />} badge={badges?.corrections} />
         <NavItem label="HR-Berichte" target="hr-reports" current={screen} onNav={onNav} icon={<IconDocument />} />
 
         <div className="admin-nav-group-label">Operativ</div>
