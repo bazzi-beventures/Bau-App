@@ -8,16 +8,20 @@ import StaffScreen from './personal/StaffScreen'
 import AbsencesScreen from './personal/AbsencesScreen'
 import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
+import ProjectsScreen from './operative/ProjectsScreen'
+import MaterialsScreen from './operative/MaterialsScreen'
+import QuotesScreen from './operative/QuotesScreen'
+import InvoicesScreen from './operative/InvoicesScreen'
+import PricingRulesScreen from './operative/PricingRulesScreen'
 import './admin.css'
 
-// Lazy placeholder for screens not yet built
 function ComingSoon({ title }: { title: string }) {
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">{title}</div>
-          <div className="admin-page-subtitle">Wird in einer der nächsten Phasen implementiert.</div>
+          <div className="admin-page-subtitle">Wird in Phase 5 implementiert.</div>
         </div>
       </div>
       <div className="admin-loading" style={{ height: 300, flexDirection: 'column', gap: 16 }}>
@@ -53,21 +57,15 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Props) {
-  const { screen, detailId, nav } = useAdminNav()
+  const { screen, nav } = useAdminNav()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
 
   async function loadDashboard() {
-    try {
-      setDashboard(await getAdminDashboard())
-    } catch { /* ignore */ }
+    try { setDashboard(await getAdminDashboard()) } catch { /* ignore */ }
   }
 
   useEffect(() => { loadDashboard() }, [])
-
-  // Reload dashboard when returning to it
-  useEffect(() => {
-    if (screen === 'dashboard') loadDashboard()
-  }, [screen])
+  useEffect(() => { if (screen === 'dashboard') loadDashboard() }, [screen])
 
   const badges = {
     corrections: dashboard?.pending_corrections ?? 0,
@@ -77,18 +75,17 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
 
   function renderScreen() {
     switch (screen) {
-      case 'dashboard':
-        return <DashboardScreen dashboard={dashboard} onNav={nav} />
-      case 'staff':
-        return <StaffScreen />
-      case 'absences':
-        return <AbsencesScreen />
-      case 'corrections':
-        return <CorrectionsScreen />
-      case 'hr-reports':
-        return <HrReportsScreen />
-      default:
-        return <ComingSoon title={SCREEN_TITLES[screen]} />
+      case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} />
+      case 'staff':        return <StaffScreen />
+      case 'absences':     return <AbsencesScreen />
+      case 'corrections':  return <CorrectionsScreen />
+      case 'hr-reports':   return <HrReportsScreen />
+      case 'projects':     return <ProjectsScreen />
+      case 'materials':    return <MaterialsScreen />
+      case 'quotes':       return <QuotesScreen />
+      case 'invoices':     return <InvoicesScreen />
+      case 'pricing-rules':return <PricingRulesScreen />
+      default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
 

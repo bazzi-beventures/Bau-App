@@ -1,0 +1,198 @@
+import { useEffect, useState } from 'react'
+import { apiFetch } from '../../api/client'
+
+interface PricingRule {
+  id: string
+  markup_pct: number
+  category: string | null
+  suppliers: { name: string; prefix: string } | null
+}
+
+interface EditState {
+  supplier_name: string
+  category: string
+  markup_pct: string
+}
+
+export default function PricingRulesScreen() {
+  const [rules, setRules] = useState<PricingRule[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<PricingRule | 'new' | null>(null)
+  const [form, setForm] = useState<EditState>({ supplier_name: '', category: '', markup_pct: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    try {
+      setRules(await apiFetch('/pwa/admin/pricing-rules') as PricingRule[])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  function openNew() {
+    setForm({ supplier_name: '', category: '', markup_pct: '' })
+    setEditing('new')
+    setError('')
+  }
+
+  function openEdit(r: PricingRule) {
+    setForm({
+      supplier_name: r.suppliers?.name ?? '',
+      category: r.category ?? '',
+      markup_pct: r.markup_pct.toString(),
+    })
+    setEditing(r)
+    setError('')
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.supplier_name.trim() || !form.markup_pct) return
+    setSaving(true)
+    setError('')
+    try {
+      await apiFetch('/pwa/admin/pricing-rules', {
+        method: 'POST',
+        body: JSON.stringify({
+          supplier_name: form.supplier_name.trim(),
+          category: form.category.trim() || null,
+          markup_pct: parseFloat(form.markup_pct),
+        }),
+      })
+      setEditing(null)
+      setToast('Preisregel gespeichert')
+      setTimeout(() => setToast(null), 3000)
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // VK = EK × (1 + markup_pct / 100)
+  const pctNum = parseFloat(form.markup_pct)
+  const previewFactor = isNaN(pctNum) ? null : (1 + pctNum / 100).toFixed(3)
+
+  return (
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div>
+          <div className="admin-page-title">Lieferantenpreise</div>
+          <div className="admin-page-subtitle">Aufschläge auf Einkaufspreise (VK = EK × (1 + Aufschlag%))</div>
+        </div>
+        <button className="admin-btn admin-btn-primary" onClick={openNew}>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1z" clipRule="evenodd"/></svg>
+          Neue Regel
+        </button>
+      </div>
+
+      <div className="admin-table-wrap">
+        {loading ? (
+          <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Lieferant</th>
+                <th>Kategorie</th>
+                <th>Aufschlag %</th>
+                <th>Faktor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.length === 0 ? (
+                <tr><td colSpan={5} className="admin-table-empty">Keine Preisregeln definiert.</td></tr>
+              ) : rules.map(r => (
+                <tr key={r.id} onClick={() => openEdit(r)} style={{ cursor: 'pointer' }}>
+                  <td><strong>{r.suppliers?.name ?? '—'}</strong></td>
+                  <td style={{ color: 'var(--muted)' }}>{r.category || 'Alle Kategorien'}</td>
+                  <td style={{ fontWeight: 700 }}>{r.markup_pct.toFixed(1)} %</td>
+                  <td style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+                    × {(1 + r.markup_pct / 100).toFixed(3)}
+                  </td>
+                  <td>
+                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={e => { e.stopPropagation(); openEdit(r) }}>
+                      Bearbeiten
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Edit/New Modal */}
+      {editing !== null && (
+        <div className="admin-modal-overlay" onClick={() => setEditing(null)}>
+          <div className="admin-modal" onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div className="admin-modal-title">{editing === 'new' ? 'Neue Preisregel' : `${form.supplier_name} bearbeiten`}</div>
+              <button className="admin-modal-close" onClick={() => setEditing(null)}>×</button>
+            </div>
+            <form onSubmit={handleSave} className="admin-modal-body">
+              {error && <div className="admin-form-error">{error}</div>}
+              <div className="admin-form-group">
+                <label className="admin-form-label">Lieferant *</label>
+                <input
+                  className="admin-form-input"
+                  value={form.supplier_name}
+                  onChange={e => setForm(f => ({ ...f, supplier_name: e.target.value }))}
+                  required
+                  placeholder="z.B. Würth"
+                />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Kategorie (leer = alle)</label>
+                <input
+                  className="admin-form-input"
+                  value={form.category}
+                  onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                  placeholder="z.B. Befestigung"
+                />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Aufschlag % *</label>
+                <input
+                  className="admin-form-input"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="300"
+                  value={form.markup_pct}
+                  onChange={e => setForm(f => ({ ...f, markup_pct: e.target.value }))}
+                  required
+                  placeholder="z.B. 25"
+                />
+                {previewFactor && (
+                  <div className="admin-form-hint">
+                    Faktor: × {previewFactor} — EK CHF 100 → VK CHF {(100 * (1 + pctNum / 100)).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </form>
+            <div className="admin-modal-footer">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setEditing(null)}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={e => { (e.currentTarget.closest('div.admin-modal')?.querySelector('form') as HTMLFormElement)?.requestSubmit() }} disabled={saving}>
+                {saving ? 'Speichern…' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-toast-container">
+          <div className="admin-toast success">{toast}</div>
+        </div>
+      )}
+    </div>
+  )
+}
