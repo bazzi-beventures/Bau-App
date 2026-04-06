@@ -8,7 +8,6 @@ interface Quote {
   total_amount: number
   status: string
   created_at: string
-  sent_at: string | null
   pdf_url: string | null
 }
 

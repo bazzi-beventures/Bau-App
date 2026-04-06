@@ -8,12 +8,12 @@ interface Invoice {
   total_amount: number
   status: string
   created_at: string
-  sent_at: string | null
   paid_at: string | null
   pdf_url: string | null
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  ausstehend: 'Ausstehend',
   offen: 'Offen',
   gesendet: 'Gesendet',
   bezahlt: 'Bezahlt',
@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_BADGE: Record<string, string> = {
+  ausstehend: 'admin-badge-open',
   offen: 'admin-badge-open',
   gesendet: 'admin-badge-sent',
   bezahlt: 'admin-badge-paid',
@@ -97,10 +98,10 @@ export default function InvoicesScreen() {
   )
 
   const totalOpen = invoices
-    .filter(i => i.status === 'offen' || i.status === 'gesendet')
+    .filter(i => i.status === 'ausstehend' || i.status === 'offen' || i.status === 'gesendet')
     .reduce((s, i) => s + i.total_amount, 0)
 
-  const statuses = ['', 'offen', 'gesendet', 'bezahlt', 'archiviert']
+  const statuses = ['', 'ausstehend', 'offen', 'gesendet', 'bezahlt', 'archiviert']
 
   return (
     <div className="admin-page">
@@ -173,7 +174,7 @@ export default function InvoicesScreen() {
                           PDF
                         </a>
                       )}
-                      {(inv.status === 'offen' || inv.status === 'gesendet') && (
+                      {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                         <button
                           className="admin-btn admin-btn-success admin-btn-sm"
                           onClick={() => setConfirmPaid(inv)}
