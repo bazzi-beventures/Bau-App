@@ -8,6 +8,12 @@ interface PricingRule {
   suppliers: { name: string; prefix: string } | null
 }
 
+interface Supplier {
+  id: string
+  name: string
+  prefix: string
+}
+
 interface EditState {
   supplier_name: string
   category: string
@@ -16,6 +22,7 @@ interface EditState {
 
 export default function PricingRulesScreen() {
   const [rules, setRules] = useState<PricingRule[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<PricingRule | 'new' | null>(null)
   const [form, setForm] = useState<EditState>({ supplier_name: '', category: '', markup_pct: '' })
@@ -26,7 +33,12 @@ export default function PricingRulesScreen() {
   async function load() {
     setLoading(true)
     try {
-      setRules(await apiFetch('/pwa/admin/pricing-rules') as PricingRule[])
+      const [rulesData, suppliersData] = await Promise.all([
+        apiFetch('/pwa/admin/pricing-rules') as Promise<PricingRule[]>,
+        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
+      ])
+      setRules(rulesData)
+      setSuppliers(suppliersData)
     } finally {
       setLoading(false)
     }
@@ -141,13 +153,17 @@ export default function PricingRulesScreen() {
               {error && <div className="admin-form-error">{error}</div>}
               <div className="admin-form-group">
                 <label className="admin-form-label">Lieferant *</label>
-                <input
+                <select
                   className="admin-form-input"
                   value={form.supplier_name}
                   onChange={e => setForm(f => ({ ...f, supplier_name: e.target.value }))}
                   required
-                  placeholder="z.B. Würth"
-                />
+                >
+                  <option value="">— Lieferant wählen —</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kategorie (leer = alle)</label>
