@@ -23,13 +23,22 @@ BEGIN
   END IF;
 
   -- Authorized User einfuegen (oder bestehenden reaktivieren)
-  INSERT INTO public.authorized_users (tenant_id, email, display_name, role, is_active)
-  VALUES (v_tenant_id, v_email, v_display_name, v_role, true)
-  ON CONFLICT (tenant_id, email) DO UPDATE SET
-    display_name = EXCLUDED.display_name,
-    role         = EXCLUDED.role,
-    is_active    = true
-  RETURNING id INTO v_user_id;
+  SELECT id INTO v_user_id
+  FROM public.authorized_users
+  WHERE tenant_id = v_tenant_id AND email = v_email
+  LIMIT 1;
+
+  IF v_user_id IS NULL THEN
+    INSERT INTO public.authorized_users (tenant_id, email, display_name, role, is_active)
+    VALUES (v_tenant_id, v_email, v_display_name, v_role, true)
+    RETURNING id INTO v_user_id;
+  ELSE
+    UPDATE public.authorized_users SET
+      display_name = v_display_name,
+      role         = v_role,
+      is_active    = true
+    WHERE id = v_user_id;
+  END IF;
 
   RAISE NOTICE 'Authorized User: % (id: %)', v_email, v_user_id;
 
