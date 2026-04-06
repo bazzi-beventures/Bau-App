@@ -31,10 +31,10 @@ function applyTenantBranding(info: TenantInfo) {
   const c = info.brand_color
   const d = info.brand_color_dark || c
   root.style.setProperty('--accent-blue', c)
-  root.style.setProperty('--accent-blue-dim', hexToRgba(c, 0.10))
-  root.style.setProperty('--accent-blue-20', hexToRgba(c, 0.15))
-  root.style.setProperty('--accent-blue-25', hexToRgba(c, 0.20))
-  root.style.setProperty('--accent-blue-40', hexToRgba(c, 0.35))
+  root.style.setProperty('--accent-blue-dim', hexToRgba(c, 0.18))
+  root.style.setProperty('--accent-blue-20', hexToRgba(c, 0.25))
+  root.style.setProperty('--accent-blue-25', hexToRgba(c, 0.30))
+  root.style.setProperty('--accent-blue-40', hexToRgba(c, 0.50))
   root.style.setProperty('--accent-blue-dark', d)
   console.log('[Branding] applied:', c, d)
 }

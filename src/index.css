@@ -3,25 +3,25 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #f0f4f8;
-  --surface: #ffffff;
-  --surface2: #e2e8f0;
-  --border: rgba(0,0,0,0.08);
-  --text: #1e293b;
-  --muted: #64748b;
+  --bg: #0d2d41;
+  --surface: #134060;
+  --surface2: #1a5278;
+  --border: rgba(255,255,255,0.09);
+  --text: #f1f5f9;
+  --muted: #93bcd4;
   --accent-blue: #196E9C;
-  --accent-blue-dim: rgba(25,110,156,0.10);
-  --accent-blue-20: rgba(25,110,156,0.15);
-  --accent-blue-25: rgba(25,110,156,0.20);
-  --accent-blue-40: rgba(25,110,156,0.35);
+  --accent-blue-dim: rgba(25,110,156,0.18);
+  --accent-blue-20: rgba(25,110,156,0.25);
+  --accent-blue-25: rgba(25,110,156,0.30);
+  --accent-blue-40: rgba(25,110,156,0.50);
   --accent-green: #22c55e;
-  --accent-green-dim: rgba(34,197,94,0.10);
+  --accent-green-dim: rgba(34,197,94,0.12);
   --accent-amber: #f59e0b;
-  --accent-amber-dim: rgba(245,158,11,0.10);
-  --accent-red: #ef4444;
-  --accent-red-dim: rgba(239,68,68,0.08);
-  --accent-purple: #7c3aed;
-  --accent-purple-dim: rgba(124,58,237,0.10);
+  --accent-amber-dim: rgba(245,158,11,0.12);
+  --accent-red: #f87171;
+  --accent-red-dim: rgba(239,68,68,0.10);
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: rgba(167,139,250,0.12);
   --radius: 16px;
   --radius-sm: 10px;
   --font: 'DM Sans', sans-serif;
@@ -30,7 +30,7 @@
 
 html, body, #root {
   height: 100%;
-  background: #e8ecf1;
+  background: #071e2a;
   font-family: var(--font);
   color: var(--text);
   overscroll-behavior: none;
@@ -38,7 +38,7 @@ html, body, #root {
 }
 
 button { cursor: pointer; font-family: var(--font); }
-input, textarea { font-family: var(--font); color: var(--text); background: var(--surface); }
+input, textarea { font-family: var(--font); color: var(--text); }
 
 /* ── SCREEN WRAPPER ─────────────────────────────── */
 .app-screen {
@@ -179,7 +179,7 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
 .btn-fingerprint svg { width: 40px; height: 40px; }
 
 .auth-footer { font-size: 12px; color: var(--muted); text-align: center; margin-top: 20px; }
-.error-msg { font-size: 13px; color: #dc2626; margin: 8px 0; }
+.error-msg { font-size: 13px; color: var(--accent-red); margin: 8px 0; }
 
 /* ── HOME SCREEN ────────────────────────────────── */
 .home-header {
@@ -199,7 +199,6 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   font-size: 12px; color: var(--muted);
   font-family: var(--mono);
   margin-top: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 .date-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
 
@@ -220,13 +219,12 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
   position: relative; overflow: hidden;
   -webkit-tap-highlight-color: transparent;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 .tile:active { transform: scale(0.97); }
 .tile-blue { border-color: var(--accent-blue-20); }
-.tile-blue:hover { background: var(--accent-blue-dim); border-color: var(--accent-blue-40); }
-.tile-green { border-color: rgba(34,197,94,0.15); }
-.tile-green:hover { background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.3); }
+.tile-blue:hover { background: var(--surface2); border-color: var(--accent-blue-40); }
+.tile-green { border-color: rgba(34,197,94,0.2); }
+.tile-green:hover { background: var(--surface2); border-color: rgba(34,197,94,0.4); }
 
 .tile-icon {
   width: 42px; height: 42px; border-radius: 12px;
@@ -258,7 +256,6 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   border-radius: var(--radius);
   padding: 14px 16px;
   display: flex; align-items: center; justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 .status-left { display: flex; flex-direction: column; gap: 2px; }
 .status-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -272,7 +269,7 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   white-space: nowrap;
 }
 .status-badge-inactive {
-  background: #f1f5f9;
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 99px;
   padding: 4px 10px;
@@ -354,9 +351,8 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
   -webkit-tap-highlight-color: transparent;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
-.menu-item:hover { background: var(--surface2); border-color: rgba(0,0,0,0.12); }
+.menu-item:hover { background: var(--surface2); border-color: rgba(255,255,255,0.12); }
 .menu-item:active { transform: scale(0.99); }
 .menu-icon {
   width: 38px; height: 38px; border-radius: 10px;
@@ -387,7 +383,7 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
 .corr-label { font-size: 12px; color: var(--muted); width: 90px; flex-shrink: 0; }
 .corr-input {
   flex: 1;
-  background: #f8fafc;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -402,7 +398,7 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
   font-size: 13px; font-weight: 500; cursor: pointer; border: none;
 }
 .corr-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.corr-btn-cancel { background: #f1f5f9; color: var(--muted); border: 1px solid var(--border); }
+.corr-btn-cancel { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
 .corr-btn-submit { background: var(--accent-amber); color: #000; }
 
 /* ── ARBEITSZEIT SCREEN ─────────────────────────── */
@@ -553,10 +549,10 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
 .confirm-btn:active { opacity: 0.75; }
 .confirm-btn-yes {
   background: var(--accent-green);
-  color: #ffffff;
+  color: #0f172a;
 }
 .confirm-btn-no {
-  background: #f1f5f9;
+  background: var(--surface2);
   color: var(--muted);
   border: 1px solid var(--border);
 }
@@ -571,7 +567,7 @@ input, textarea { font-family: var(--font); color: var(--text); background: var(
 .disambig-btn {
   padding: 8px 14px;
   border-radius: var(--radius-sm);
-  background: #f1f5f9;
+  background: var(--surface2);
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
