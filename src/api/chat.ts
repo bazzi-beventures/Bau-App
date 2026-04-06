@@ -13,6 +13,7 @@ export interface ChatResponse {
   transcription?: string
   report_id?: number | string
   sign_url?: string
+  correction_id?: string
   disambiguation?: DisambiguationOption[]
   pending_summary?: {
     project: string
@@ -61,6 +62,12 @@ export async function submitCorrectionRequest(payload: CorrectionPayload): Promi
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<ChatResponse>
+}
+
+export async function getCorrectionStatus(correctionId: string): Promise<{ status: string; review_note: string; session_date: string }> {
+  return apiFetch(`/pwa/zeit/correction-request/${correctionId}`, {
+    method: 'GET',
+  }) as Promise<{ status: string; review_note: string; session_date: string }>
 }
 
 export async function confirmReport(): Promise<ChatResponse> {

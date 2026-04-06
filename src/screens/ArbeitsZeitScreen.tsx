@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { zeitAction, ZeitAction, submitCorrectionRequest, CorrectionPayload } from '../api/chat'
+import { useState, useEffect, useRef } from 'react'
+import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
 import { ApiError, apiBlobFetch } from '../api/client'
 
 interface Props {
@@ -124,6 +124,33 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '',
   })
   const [corrLoading, setCorrLoading] = useState(false)
+  const [pendingCorrection, setPendingCorrection] = useState<{ id: string; date: string } | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!pendingCorrection) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      return
+    }
+    const check = async () => {
+      try {
+        const s = await getCorrectionStatus(pendingCorrection.id)
+        if (s.status === 'approved') {
+          setResult({ text: `Korrektur für ${pendingCorrection.date} wurde genehmigt und angewendet.`, isError: false })
+          setPendingCorrection(null)
+        } else if (s.status === 'rejected') {
+          const note = s.review_note ? ` Grund: ${s.review_note}` : ''
+          setResult({ text: `Korrektur für ${pendingCorrection.date} wurde abgelehnt.${note}`, isError: true })
+          setPendingCorrection(null)
+        }
+      } catch {
+        // Netzwerkfehler — einfach beim nächsten Intervall neu versuchen
+      }
+    }
+    check()
+    pollRef.current = setInterval(check, 15000)
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+  }, [pendingCorrection])
 
   async function handleCorrectionSubmit() {
     if (!corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()) return
@@ -132,6 +159,9 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     try {
       const res = await submitCorrectionRequest(corrForm)
       setResult({ text: res.reply, isError: !res.action_taken })
+      if (res.correction_id) {
+        setPendingCorrection({ id: res.correction_id, date: corrForm.date })
+      }
       setShowCorrection(false)
       setCorrForm({ date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '' })
     } catch (err) {
@@ -208,6 +238,13 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
       {result && (
         <div className={`action-result${result.isError ? ' action-result-error' : ''}`}>
           {result.text}
+        </div>
+      )}
+
+      {/* Pending correction banner */}
+      {pendingCorrection && (
+        <div className="action-result" style={{ background: '#fef3c7', color: '#92400e', borderLeft: '3px solid #f59e0b' }}>
+          Korrekturantrag für {pendingCorrection.date} eingereicht. Warte auf Genehmigung…
         </div>
       )}
 
