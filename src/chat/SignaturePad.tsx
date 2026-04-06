@@ -18,18 +18,21 @@ export default function SignaturePad({ reportId, onDone, onLoggedOut }: Props) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    const dpr = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    canvas.width = rect.width * dpr
-    canvas.height = rect.height * dpr
-    ctx.scale(dpr, dpr)
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, rect.width, rect.height)
-    ctx.strokeStyle = '#000'
-    ctx.lineWidth = 2.5
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
+    const init = () => {
+      const ctx = canvas.getContext('2d')!
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * dpr
+      canvas.height = rect.height * dpr
+      ctx.scale(dpr, dpr)
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, rect.width, rect.height)
+      ctx.strokeStyle = '#000'
+      ctx.lineWidth = 2.5
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+    }
+    requestAnimationFrame(init)
   }, [])
 
   function getPos(e: React.MouseEvent | React.TouchEvent) {
