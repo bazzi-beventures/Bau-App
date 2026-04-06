@@ -280,7 +280,7 @@ export default function MaterialsScreen() {
 
       {editMaterial !== undefined && (
         <MaterialModal
-          material={editMaterial === 'new' ? null : editMaterial as Material}
+          material={editMaterial === 'new' ? null : (editMaterial as Material)}
           onClose={() => setEditMaterial(undefined)}
           onSaved={() => { setEditMaterial(undefined); load() }}
         />

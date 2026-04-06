@@ -4,9 +4,11 @@ import { apiFetch, ApiError } from '../api/client'
 interface Props {
   displayName: string
   logoUrl?: string
+  role: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProfile: () => void
+  onNavKennzahlen: () => void
   onLoggedOut: () => void
 }
 
@@ -34,8 +36,9 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, onNavArbeitszeit, onNavProfile, onNavKennzahlen, onLoggedOut }: Props) {
   const firstName = displayName.split(' ')[0]
+  const isAdmin = role === 'admin' || role === 'superadmin'
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
       </div>
 
       {/* Tiles */}
-      <div className="tiles">
+      <div className={isAdmin ? 'tiles tiles-3col' : 'tiles'}>
         <div className="tile tile-blue" onClick={onNavRapport}>
           <div className="tile-icon tile-icon-blue">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
@@ -109,6 +112,27 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
             </svg>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="tile tile-amber" onClick={onNavKennzahlen}>
+            <div className="tile-icon tile-icon-amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Kennzahlen</div>
+              <div className="tile-desc">KPIs &amp; Dashboards</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status card */}
