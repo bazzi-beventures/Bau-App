@@ -42,7 +42,7 @@ export default function PinScreen({ logoUrl, onPinValid }: Props) {
   return (
     <div className="auth-screen">
       <TenantLogo logoUrl={logoUrl} />
-      <div className="auth-title">Willkommen zur<br />Bau-App</div>
+      <div className="auth-title">Willkommen beim<br />KI Assistent</div>
       <div className="auth-sub">Erstmalige Anmeldung mit PIN.</div>
 
       <form onSubmit={handleSubmit}>
