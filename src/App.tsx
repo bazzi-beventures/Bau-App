@@ -139,6 +139,9 @@ export default function App() {
           loadBranding()
           setScreen('register')
         }}
+        onLoggedIn={() => {
+          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
+        }}
       />
     )
   }
