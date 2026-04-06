@@ -181,11 +181,27 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .auth-footer { font-size: 12px; color: var(--muted); text-align: center; margin-top: 20px; }
 .error-msg { font-size: 13px; color: var(--accent-red); margin: 8px 0; }
 
+/* ── HEADER LOGO ────────────────────────────────── */
+.header-logo {
+  height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+  opacity: 0.92;
+  flex-shrink: 0;
+}
+
 /* ── HOME SCREEN ────────────────────────────────── */
 .home-header {
   padding: 20px 24px 16px;
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
   flex-shrink: 0;
+}
+.home-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 .home-greeting { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
 .home-name { font-size: 22px; font-weight: 600; }
@@ -302,10 +318,12 @@ input, textarea { font-family: var(--font); color: var(--text); }
 /* ── INNER SCREENS ──────────────────────────────── */
 .inner-header {
   display: flex; align-items: center; gap: 14px;
+  justify-content: space-between;
   padding: 12px 24px 16px;
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
   flex-shrink: 0;
 }
+.inner-header .inner-title { flex: 1; }
 .back-btn {
   width: 36px; height: 36px;
   background: var(--surface);
@@ -452,11 +470,13 @@ input, textarea { font-family: var(--font); color: var(--text); }
 
 .chat-header {
   display: flex; align-items: center; gap: 14px;
+  justify-content: space-between;
   padding: 12px 24px 14px;
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.chat-header > div:nth-child(2) { flex: 1; }
 .chat-header-title { font-size: 16px; font-weight: 600; flex: 1; }
 .chat-header-sub { font-size: 12px; color: var(--muted); flex: 1; margin-top: 1px; }
 
