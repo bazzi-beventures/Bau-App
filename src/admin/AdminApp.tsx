@@ -13,6 +13,8 @@ import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
+import UsersScreen from './system/UsersScreen'
+import ImportScreen from './system/ImportScreen'
 import './admin.css'
 
 function ComingSoon({ title }: { title: string }) {
@@ -85,6 +87,8 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
       case 'quotes':       return <QuotesScreen />
       case 'invoices':     return <InvoicesScreen />
       case 'pricing-rules':return <PricingRulesScreen />
+      case 'users':        return <UsersScreen />
+      case 'import':       return <ImportScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
