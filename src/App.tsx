@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
 import { ApiError } from './api/client'
 import PinScreen from './auth/PinScreen'
@@ -29,11 +29,14 @@ function hexToRgba(hex: string, alpha: number): string {
 function applyTenantBranding(info: TenantInfo) {
   const root = document.documentElement
   const c = info.brand_color
+  const d = info.brand_color_dark || c
   root.style.setProperty('--accent-blue', c)
   root.style.setProperty('--accent-blue-dim', hexToRgba(c, 0.12))
   root.style.setProperty('--accent-blue-20', hexToRgba(c, 0.2))
   root.style.setProperty('--accent-blue-25', hexToRgba(c, 0.25))
   root.style.setProperty('--accent-blue-40', hexToRgba(c, 0.4))
+  root.style.setProperty('--accent-blue-dark', d)
+  console.log('[Branding] applied:', c, d)
 }
 
 // Generic fallback logo
@@ -74,20 +77,23 @@ export default function App() {
     localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
   )
 
+  const loadBranding = useCallback(async () => {
+    const slug = localStorage.getItem('tenantSlug') ?? ''
+    if (!slug) return
+    try {
+      const info = await getTenantInfo(slug)
+      applyTenantBranding(info)
+      setLogoUrl(info.logo_url)
+      setTenantName(info.name)
+    } catch (err) {
+      console.warn('[Branding] Fehler beim Laden:', err)
+    }
+  }, [])
+
   useEffect(() => {
-    const tenantSlug = localStorage.getItem('tenantSlug') ?? ''
-
-    const brandingPromise = tenantSlug
-      ? getTenantInfo(tenantSlug).then(info => {
-          applyTenantBranding(info)
-          setLogoUrl(info.logo_url)
-          setTenantName(info.name)
-        }).catch(() => undefined)
-      : Promise.resolve(undefined)
-
     Promise.all([
       getMe().then(u => u).catch(err => ({ error: err })),
-      brandingPromise,
+      loadBranding(),
     ]).then(([userResult]) => {
       if ('error' in (userResult as object)) {
         setScreen(hasStoredIdentity ? 'login' : 'pin')
@@ -115,6 +121,7 @@ export default function App() {
         logoUrl={logoUrl}
         onPinValid={(tenantSlug, authorizedUserId, displayName, pin) => {
           setPinState({ tenantSlug, authorizedUserId, displayName, pin })
+          loadBranding()
           setScreen('register')
         }}
       />
@@ -127,7 +134,7 @@ export default function App() {
         {...pinState}
         logoUrl={logoUrl}
         onRegistered={() => {
-          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('login'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen('home') }).catch(() => setScreen('login'))
         }}
       />
     )
@@ -138,7 +145,7 @@ export default function App() {
       <LoginScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
-          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen('home') }).catch(() => setScreen('pin'))
         }}
       />
     )
