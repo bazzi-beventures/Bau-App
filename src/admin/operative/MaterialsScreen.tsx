@@ -278,7 +278,7 @@ export default function MaterialsScreen() {
         )}
       </div>
 
-      {(editMaterial === 'new' || (editMaterial && editMaterial !== 'new')) && (
+      {editMaterial !== undefined && (
         <MaterialModal
           material={editMaterial === 'new' ? null : editMaterial as Material}
           onClose={() => setEditMaterial(undefined)}
