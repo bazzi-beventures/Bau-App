@@ -12,11 +12,25 @@ export interface Project {
   created_at: string
 }
 
+type ProjectSortKey = 'name' | 'customer_name' | 'customer_email' | 'status' | 'created_at'
+type SortDir = 'asc' | 'desc'
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 11 }}>
+      {active && dir === 'desc' ? '↓' : '↑'}
+    </span>
+  )
+}
+
 export default function ProjectsScreen() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sortKey, setSortKey] = useState<ProjectSortKey>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -31,17 +45,37 @@ export default function ProjectsScreen() {
 
   useEffect(() => { load() }, [])
 
+  function toggleSort(key: ProjectSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const filtered = projects.filter(p => {
     if (!showClosed && p.is_closed) return false
     const q = search.toLowerCase()
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.customer_name || '').toLowerCase().includes(q)
-    )
+    const matchSearch = p.name.toLowerCase().includes(q) || (p.customer_name || '').toLowerCase().includes(q)
+    const matchStatus = !statusFilter || (statusFilter === 'offen' ? !p.is_closed : p.is_closed)
+    return matchSearch && matchStatus
+  }).sort((a, b) => {
+    let aVal: string | number
+    let bVal: string | number
+    switch (sortKey) {
+      case 'name':          aVal = a.name; bVal = b.name; break
+      case 'customer_name': aVal = a.customer_name ?? ''; bVal = b.customer_name ?? ''; break
+      case 'customer_email': aVal = a.customer_email ?? ''; bVal = b.customer_email ?? ''; break
+      case 'status':        aVal = a.is_closed ? 1 : 0; bVal = b.is_closed ? 1 : 0; break
+      case 'created_at':    aVal = a.created_at; bVal = b.created_at; break
+    }
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+    }
+    return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
   })
 
   const open = filtered.filter(p => !p.is_closed).length
   const closed = filtered.filter(p => p.is_closed).length
+
+  const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 
   if (selected || showNew) {
     return (
@@ -82,6 +116,11 @@ export default function ProjectsScreen() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">Alle Status</option>
+            <option value="offen">Offen</option>
+            <option value="geschlossen">Geschlossen</option>
+          </select>
         </div>
 
         {loading ? (
@@ -90,11 +129,21 @@ export default function ProjectsScreen() {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Projektname</th>
-                <th>Kunde</th>
-                <th>E-Mail</th>
-                <th>Status</th>
-                <th>Erstellt</th>
+                <th style={thStyle} onClick={() => toggleSort('name')}>
+                  Projektname <SortIcon active={sortKey === 'name'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('customer_name')}>
+                  Kunde <SortIcon active={sortKey === 'customer_name'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('customer_email')}>
+                  E-Mail <SortIcon active={sortKey === 'customer_email'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('status')}>
+                  Status <SortIcon active={sortKey === 'status'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('created_at')}>
+                  Erstellt <SortIcon active={sortKey === 'created_at'} dir={sortDir} />
+                </th>
               </tr>
             </thead>
             <tbody>

@@ -177,11 +177,25 @@ function MaterialModal({ material, onClose, onSaved }: { material: Material | nu
   )
 }
 
+type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'unit_price' | 'stock'
+type SortDir = 'asc' | 'desc'
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 11 }}>
+      {active && dir === 'desc' ? '↓' : '↑'}
+    </span>
+  )
+}
+
 export default function MaterialsScreen() {
   const [materials, setMaterials] = useState<Material[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [manufacturerFilter, setManufacturerFilter] = useState('')
+  const [sortKey, setSortKey] = useState<MaterialSortKey>('art_nr')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [editMaterial, setEditMaterial] = useState<Material | null | 'new'>()
   const [stockMaterial, setStockMaterial] = useState<Material | null>(null)
 
@@ -196,14 +210,38 @@ export default function MaterialsScreen() {
 
   useEffect(() => { load() }, [])
 
+  function toggleSort(key: MaterialSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const categories = Array.from(new Set(materials.map(m => m.category).filter(Boolean))).sort() as string[]
+  const manufacturers = Array.from(new Set(materials.map(m => m.manufacturer).filter(Boolean))).sort() as string[]
 
   const filtered = materials.filter(m => {
     const q = search.toLowerCase()
     const matchSearch = m.name.toLowerCase().includes(q) || m.art_nr.toLowerCase().includes(q) || (m.manufacturer || '').toLowerCase().includes(q)
     const matchCat = !categoryFilter || m.category === categoryFilter
-    return matchSearch && matchCat
+    const matchMfr = !manufacturerFilter || m.manufacturer === manufacturerFilter
+    return matchSearch && matchCat && matchMfr
+  }).sort((a, b) => {
+    let aVal: string | number
+    let bVal: string | number
+    switch (sortKey) {
+      case 'art_nr':   aVal = a.art_nr; bVal = b.art_nr; break
+      case 'name':     aVal = a.name; bVal = b.name; break
+      case 'category': aVal = a.category ?? ''; bVal = b.category ?? ''; break
+      case 'unit':     aVal = a.unit ?? ''; bVal = b.unit ?? ''; break
+      case 'unit_price': aVal = a.unit_price ?? -1; bVal = b.unit_price ?? -1; break
+      case 'stock':    aVal = a.inventory[0]?.quantity ?? -1; bVal = b.inventory[0]?.quantity ?? -1; break
+    }
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+    }
+    return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
   })
+
+  const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 
   return (
     <div className="admin-page">
@@ -225,6 +263,10 @@ export default function MaterialsScreen() {
             <option value="">Alle Kategorien</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={manufacturerFilter} onChange={e => setManufacturerFilter(e.target.value)}>
+            <option value="">Alle Hersteller</option>
+            {manufacturers.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
 
         {loading ? (
@@ -233,12 +275,24 @@ export default function MaterialsScreen() {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Art.-Nr.</th>
-                <th>Bezeichnung</th>
-                <th>Kategorie</th>
-                <th>Einheit</th>
-                <th>VK-Preis</th>
-                <th>Bestand</th>
+                <th style={thStyle} onClick={() => toggleSort('art_nr')}>
+                  Art.-Nr. <SortIcon active={sortKey === 'art_nr'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('name')}>
+                  Bezeichnung <SortIcon active={sortKey === 'name'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('category')}>
+                  Kategorie <SortIcon active={sortKey === 'category'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('unit')}>
+                  Einheit <SortIcon active={sortKey === 'unit'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('unit_price')}>
+                  VK-Preis <SortIcon active={sortKey === 'unit_price'} dir={sortDir} />
+                </th>
+                <th style={thStyle} onClick={() => toggleSort('stock')}>
+                  Bestand <SortIcon active={sortKey === 'stock'} dir={sortDir} />
+                </th>
                 <th>Aktionen</th>
               </tr>
             </thead>
