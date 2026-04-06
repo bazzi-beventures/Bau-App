@@ -25,10 +25,10 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.message === 'invalid_pin') setError('PIN ungültig oder abgelaufen.')
-        else if (err.message === 'verification_failed') setError('Fingerabdruck-Verifizierung fehlgeschlagen.')
+        else if (err.message === 'verification_failed') setError('Biometrie-Verifizierung fehlgeschlagen.')
         else setError(`Fehler: ${err.message}`)
       } else if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        setError('Fingerabdruck-Registrierung abgebrochen.')
+        setError('Biometrie-Registrierung abgebrochen.')
       } else {
         setError('Unbekannter Fehler. Bitte erneut versuchen.')
       }
@@ -40,28 +40,25 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
   return (
     <div className="auth-screen">
       <TenantLogo logoUrl={logoUrl} />
-      <div className="auth-title">Fingerabdruck<br />registrieren</div>
+      <div className="auth-title">Biometrie<br />registrieren</div>
       <div className="auth-sub">
-        Hallo {displayName.split(' ')[0]}! Registriere deinen Fingerabdruck für zukünftige Anmeldungen.
+        Hallo {displayName.split(' ')[0]}! Registriere Face ID oder Fingerabdruck für zukünftige Anmeldungen.
       </div>
 
       {error && <p className="error-msg">{error}</p>}
 
       <button className="btn-fingerprint" onClick={handleRegister} disabled={loading}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
-          <path d="M12 6c-3.31 0-6 2.69-6 6"/>
-          <path d="M12 8c-2.21 0-4 1.79-4 4"/>
-          <path d="M12 10c-1.1 0-2 .9-2 2"/>
-          <circle cx="12" cy="12" r="1"/>
-          <path d="M12 14v4"/>
-          <path d="M10 16h4"/>
+          <rect x="2" y="3" width="20" height="18" rx="3"/>
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M7 20c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
+          <path d="M17 3v2M7 3v2"/>
         </svg>
-        {loading ? 'Warte auf Fingerabdruck…' : 'Fingerabdruck jetzt registrieren'}
+        {loading ? 'Warte auf Biometrie…' : 'Biometrie jetzt registrieren'}
       </button>
 
       <p className="auth-footer" style={{ marginTop: 16 }}>
-        Tippe auf den Button und halte deinen Finger auf den Sensor.
+        Tippe auf den Button und bestätige mit Face ID oder Fingerabdruck.
       </p>
     </div>
   )

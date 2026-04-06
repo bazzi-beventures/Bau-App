@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authenticatePasskey } from './webauthn'
+import { loginWithPin } from '../api/auth'
 import { ApiError } from '../api/client'
 import { TenantLogo } from '../App'
 
@@ -11,6 +12,8 @@ interface Props {
 export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPin, setShowPin] = useState(false)
+  const [pin, setPin] = useState('')
 
   const tenantSlug = localStorage.getItem('tenantSlug') ?? ''
   const authorizedUserId = localStorage.getItem('authorizedUserId') ?? ''
@@ -36,10 +39,67 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
     }
   }
 
+  async function handlePinLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await loginWithPin(tenantSlug, authorizedUserId, pin)
+      onLoggedIn()
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401 || err.message === 'invalid_pin') setError('Falsche PIN oder PIN abgelaufen.')
+        else setError(`Fehler: ${err.message}`)
+      } else {
+        setError('Verbindungsfehler.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleNewDevice() {
     localStorage.removeItem('authorizedUserId')
     localStorage.removeItem('displayName')
     window.location.reload()
+  }
+
+  if (showPin) {
+    return (
+      <div className="auth-screen">
+        <TenantLogo logoUrl={logoUrl} />
+        <div className="auth-title">Mit PIN<br />anmelden</div>
+        <div className="auth-sub">Gib deinen 6-stelligen PIN ein.</div>
+
+        {error && <p className="error-msg">{error}</p>}
+
+        <form onSubmit={handlePinLogin}>
+          <div className="field">
+            <label className="field-label">PIN</label>
+            <input
+              className="input input-pin"
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              autoFocus
+              required
+            />
+          </div>
+
+          <button className="btn-primary" type="submit" disabled={loading || pin.length !== 6}>
+            {loading ? 'Anmelden…' : 'Anmelden →'}
+          </button>
+        </form>
+
+        <button className="btn-secondary" onClick={() => { setShowPin(false); setError('') }}>
+          Zurück zur Biometrie
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -52,15 +112,16 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
 
       <button className="btn-fingerprint" onClick={handleLogin} disabled={loading}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
-          <path d="M12 6c-3.31 0-6 2.69-6 6"/>
-          <path d="M12 8c-2.21 0-4 1.79-4 4"/>
-          <path d="M12 10c-1.1 0-2 .9-2 2"/>
-          <circle cx="12" cy="12" r="1"/>
-          <path d="M12 14v4"/>
-          <path d="M10 16h4"/>
+          <rect x="2" y="3" width="20" height="18" rx="3"/>
+          <circle cx="12" cy="10" r="3"/>
+          <path d="M7 20c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
+          <path d="M17 3v2M7 3v2"/>
         </svg>
-        {loading ? 'Warte auf Fingerabdruck…' : 'Mit Fingerabdruck anmelden'}
+        {loading ? 'Warte auf Biometrie…' : 'Mit Face ID / Fingerabdruck anmelden'}
+      </button>
+
+      <button className="btn-secondary" onClick={() => { setShowPin(true); setError('') }}>
+        Mit PIN anmelden
       </button>
 
       <button className="btn-secondary" onClick={handleNewDevice}>
