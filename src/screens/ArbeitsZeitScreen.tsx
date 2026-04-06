@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
-import { ApiError, apiBlobFetch } from '../api/client'
+import { ApiError } from '../api/client'
+import { BerichtType } from './BerichtScreen'
 
 interface Props {
   displayName: string
@@ -9,6 +10,7 @@ interface Props {
   onNavRapport: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
+  onOpenBericht: (type: BerichtType) => void
 }
 
 interface Action {
@@ -113,10 +115,10 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProfile, onLoggedOut, onOpenBericht }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
-  const [reportLoading, setReportLoading] = useState(false)
+  const [reportLoading] = useState(false)
 
   // Korrektur-Formular
   const [showCorrection, setShowCorrection] = useState(false)
@@ -189,31 +191,6 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     }
   }
 
-  async function handlePdfDownload(url: string) {
-    setResult(null)
-    setReportLoading(true)
-    try {
-      const { blob, filename } = await apiBlobFetch(url)
-      const blobUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(blobUrl)
-      setResult({ text: 'Bericht wird heruntergeladen…', isError: false })
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        onLoggedOut()
-        return
-      }
-      const detail = err instanceof ApiError && err.status === 404
-        ? 'Keine Daten für diesen Zeitraum gefunden.'
-        : 'Bericht konnte nicht erstellt werden. Bitte erneut versuchen.'
-      setResult({ text: detail, isError: true })
-    } finally {
-      setReportLoading(false)
-    }
-  }
 
   return (
     <div className="app-screen">
@@ -270,11 +247,53 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
           </div>
         ))}
 
-        {/* Arbeitszeitbericht — Monats-PDF */}
+        {/* Wochen-Stundenjournal — Diese Woche */}
         <div
           className="menu-item"
-          onClick={() => !reportLoading && loadingIdx === null && handlePdfDownload('/pwa/report/monthly-pdf')}
-          style={{ opacity: reportLoading || loadingIdx !== null ? 0.5 : 1 }}
+          onClick={() => loadingIdx === null && onOpenBericht('weekly-this')}
+          style={{ opacity: loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="8 13 12 17 16 13"/>
+              <line x1="12" y1="17" x2="12" y2="9"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">Diese Woche</div>
+            <div className="menu-sub">Stundenjournal der laufenden Woche</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Wochen-Stundenjournal — Letzte Woche */}
+        <div
+          className="menu-item"
+          onClick={() => loadingIdx === null && onOpenBericht('weekly-last')}
+          style={{ opacity: loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="8 13 12 17 16 13"/>
+              <line x1="12" y1="17" x2="12" y2="9"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">Letzte Woche</div>
+            <div className="menu-sub">Stundenjournal der vergangenen Woche</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Arbeitszeitbericht — Monat */}
+        <div
+          className="menu-item"
+          onClick={() => loadingIdx === null && onOpenBericht('monthly')}
+          style={{ opacity: loadingIdx !== null ? 0.5 : 1 }}
         >
           <div className="menu-icon menu-icon-green">
             <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
@@ -285,8 +304,8 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
             </svg>
           </div>
           <div className="menu-text">
-            <div className="menu-label">{reportLoading ? '…' : 'Arbeitszeitbericht'}</div>
-            <div className="menu-sub">Monatszeiten &amp; Überstunden als PDF</div>
+            <div className="menu-label">Arbeitszeitbericht</div>
+            <div className="menu-sub">Monatszeiten &amp; Überstunden anzeigen</div>
           </div>
           <div className="menu-chevron">›</div>
         </div>

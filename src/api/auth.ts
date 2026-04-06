@@ -26,13 +26,6 @@ export async function validatePin(tenantSlug: string, authorizedUserId: string, 
   }) as Promise<{ status: string; display_name: string }>
 }
 
-export async function loginWithPin(tenantSlug: string, authorizedUserId: string, pin: string): Promise<{ display_name: string }> {
-  return apiFetch('/pwa/auth/login-pin', {
-    method: 'POST',
-    body: JSON.stringify({ tenant_slug: tenantSlug, authorized_user_id: authorizedUserId, pin }),
-  }) as Promise<{ display_name: string }>
-}
-
 export async function getMe(): Promise<UserInfo> {
   return apiFetch('/pwa/me') as Promise<UserInfo>
 }

@@ -3,6 +3,7 @@ import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMateri
 import { ApiError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
+import SignaturePad from './SignaturePad'
 
 interface Message {
   id: number
@@ -11,7 +12,6 @@ interface Message {
   transcription?: string
   timestamp: string
   action_taken?: string | null
-  sign_url?: string
   disambiguation?: DisambiguationOption[]
 }
 
@@ -45,6 +45,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
   const [pendingConfirm, setPendingConfirm] = useState(false)
   const [pendingDisambiguation, setPendingDisambiguation] = useState(false)
   const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(false)
+  const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -68,6 +69,11 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
       setPendingQuoteQuestion(true)
       setPendingConfirm(false)
       setPendingDisambiguation(false)
+    } else if (res.action_taken === 'report_saved' && res.report_id) {
+      setPendingSignReportId(Number(res.report_id))
+      setPendingConfirm(false)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
     } else {
       setPendingConfirm(false)
       setPendingDisambiguation(false)
@@ -86,7 +92,6 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
         transcription: res.transcription,
         timestamp: now(),
         action_taken: res.action_taken,
-        sign_url: res.sign_url,
         disambiguation: res.disambiguation,
       })
       handleActionState(res)
@@ -106,7 +111,8 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
     setLoading(true)
     try {
       const res = await confirmReport()
-      addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken, sign_url: res.sign_url })
+      addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
+      handleActionState(res)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
       addMessage({ role: 'bot', text: 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
@@ -197,7 +203,6 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
             text={msg.text}
             transcription={msg.transcription}
             timestamp={msg.timestamp}
-            sign_url={msg.sign_url}
           />
         ))}
         {loading && (
@@ -262,11 +267,20 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
           </div>
         )}
 
+        {/* Inline signature pad — shown after report is saved */}
+        {pendingSignReportId !== null && (
+          <SignaturePad
+            reportId={pendingSignReportId}
+            onDone={() => setPendingSignReportId(null)}
+            onLoggedOut={onLoggedOut}
+          />
+        )}
+
         <div ref={bottomRef} />
       </div>
 
       {/* Input — disabled while awaiting confirmation or disambiguation */}
-      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} onSendPhoto={onSendPhoto} disabled={loading || pendingConfirm || pendingDisambiguation || pendingQuoteQuestion} />
+      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} onSendPhoto={onSendPhoto} disabled={loading || pendingConfirm || pendingDisambiguation || pendingQuoteQuestion || pendingSignReportId !== null} />
 
       {/* Nav bar */}
       <div className="nav-bar">

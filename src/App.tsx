@@ -9,8 +9,9 @@ import HomeScreen from './screens/HomeScreen'
 import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
+import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht'
 
 interface PinState {
   tenantSlug: string
@@ -77,6 +78,7 @@ export default function App() {
   const [pinState, setPinState] = useState<PinState | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
   const [tenantName, setTenantName] = useState('')
+  const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
 
   const hasStoredIdentity = Boolean(
     localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
@@ -215,6 +217,21 @@ export default function App() {
       <ArbeitsZeitScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}
+      />
+    )
+  }
+
+  if (screen === 'bericht' && user) {
+    return (
+      <BerichtScreen
+        berichtType={berichtType}
+        logoUrl={logoUrl}
+        onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onNavProfile={() => setScreen('profile')}

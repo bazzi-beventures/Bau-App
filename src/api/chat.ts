@@ -12,7 +12,6 @@ export interface ChatResponse {
   action_taken: string | null
   transcription?: string
   report_id?: number | string
-  sign_url?: string
   correction_id?: string
   disambiguation?: DisambiguationOption[]
   pending_summary?: {
@@ -78,6 +77,13 @@ export async function cancelReport(): Promise<ChatResponse> {
   return apiFetch('/pwa/chat/cancel', { method: 'POST' }) as Promise<ChatResponse>
 }
 
+export async function signReport(reportId: number, signatureBase64: string): Promise<void> {
+  await apiFetch(`/pwa/chat/sign/${reportId}`, {
+    method: 'POST',
+    body: JSON.stringify({ signature_base64: signatureBase64 }),
+  })
+}
+
 export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {
   return apiFetch('/pwa/chat/disambiguate', {
     method: 'POST',
@@ -89,4 +95,40 @@ export async function uploadPhoto(file: File): Promise<ChatResponse> {
   const form = new FormData()
   form.append('photo', file, file.name)
   return apiFormFetch('/pwa/chat/photo', form) as Promise<ChatResponse>
+}
+
+export interface MonthlyReportData {
+  type: 'monthly'
+  staff_name: string
+  monat_name: string
+  jahr: number
+  erstellt_am: string
+  tage: { datum: string; wochentag: string; clock_in: string; clock_out: string; pause_min: number; stunden_str: string }[]
+  arbeitstage: number
+  total_stunden_str: string
+  soll_stunden_str: string
+  ueberstunden_min: number
+  ueberstunden_str: string
+}
+
+export interface WeeklyReportData {
+  type: 'weekly'
+  period_label: string
+  period_start: string
+  period_end: string
+  staff_name: string
+  days: { date: string; weekday: string; clock_in: string; clock_out: string; break_min: number; net_hours: number; projects: string; absence: string }[]
+  total_net_hours: number
+  soll_hours: number
+  saldo: number
+}
+
+export type ReportData = MonthlyReportData | WeeklyReportData
+
+export async function fetchMonthlyData(): Promise<MonthlyReportData> {
+  return apiFetch('/pwa/report/monthly-data', { method: 'GET' }) as Promise<MonthlyReportData>
+}
+
+export async function fetchWeeklyData(period: 'this_week' | 'last_week'): Promise<WeeklyReportData> {
+  return apiFetch(`/pwa/report/weekly-data?period=${period}`, { method: 'GET' }) as Promise<WeeklyReportData>
 }
