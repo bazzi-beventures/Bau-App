@@ -93,7 +93,12 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                 </div>
                 <div className="admin-form-group">
                   <label className="admin-form-label">Funktion</label>
-                  <input className="admin-form-input" value={funktion} onChange={e => setFunktion(e.target.value)} placeholder="z.B. Maurer" />
+                  <select className="admin-form-input" value={funktion} onChange={e => setFunktion(e.target.value)}>
+                    <option value="">— Bitte wählen —</option>
+                    {roles.map(r => (
+                      <option key={r.name} value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

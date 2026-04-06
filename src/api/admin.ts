@@ -30,14 +30,27 @@ export interface StaffMember {
   is_active: boolean
 }
 
+export interface StaffRole {
+  name: string
+  hourly_rate: number
+}
+
 export async function getAdminStaff(): Promise<StaffMember[]> {
   return apiFetch('/pwa/admin/staff') as Promise<StaffMember[]>
+}
+
+export async function getStaffRoles(): Promise<StaffRole[]> {
+  return apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>
 }
 
 export async function upsertStaff(data: Partial<StaffMember> & { id?: string }): Promise<StaffMember> {
   const method = data.id ? 'PATCH' : 'POST'
   const url = data.id ? `/pwa/admin/staff/${data.id}` : '/pwa/admin/staff'
   return apiFetch(url, { method, body: JSON.stringify(data) }) as Promise<StaffMember>
+}
+
+export async function deleteStaff(staffId: string): Promise<void> {
+  await apiFetch(`/pwa/admin/staff/${staffId}`, { method: 'DELETE' })
 }
 
 export async function generateStaffPin(staffId: string): Promise<{ pin: string; expires_at: string }> {
