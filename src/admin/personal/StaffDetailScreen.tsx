@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { StaffMember, upsertStaff, generateStaffPin } from '../../api/admin'
+import { useState, useEffect } from 'react'
+import { StaffMember, StaffRole, upsertStaff, generateStaffPin, getStaffRoles } from '../../api/admin'
 
 interface Props {
   member: StaffMember | null
@@ -20,6 +20,11 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
   const [pinExpiry, setPinExpiry] = useState('')
   const [generatingPin, setGeneratingPin] = useState(false)
   const [pinError, setPinError] = useState('')
+  const [roles, setRoles] = useState<StaffRole[]>([])
+
+  useEffect(() => {
+    getStaffRoles().then(setRoles).catch(() => {})
+  }, [])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -94,11 +99,11 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="admin-form-group">
                   <label className="admin-form-label">Stundenlohn (CHF)</label>
-                  <input className="admin-form-input" type="number" step="0.01" min="0" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="35.00" />
+                  <input className="admin-form-input" inputMode="decimal" value={hourlyRate} onChange={e => setHourlyRate(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="35.00" />
                 </div>
                 <div className="admin-form-group">
                   <label className="admin-form-label">Monatslohn (CHF)</label>
-                  <input className="admin-form-input" type="number" step="0.01" min="0" value={monthlySalary} onChange={e => setMonthlySalary(e.target.value)} placeholder="5500.00" />
+                  <input className="admin-form-input" inputMode="decimal" value={monthlySalary} onChange={e => setMonthlySalary(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="5500.00" />
                 </div>
               </div>
             </div>
