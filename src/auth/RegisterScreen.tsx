@@ -31,7 +31,8 @@ export default function RegisterScreen({ tenantSlug, authorizedUserId, displayNa
         if (err.name === 'NotAllowedError') {
           setError('Registrierung abgebrochen oder Biometrie fehlgeschlagen. Bitte nochmals versuchen.')
         } else if (err.name === 'InvalidStateError') {
-          setError('Dieses Gerät ist bereits registriert. Bitte Admin kontaktieren.')
+          setError('Dieses Gerät ist bereits registriert — du kannst dich direkt anmelden.')
+          setTimeout(() => onRegistered(), 2000)
         } else if (err.name === 'SecurityError') {
           setError('Sicherheitsfehler. Bitte die Seite neu laden (Cache leeren).')
         } else {
