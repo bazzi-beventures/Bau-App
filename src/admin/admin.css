@@ -26,31 +26,20 @@
 .admin-sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 10px;
   padding: 20px 16px 16px;
   border-bottom: 1px solid #1e2332;
 }
 
-.admin-sidebar-logo {
-  width: 48px;
-  height: 48px;
+.admin-content-logo {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  height: 40px;
   object-fit: contain;
-  border-radius: 6px;
-}
-
-.admin-sidebar-logo-fallback {
-  width: 48px;
-  height: 48px;
-  background: var(--accent-blue, #3b82f6);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  flex-shrink: 0;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .admin-sidebar-tenant {
@@ -196,6 +185,7 @@
 
 /* ─── Main Content ────────────────────────────────────────── */
 .admin-content {
+  position: relative;
   overflow-y: auto;
   height: 100vh;
   display: flex;

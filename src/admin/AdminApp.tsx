@@ -63,6 +63,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
 export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Props) {
   const { screen, nav } = useAdminNav()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
+  const [logoError, setLogoError] = useState(false)
 
   async function loadDashboard() {
     try { setDashboard(await getAdminDashboard()) } catch { /* ignore */ }
@@ -104,11 +105,18 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
         onLoggedOut={onLoggedOut}
         displayName={user.display_name}
         role={user.role}
-        logoUrl={logoUrl}
         tenantName={tenantName}
         badges={badges}
       />
       <main className="admin-content">
+        {logoUrl && !logoError && (
+          <img
+            className="admin-content-logo"
+            src={logoUrl}
+            alt={tenantName}
+            onError={() => setLogoError(true)}
+          />
+        )}
         {renderScreen()}
       </main>
     </div>

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { AdminScreen } from './useAdminNav'
 import { logout } from '../api/auth'
 
@@ -8,7 +7,6 @@ interface Props {
   onLoggedOut: () => void
   displayName: string
   role: string
-  logoUrl: string
   tenantName: string
   badges?: {
     corrections?: number
@@ -85,10 +83,8 @@ function IconLogout() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 0 0-1 1v12a1 1 0 1 0 2 0V5h10v11a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H3zm7 9a1 1 0 0 0 1-1V7.414l1.293 1.293a1 1 0 1 0 1.414-1.414l-3-3a1 1 0 0 0-1.414 0l-3 3a1 1 0 1 0 1.414 1.414L9 7.414V11a1 1 0 0 0 1 1z" clipRule="evenodd"/></svg>
 }
 
-export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, role, logoUrl, tenantName, badges }: Props) {
-  const [imgError, setImgError] = useState(false)
+export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, role, tenantName, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-  const tenantInitial = (tenantName || 'A').charAt(0).toUpperCase()
 
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
@@ -99,10 +95,6 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
     <aside className="admin-sidebar">
       <div className="admin-sidebar-header">
         <span className="admin-sidebar-tenant">{tenantName || 'Admin'}</span>
-        {logoUrl && !imgError
-          ? <img className="admin-sidebar-logo" src={logoUrl} alt="Logo" onError={() => setImgError(true)} />
-          : <div className="admin-sidebar-logo-fallback">{tenantInitial}</div>
-        }
       </div>
 
       <nav className="admin-nav">
