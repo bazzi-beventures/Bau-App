@@ -9,6 +9,7 @@ interface Session {
   clock_out: string | null
   break_minutes: number
   total_minutes: number | null
+  violations?: string[]
 }
 
 interface LaborHour {
@@ -18,9 +19,18 @@ interface LaborHour {
   date: string
 }
 
+interface OvertimeInfo {
+  total_net_hours: number
+  soll_hours: number
+  saldo: number
+  absence_days: number
+}
+
 interface TimesheetData {
   sessions: Session[]
   labor_hours: LaborHour[]
+  overtime_by_staff: Record<string, OvertimeInfo>
+  soll_stunden_woche: number
 }
 
 function fmtDate(d: string) {
@@ -32,6 +42,11 @@ function fmtHours(minutes: number | null) {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return `${h}:${m.toString().padStart(2, '0')} h`
+}
+
+function fmtDecimal(hours: number) {
+  const sign = hours >= 0 ? '+' : ''
+  return `${sign}${hours.toFixed(1)} h`
 }
 
 function fmtTime(iso: string | null) {
@@ -86,6 +101,20 @@ export default function HrReportsScreen() {
     return sessions.reduce((sum, s) => sum + (s.total_minutes ?? 0), 0)
   }
 
+  function staffViolationCount(sessions: Session[]) {
+    return sessions.reduce((sum, s) => sum + (s.violations?.length ?? 0), 0)
+  }
+
+  // Alle Verstösse sammeln für Summary
+  const allViolations: { staff: string; date: string; text: string }[] = []
+  if (data) {
+    for (const s of data.sessions) {
+      for (const v of (s.violations ?? [])) {
+        allViolations.push({ staff: s.staff_name, date: s.date, text: v })
+      }
+    }
+  }
+
   return (
     <div className="admin-page">
       <div className="admin-page-header">
@@ -116,6 +145,27 @@ export default function HrReportsScreen() {
 
       {data && !loading && (
         <>
+          {/* Verstösse-Zusammenfassung */}
+          {allViolations.length > 0 && (
+            <div className="admin-table-wrap" style={{ marginBottom: 16, border: '1px solid rgba(239,68,68,0.3)' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>!</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#ef4444' }}>
+                  {allViolations.length} Verstoss{allViolations.length !== 1 ? 'e' : ''} im Zeitraum
+                </span>
+              </div>
+              <div style={{ padding: '8px 16px', maxHeight: 200, overflowY: 'auto' }}>
+                {allViolations.map((v, i) => (
+                  <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 13, display: 'flex', gap: 12 }}>
+                    <span style={{ color: 'var(--muted)', minWidth: 90 }}>{fmtDate(v.date)}</span>
+                    <span style={{ fontWeight: 600, minWidth: 130 }}>{v.staff}</span>
+                    <span style={{ color: '#fca5a5' }}>{v.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {staffGroups.size === 0 ? (
             <div className="admin-table-wrap">
               <div className="admin-table-empty" style={{ padding: 48 }}>Keine Daten für diesen Zeitraum gefunden.</div>
@@ -123,7 +173,10 @@ export default function HrReportsScreen() {
           ) : (
             Array.from(staffGroups.entries()).map(([staffName, sessions]) => {
               const totalMin = staffTotalHours(sessions)
+              const violationCount = staffViolationCount(sessions)
               const isExpanded = expandedStaff === staffName
+              const overtime = data.overtime_by_staff?.[staffName]
+
               return (
                 <div key={staffName} className="admin-table-wrap" style={{ marginBottom: 14 }}>
                   {/* Staff-Header */}
@@ -139,11 +192,35 @@ export default function HrReportsScreen() {
                         {staffName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{staffName}</div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          {staffName}
+                          {violationCount > 0 && (
+                            <span style={{
+                              marginLeft: 8, fontSize: 11, fontWeight: 600,
+                              background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+                              padding: '2px 7px', borderRadius: 10,
+                            }}>
+                              {violationCount} Verstoss{violationCount !== 1 ? 'e' : ''}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{sessions.length} Sessions</div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                      {overtime && (
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{
+                            fontWeight: 700, fontSize: 14,
+                            color: overtime.saldo >= 0 ? '#22c55e' : '#ef4444',
+                          }}>
+                            {fmtDecimal(overtime.saldo)}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            Saldo (Soll: {overtime.soll_hours.toFixed(1)}h)
+                          </div>
+                        </div>
+                      )}
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtHours(totalMin)}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>Total Netto</div>
@@ -161,21 +238,48 @@ export default function HrReportsScreen() {
                           <th>Ausstempeln</th>
                           <th>Pause</th>
                           <th>Netto</th>
+                          <th>Verstösse</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {sessions.sort((a, b) => a.date.localeCompare(b.date)).map(s => (
-                          <tr key={s.id}>
-                            <td>{fmtDate(s.date)}</td>
-                            <td>{fmtTime(s.clock_in)}</td>
-                            <td>{fmtTime(s.clock_out)}</td>
-                            <td style={{ color: 'var(--muted)' }}>{s.break_minutes > 0 ? `${s.break_minutes} min` : '—'}</td>
-                            <td><strong>{fmtHours(s.total_minutes)}</strong></td>
-                          </tr>
-                        ))}
+                        {sessions.sort((a, b) => a.date.localeCompare(b.date)).map(s => {
+                          const hasViolations = (s.violations?.length ?? 0) > 0
+                          return (
+                            <tr key={s.id} style={hasViolations ? { background: 'rgba(239,68,68,0.06)' } : undefined}>
+                              <td>{fmtDate(s.date)}</td>
+                              <td>{fmtTime(s.clock_in)}</td>
+                              <td style={!s.clock_out ? { color: '#ef4444', fontWeight: 600 } : undefined}>
+                                {fmtTime(s.clock_out)}
+                              </td>
+                              <td style={{ color: 'var(--muted)' }}>
+                                {s.break_minutes > 0 ? `${s.break_minutes} min` : '—'}
+                              </td>
+                              <td><strong>{fmtHours(s.total_minutes)}</strong></td>
+                              <td>
+                                {hasViolations ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    {s.violations!.map((v, i) => (
+                                      <span key={i} style={{
+                                        fontSize: 11, color: '#fca5a5',
+                                        background: 'rgba(239,68,68,0.1)',
+                                        padding: '2px 6px', borderRadius: 4,
+                                        display: 'inline-block',
+                                      }}>
+                                        {v}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
                         <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
                           <td colSpan={4} style={{ fontWeight: 700 }}>Total</td>
                           <td style={{ fontWeight: 700, color: 'var(--accent-blue, #3b82f6)' }}>{fmtHours(totalMin)}</td>
+                          <td />
                         </tr>
                       </tbody>
                     </table>
