@@ -27,9 +27,6 @@ function KpiCard({ label, value, colorClass, onClick, icon }: KpiCardProps) {
 function IconClock() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm1-12a1 1 0 1 0-2 0v4a1 1 0 0 0 .293.707l2.828 2.829a1 1 0 1 0 1.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
 }
-function IconCalendar() {
-  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1V3a1 1 0 1 0-2 0v1H7V3a1 1 0 0 0-1-1zm0 5a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H6z" clipRule="evenodd"/></svg>
-}
 function IconCash() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2V6h10a2 2 0 0 0-2-2H4zm2 6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H6zm7 4a1 1 0 1 0-2 0 1 1 0 0 0 2 0z" clipRule="evenodd"/></svg>
 }
@@ -58,14 +55,7 @@ export default function DashboardScreen({ dashboard, onNav }: Props) {
           onClick={() => onNav('corrections')}
           icon={<IconClock />}
         />
-        <KpiCard
-          label="Absenzen pendent"
-          value={dashboard?.pending_absences ?? null}
-          colorClass="blue"
-          onClick={() => onNav('absences')}
-          icon={<IconCalendar />}
-        />
-        <KpiCard
+<KpiCard
           label="Rechnungen offen"
           value={dashboard?.open_invoices ?? null}
           colorClass="red"
