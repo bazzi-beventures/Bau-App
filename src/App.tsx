@@ -155,6 +155,7 @@ export default function App() {
     return (
       <HomeScreen
         displayName={user.display_name}
+        logoUrl={logoUrl}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
@@ -170,6 +171,7 @@ export default function App() {
         email={user.email}
         role={user.role}
         tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
+        logoUrl={logoUrl}
         onBack={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
@@ -180,6 +182,7 @@ export default function App() {
     return (
       <ChatScreen
         displayName={user.display_name}
+        logoUrl={logoUrl}
         activeNav="rapport"
         onNavHome={() => setScreen('home')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
@@ -193,6 +196,7 @@ export default function App() {
     return (
       <ArbeitsZeitScreen
         displayName={user.display_name}
+        logoUrl={logoUrl}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onNavProfile={() => setScreen('profile')}

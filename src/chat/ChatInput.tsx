@@ -4,6 +4,7 @@ import { useVoiceRecorder } from './useVoiceRecorder'
 interface Props {
   onSendText: (text: string) => void
   onSendVoice: (blob: Blob) => void
+  onSendPhoto?: (file: File) => void
   disabled?: boolean
 }
 
@@ -13,9 +14,10 @@ function formatTime(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-export default function ChatInput({ onSendText, onSendVoice, disabled }: Props) {
+export default function ChatInput({ onSendText, onSendVoice, onSendPhoto, disabled }: Props) {
   const [text, setText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
     isRecording, isLocked, seconds,
@@ -35,6 +37,19 @@ export default function ChatInput({ onSendText, onSendVoice, disabled }: Props) 
     onSendText(trimmed)
     setText('')
     textareaRef.current?.focus()
+  }
+
+  function handlePhotoClick() {
+    fileInputRef.current?.click()
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file && onSendPhoto) {
+      onSendPhoto(file)
+    }
+    // Reset input so same file can be selected again
+    e.target.value = ''
   }
 
   if (isRecording) {
@@ -83,6 +98,29 @@ export default function ChatInput({ onSendText, onSendVoice, disabled }: Props) 
 
   return (
     <div className="chat-input-bar">
+      {/* Hidden file input for photo capture */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+      {/* Camera button — only when no text and photos enabled */}
+      {!text.trim() && onSendPhoto && (
+        <button
+          className="chat-photo-btn"
+          onClick={handlePhotoClick}
+          title="Foto aufnehmen"
+          disabled={disabled}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.8">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
+      )}
       <textarea
         ref={textareaRef}
         className="chat-textarea"

@@ -5,6 +5,7 @@ interface Props {
   email: string | null
   role: string
   tenantName: string
+  logoUrl?: string
   onBack: () => void
   onLoggedOut: () => void
 }
@@ -18,7 +19,7 @@ function roleLabel(role: string): string {
   }
 }
 
-export default function ProfileScreen({ displayName, email, role, tenantName, onBack, onLoggedOut }: Props) {
+export default function ProfileScreen({ displayName, email, role, tenantName, logoUrl, onBack, onLoggedOut }: Props) {
   async function handleLogout() {
     await logout().catch(() => {})
     onLoggedOut()
@@ -33,6 +34,7 @@ export default function ProfileScreen({ displayName, email, role, tenantName, on
           </svg>
         </div>
         <div className="inner-title">Profil</div>
+        {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
       </div>
 
       {/* Avatar + Name */}

@@ -1,10 +1,19 @@
 import { apiFetch, apiFormFetch } from './client'
 
+export interface DisambiguationOption {
+  name: string
+  art_nr: string
+  manufacturer?: string
+  category?: string
+}
+
 export interface ChatResponse {
   reply: string
   action_taken: string | null
   transcription?: string
   report_id?: number | string
+  sign_url?: string
+  disambiguation?: DisambiguationOption[]
   pending_summary?: {
     project: string
     date: string
@@ -60,4 +69,17 @@ export async function confirmReport(): Promise<ChatResponse> {
 
 export async function cancelReport(): Promise<ChatResponse> {
   return apiFetch('/pwa/chat/cancel', { method: 'POST' }) as Promise<ChatResponse>
+}
+
+export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {
+  return apiFetch('/pwa/chat/disambiguate', {
+    method: 'POST',
+    body: JSON.stringify({ art_nr }),
+  }) as Promise<ChatResponse>
+}
+
+export async function uploadPhoto(file: File): Promise<ChatResponse> {
+  const form = new FormData()
+  form.append('photo', file, file.name)
+  return apiFormFetch('/pwa/chat/photo', form) as Promise<ChatResponse>
 }

@@ -4,6 +4,7 @@ import { ApiError, apiBlobFetch } from '../api/client'
 
 interface Props {
   displayName: string
+  logoUrl?: string
   onNavHome: () => void
   onNavRapport: () => void
   onNavProfile: () => void
@@ -112,7 +113,7 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -158,24 +159,27 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onNavProfil
     }
   }
 
-  async function handleArbeitszeitbericht() {
+  async function handlePdfDownload(url: string) {
     setResult(null)
     setReportLoading(true)
     try {
-      const { blob, filename } = await apiBlobFetch('/pwa/report/monthly-pdf')
-      const url = URL.createObjectURL(blob)
+      const { blob, filename } = await apiBlobFetch(url)
+      const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url
+      a.href = blobUrl
       a.download = filename
       a.click()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(blobUrl)
       setResult({ text: 'Bericht wird heruntergeladen…', isError: false })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLoggedOut()
         return
       }
-      setResult({ text: 'Bericht konnte nicht erstellt werden. Bitte erneut versuchen.', isError: true })
+      const detail = err instanceof ApiError && err.status === 404
+        ? 'Keine Daten für diesen Zeitraum gefunden.'
+        : 'Bericht konnte nicht erstellt werden. Bitte erneut versuchen.'
+      setResult({ text: detail, isError: true })
     } finally {
       setReportLoading(false)
     }
@@ -191,6 +195,7 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onNavProfil
           </svg>
         </div>
         <div className="inner-title">Arbeitszeit</div>
+        {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
       </div>
 
       {/* Banner */}
@@ -228,10 +233,52 @@ export default function ArbeitsZeitScreen({ onNavHome, onNavRapport, onNavProfil
           </div>
         ))}
 
-        {/* Arbeitszeitbericht — PDF download */}
+        {/* Wochen-Stundenjournal — Diese Woche */}
         <div
           className="menu-item"
-          onClick={() => !reportLoading && loadingIdx === null && handleArbeitszeitbericht()}
+          onClick={() => !reportLoading && loadingIdx === null && handlePdfDownload('/pwa/report/weekly-pdf?period=this_week')}
+          style={{ opacity: reportLoading || loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="8 13 12 17 16 13"/>
+              <line x1="12" y1="17" x2="12" y2="9"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">{reportLoading ? '…' : 'Diese Woche'}</div>
+            <div className="menu-sub">Stundenjournal der laufenden Woche</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Wochen-Stundenjournal — Letzte Woche */}
+        <div
+          className="menu-item"
+          onClick={() => !reportLoading && loadingIdx === null && handlePdfDownload('/pwa/report/weekly-pdf?period=last_week')}
+          style={{ opacity: reportLoading || loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <polyline points="8 13 12 17 16 13"/>
+              <line x1="12" y1="17" x2="12" y2="9"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">{reportLoading ? '…' : 'Letzte Woche'}</div>
+            <div className="menu-sub">Stundenjournal der vergangenen Woche</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Arbeitszeitbericht — Monats-PDF */}
+        <div
+          className="menu-item"
+          onClick={() => !reportLoading && loadingIdx === null && handlePdfDownload('/pwa/report/monthly-pdf')}
           style={{ opacity: reportLoading || loadingIdx !== null ? 0.5 : 1 }}
         >
           <div className="menu-icon menu-icon-green">

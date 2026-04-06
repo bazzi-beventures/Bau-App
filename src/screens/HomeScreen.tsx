@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from '../api/client'
 
 interface Props {
   displayName: string
+  logoUrl?: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProfile: () => void
@@ -33,7 +34,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
   const firstName = displayName.split(' ')[0]
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
@@ -56,8 +57,13 @@ export default function HomeScreen({ displayName, onNavRapport, onNavArbeitszeit
     <div className="app-screen">
       {/* Header */}
       <div className="home-header">
-        <div className="home-greeting">{getGreeting()}</div>
-        <div className="home-name">{firstName}</div>
+        <div className="home-header-top">
+          <div>
+            <div className="home-greeting">{getGreeting()}</div>
+            <div className="home-name">{firstName}</div>
+          </div>
+          {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
+        </div>
         <div className="date-chip">
           <div className="date-dot" />
           {getDateStr()}

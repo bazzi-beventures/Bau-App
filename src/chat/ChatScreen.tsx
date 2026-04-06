@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessage, sendVoice, confirmReport, cancelReport, ChatResponse } from '../api/chat'
+import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, ChatResponse, DisambiguationOption } from '../api/chat'
 import { ApiError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
@@ -11,10 +11,13 @@ interface Message {
   transcription?: string
   timestamp: string
   action_taken?: string | null
+  sign_url?: string
+  disambiguation?: DisambiguationOption[]
 }
 
 interface Props {
   displayName: string
+  logoUrl?: string
   activeNav: 'rapport' | 'arbeitszeit'
   onNavHome: () => void
   onNavArbeitszeit: () => void
@@ -29,7 +32,7 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -40,6 +43,8 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
   ])
   const [loading, setLoading] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState(false)
+  const [pendingDisambiguation, setPendingDisambiguation] = useState(false)
+  const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,6 +53,26 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
 
   function addMessage(msg: Omit<Message, 'id'>) {
     setMessages(prev => [...prev, { ...msg, id: nextId() }])
+  }
+
+  function handleActionState(res: ChatResponse) {
+    if (res.action_taken === 'confirm_pending') {
+      setPendingConfirm(true)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
+    } else if (res.action_taken === 'disambiguate') {
+      setPendingDisambiguation(true)
+      setPendingConfirm(false)
+      setPendingQuoteQuestion(false)
+    } else if (res.action_taken === 'quote_question') {
+      setPendingQuoteQuestion(true)
+      setPendingConfirm(false)
+      setPendingDisambiguation(false)
+    } else {
+      setPendingConfirm(false)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
+    }
   }
 
   async function handleResponse(userText: string, promise: Promise<ChatResponse>) {
@@ -61,12 +86,10 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
         transcription: res.transcription,
         timestamp: now(),
         action_taken: res.action_taken,
+        sign_url: res.sign_url,
+        disambiguation: res.disambiguation,
       })
-      if (res.action_taken === 'confirm_pending') {
-        setPendingConfirm(true)
-      } else {
-        setPendingConfirm(false)
-      }
+      handleActionState(res)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLoggedOut()
@@ -83,7 +106,7 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
     setLoading(true)
     try {
       const res = await confirmReport()
-      addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
+      addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken, sign_url: res.sign_url })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
       addMessage({ role: 'bot', text: 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
@@ -94,6 +117,7 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
 
   async function handleCancel() {
     setPendingConfirm(false)
+    setPendingDisambiguation(false)
     setLoading(true)
     try {
       const res = await cancelReport()
@@ -106,15 +130,47 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
     }
   }
 
+  async function handleDisambiguate(art_nr: string, displayName: string) {
+    setPendingDisambiguation(false)
+    addMessage({ role: 'user', text: displayName, timestamp: now() })
+    setLoading(true)
+    try {
+      const res = await disambiguateMaterial(art_nr)
+      addMessage({
+        role: 'bot',
+        text: res.reply,
+        timestamp: now(),
+        action_taken: res.action_taken,
+        disambiguation: res.disambiguation,
+      })
+      handleActionState(res)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      addMessage({ role: 'bot', text: 'Fehler bei der Auswahl. Bitte erneut versuchen.', timestamp: now() })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function onSendText(text: string) {
-    if (pendingConfirm) return  // block new messages while awaiting confirmation
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
     handleResponse(text, sendMessage(text))
   }
 
   function onSendVoice(blob: Blob) {
-    if (pendingConfirm) return
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
     handleResponse('🎤 Sprachnachricht', sendVoice(blob))
   }
+
+  function onSendPhoto(file: File) {
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
+    handleResponse('📸 Foto', uploadPhoto(file))
+  }
+
+  // Find the last message with disambiguation options (for rendering buttons)
+  const lastDisambigMsg = pendingDisambiguation
+    ? [...messages].reverse().find(m => m.disambiguation && m.disambiguation.length > 0)
+    : null
 
   return (
     <div className="chat-screen">
@@ -129,6 +185,7 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
           <div className="chat-header-title">Rapporte</div>
           <div className="chat-header-sub">Rapport Bot · KI-Assistent</div>
         </div>
+        {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
       </div>
 
       {/* Messages */}
@@ -140,6 +197,7 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
             text={msg.text}
             transcription={msg.transcription}
             timestamp={msg.timestamp}
+            sign_url={msg.sign_url}
           />
         ))}
         {loading && (
@@ -147,6 +205,48 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
             <div className="typing-dot-row">
               <span /><span /><span />
             </div>
+          </div>
+        )}
+
+        {/* Disambiguation buttons */}
+        {lastDisambigMsg && !loading && (
+          <div className="disambig-buttons">
+            {lastDisambigMsg.disambiguation!.map(opt => (
+              <button
+                key={opt.art_nr}
+                className="disambig-btn"
+                onClick={() => handleDisambiguate(opt.art_nr, opt.name)}
+              >
+                {opt.name}
+                {opt.manufacturer || opt.category
+                  ? ` (${opt.manufacturer || opt.category})`
+                  : ''}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Offerten Ja/Nein buttons */}
+        {pendingQuoteQuestion && !loading && (
+          <div className="disambig-buttons">
+            <button
+              className="disambig-btn"
+              onClick={() => {
+                setPendingQuoteQuestion(false)
+                handleResponse('Ja', sendMessage('Ja'))
+              }}
+            >
+              Ja, Offerte verwenden
+            </button>
+            <button
+              className="disambig-btn"
+              onClick={() => {
+                setPendingQuoteQuestion(false)
+                handleResponse('Nein', sendMessage('Nein'))
+              }}
+            >
+              Nein, normaler Flow
+            </button>
           </div>
         )}
 
@@ -165,8 +265,8 @@ export default function ChatScreen({ displayName, activeNav, onNavHome, onNavArb
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — disabled while awaiting confirmation */}
-      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} disabled={loading || pendingConfirm} />
+      {/* Input — disabled while awaiting confirmation or disambiguation */}
+      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} onSendPhoto={onSendPhoto} disabled={loading || pendingConfirm || pendingDisambiguation || pendingQuoteQuestion} />
 
       {/* Nav bar */}
       <div className="nav-bar">
