@@ -90,11 +90,12 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   )
 }
 
-function MaterialModal({ material, onClose, onSaved }: { material: Material | null; onClose: () => void; onSaved: () => void }) {
+function MaterialModal({ material, onClose, onSaved, existingCategories }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[] }) {
   const isNew = !material
   const [artNr, setArtNr] = useState(material?.art_nr ?? '')
   const [name, setName] = useState(material?.name ?? '')
   const [category, setCategory] = useState(material?.category ?? '')
+  const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
   const [unit, setUnit] = useState(material?.unit ?? '')
   const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
   const [manufacturer, setManufacturer] = useState(material?.manufacturer ?? '')
@@ -148,7 +149,21 @@ function MaterialModal({ material, onClose, onSaved }: { material: Material | nu
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="admin-form-group">
               <label className="admin-form-label">Kategorie</label>
-              <input className="admin-form-input" value={category} onChange={e => setCategory(e.target.value)} />
+              {isNewCategory ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input className="admin-form-input" value={category} onChange={e => setCategory(e.target.value)} placeholder="Neue Kategorie…" autoFocus />
+                  <button type="button" className="admin-btn admin-btn-secondary" style={{ flexShrink: 0, padding: '6px 10px' }} onClick={() => { setIsNewCategory(false); setCategory('') }}>×</button>
+                </div>
+              ) : (
+                <select className="admin-form-select" value={category} onChange={e => {
+                  if (e.target.value === '__new__') { setIsNewCategory(true); setCategory('') }
+                  else setCategory(e.target.value)
+                }}>
+                  <option value="">— Keine —</option>
+                  {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="__new__">+ Neue Kategorie…</option>
+                </select>
+              )}
             </div>
             <div className="admin-form-group">
               <label className="admin-form-label">Einheit</label>
@@ -337,6 +352,7 @@ export default function MaterialsScreen() {
           material={editMaterial === 'new' ? null : (editMaterial as Material)}
           onClose={() => setEditMaterial(undefined)}
           onSaved={() => { setEditMaterial(undefined); load() }}
+          existingCategories={categories}
         />
       )}
 
