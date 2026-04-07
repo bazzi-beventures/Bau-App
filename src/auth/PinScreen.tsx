@@ -16,7 +16,7 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [showPasswordForm, setShowPasswordForm] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -69,7 +69,7 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
     <div className="auth-screen">
       <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Willkommen beim<br />KI Assistent</div>
-      <div className="auth-sub">{showPasswordForm ? 'Admin-Anmeldung mit Passwort.' : 'Erstmalige Anmeldung mit PIN.'}</div>
+      <div className="auth-sub">{showPasswordForm ? 'Anmeldung mit E-Mail und Passwort.' : 'Erstmalige Anmeldung mit PIN.'}</div>
 
       {!showPasswordForm ? (
         <form onSubmit={handleSubmit}>
@@ -121,7 +121,7 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
           </button>
 
           <button type="button" className="btn-secondary" onClick={() => { setShowPasswordForm(true); setError('') }} style={{ marginTop: 4 }}>
-            Mit Passwort anmelden (Admin)
+            Mit Passwort anmelden
           </button>
         </form>
       ) : (
@@ -191,7 +191,7 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
           </button>
 
           <button type="button" className="btn-secondary" onClick={() => { setShowPasswordForm(false); setError('') }}>
-            Zurück zur PIN-Anmeldung
+            Als Mitarbeiter mit PIN anmelden
           </button>
         </form>
       )}

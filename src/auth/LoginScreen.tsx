@@ -12,7 +12,6 @@ interface Props {
 export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -75,86 +74,72 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
 
       {error && <p className="error-msg">{error}</p>}
 
-      {!showPasswordForm ? (
-        <>
-          <button className="btn-fingerprint" onClick={handlePasskeyLogin} disabled={loading}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
-              <path d="M12 6c-3.31 0-6 2.69-6 6"/>
-              <path d="M12 8c-2.21 0-4 1.79-4 4"/>
-              <path d="M12 10c-1.1 0-2 .9-2 2"/>
-              <circle cx="12" cy="12" r="1"/>
-              <path d="M12 14v4"/>
-              <path d="M10 16h4"/>
-            </svg>
-            {loading ? 'Warte auf Bestätigung…' : 'Anmelden (Passkey / PIN)'}
-          </button>
+      <form onSubmit={handlePasswordLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="admin@firma.ch"
+            autoComplete="email"
+            required
+            style={{
+              background: 'var(--surface, #1a1f2e)',
+              border: '1px solid var(--border, #2a3148)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              fontSize: 15,
+              color: 'var(--text)',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Passwort</label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            required
+            style={{
+              background: 'var(--surface, #1a1f2e)',
+              border: '1px solid var(--border, #2a3148)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              fontSize: 15,
+              color: 'var(--text)',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password}>
+          {loading ? 'Anmelden…' : 'Anmelden'}
+        </button>
+      </form>
 
-          <button className="btn-secondary" onClick={() => { setShowPasswordForm(true); setError('') }} style={{ marginTop: 4 }}>
-            Mit Passwort anmelden (Admin)
-          </button>
+      <button className="btn-secondary" onClick={handlePasskeyLogin} disabled={loading} style={{ marginTop: 4 }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 18, height: 18, marginRight: 6, verticalAlign: 'middle' }}>
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity="0.3"/>
+          <path d="M12 6c-3.31 0-6 2.69-6 6"/>
+          <path d="M12 8c-2.21 0-4 1.79-4 4"/>
+          <path d="M12 10c-1.1 0-2 .9-2 2"/>
+          <circle cx="12" cy="12" r="1"/>
+          <path d="M12 14v4"/>
+          <path d="M10 16h4"/>
+        </svg>
+        Mit Biometrie / Passkey anmelden
+      </button>
 
-          <button className="btn-secondary" onClick={handleNewDevice} style={{ marginTop: 4 }}>
-            Anderes Gerät / Neuer Mitarbeiter
-          </button>
-        </>
-      ) : (
-        <>
-          <form onSubmit={handlePasswordLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="admin@firma.ch"
-                autoComplete="email"
-                required
-                style={{
-                  background: 'var(--surface, #1a1f2e)',
-                  border: '1px solid var(--border, #2a3148)',
-                  borderRadius: 10,
-                  padding: '12px 14px',
-                  fontSize: 15,
-                  color: 'var(--text)',
-                  outline: 'none',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Passwort</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                required
-                style={{
-                  background: 'var(--surface, #1a1f2e)',
-                  border: '1px solid var(--border, #2a3148)',
-                  borderRadius: 10,
-                  padding: '12px 14px',
-                  fontSize: 15,
-                  color: 'var(--text)',
-                  outline: 'none',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-            <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password}>
-              {loading ? 'Anmelden…' : 'Anmelden'}
-            </button>
-          </form>
-
-          <button className="btn-secondary" onClick={() => { setShowPasswordForm(false); setError('') }}>
-            Zurück zur Passkey-Anmeldung
-          </button>
-        </>
-      )}
+      <button className="btn-secondary" onClick={handleNewDevice} style={{ marginTop: 4 }}>
+        Anderes Gerät / Neuer Mitarbeiter
+      </button>
 
       <p className="auth-footer">Alle Daten verschlüsselt übertragen</p>
     </div>
