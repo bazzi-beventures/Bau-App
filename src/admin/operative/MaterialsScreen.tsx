@@ -90,7 +90,7 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   )
 }
 
-function MaterialModal({ material, onClose, onSaved, existingCategories }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[] }) {
+function MaterialModal({ material, onClose, onSaved, existingCategories, existingManufacturers }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; existingManufacturers: string[] }) {
   const isNew = !material
   const [artNr, setArtNr] = useState(material?.art_nr ?? '')
   const [name, setName] = useState(material?.name ?? '')
@@ -99,6 +99,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories }: { mat
   const [unit, setUnit] = useState(material?.unit ?? '')
   const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
   const [manufacturer, setManufacturer] = useState(material?.manufacturer ?? '')
+  const [isNewManufacturer, setIsNewManufacturer] = useState(!!(material?.manufacturer && !existingManufacturers.includes(material.manufacturer)))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -177,7 +178,21 @@ function MaterialModal({ material, onClose, onSaved, existingCategories }: { mat
             </div>
             <div className="admin-form-group">
               <label className="admin-form-label">Hersteller</label>
-              <input className="admin-form-input" value={manufacturer} onChange={e => setManufacturer(e.target.value)} />
+              {isNewManufacturer ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input className="admin-form-input" value={manufacturer} onChange={e => setManufacturer(e.target.value)} placeholder="Neuer Hersteller…" autoFocus />
+                  <button type="button" className="admin-btn admin-btn-secondary" style={{ flexShrink: 0, padding: '6px 10px' }} onClick={() => { setIsNewManufacturer(false); setManufacturer('') }}>×</button>
+                </div>
+              ) : (
+                <select className="admin-form-select" value={manufacturer} onChange={e => {
+                  if (e.target.value === '__new__') { setIsNewManufacturer(true); setManufacturer('') }
+                  else setManufacturer(e.target.value)
+                }}>
+                  <option value="">— Kein —</option>
+                  {existingManufacturers.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="__new__">+ Neuer Hersteller…</option>
+                </select>
+              )}
             </div>
           </div>
         </form>
@@ -353,6 +368,7 @@ export default function MaterialsScreen() {
           onClose={() => setEditMaterial(undefined)}
           onSaved={() => { setEditMaterial(undefined); load() }}
           existingCategories={categories}
+          existingManufacturers={manufacturers}
         />
       )}
 
