@@ -25,6 +25,9 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const [pinExpiry, setPinExpiry] = useState('')
   const [generatingPin, setGeneratingPin] = useState(false)
 
+  const [newPassword, setNewPassword] = useState('')
+  const [settingPassword, setSettingPassword] = useState(false)
+
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmAnonymize, setConfirmAnonymize] = useState(false)
   const [acting, setActing] = useState(false)
@@ -87,6 +90,24 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       setActing(false)
     }
     setConfirmDelete(false)
+  }
+
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user || newPassword.length < 8) return
+    setSettingPassword(true)
+    try {
+      await apiFetch(`/pwa/admin/users/${user.id}/set-password`, {
+        method: 'POST',
+        body: JSON.stringify({ new_password: newPassword }),
+      })
+      setNewPassword('')
+      showToast('Passwort gesetzt')
+    } catch {
+      setError('Fehler beim Setzen des Passworts')
+    } finally {
+      setSettingPassword(false)
+    }
   }
 
   async function handleAnonymize() {
@@ -200,6 +221,32 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
               >
                 {generatingPin ? 'Generiere…' : pin ? 'Neuen PIN generieren' : 'PIN generieren'}
               </button>
+            </div>
+
+            {/* Passwort setzen */}
+            <div className="admin-table-wrap" style={{ padding: 20 }}>
+              <div className="admin-section-title">Passwort</div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 14px' }}>
+                Setzt ein neues Login-Passwort für diesen Benutzer (min. 8 Zeichen).
+              </p>
+              <form onSubmit={handleSetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input
+                  className="admin-form-input"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Neues Passwort"
+                  minLength={8}
+                />
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-secondary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  disabled={settingPassword || newPassword.length < 8}
+                >
+                  {settingPassword ? 'Speichere…' : 'Passwort setzen'}
+                </button>
+              </form>
             </div>
 
             {/* Gefahrenzone */}
