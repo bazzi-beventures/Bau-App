@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+
 interface Session {
   id: string
   staff_name: string
@@ -75,6 +77,8 @@ export default function HrReportsScreen() {
   const [data, setData] = useState<TimesheetData | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedStaff, setExpandedStaff] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -94,6 +98,39 @@ export default function HrReportsScreen() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const res = await fetch(`${BASE_URL}/pwa/admin/hr/export-timesheets`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail || 'Export fehlgeschlagen')
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      const filename = match ? match[1] : `Stunden-Export_${dateFrom}_${dateTo}.xlsx`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      setToast({ msg: 'Export heruntergeladen', type: 'success' })
+      setTimeout(() => setToast(null), 3000)
+    } catch (err) {
+      setToast({ msg: err instanceof Error ? err.message : 'Export fehlgeschlagen', type: 'error' })
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const staffGroups = data ? groupByStaff(data.sessions) : new Map<string, Session[]>()
 
@@ -137,6 +174,9 @@ export default function HrReportsScreen() {
           </div>
           <button className="admin-btn admin-btn-primary" onClick={load} disabled={loading}>
             {loading ? 'Laden…' : 'Laden'}
+          </button>
+          <button className="admin-btn admin-btn-secondary" onClick={handleExport} disabled={exporting || loading}>
+            {exporting ? 'Exportieren…' : 'XLSX Export'}
           </button>
         </div>
       </div>
@@ -289,6 +329,12 @@ export default function HrReportsScreen() {
             })
           )}
         </>
+      )}
+
+      {toast && (
+        <div className="admin-toast-container">
+          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
+        </div>
       )}
     </div>
   )

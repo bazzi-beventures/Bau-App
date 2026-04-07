@@ -11,6 +11,7 @@ export type AdminScreen =
   | 'quotes'
   | 'invoices'
   | 'pricing-rules'
+  | 'project-overview'
   | 'users'
   | 'import'
   | 'kpis'

@@ -13,6 +13,7 @@ import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
+import ProjectOverviewScreen from './operative/ProjectOverviewScreen'
 import UsersScreen from './system/UsersScreen'
 import ImportScreen from './system/ImportScreen'
 import KpiScreen from './kpis/KpiScreen'
@@ -55,6 +56,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'quotes': 'Offerten',
   'invoices': 'Rechnungen',
   'pricing-rules': 'Lieferantenpreise',
+  'project-overview': 'Projektfortschritte',
   'users': 'Benutzerverwaltung',
   'import': 'Import / Upload',
   'kpis': 'Kennzahlen',
@@ -90,6 +92,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
       case 'quotes':       return <QuotesScreen />
       case 'invoices':     return <InvoicesScreen />
       case 'pricing-rules':return <PricingRulesScreen />
+      case 'project-overview': return <ProjectOverviewScreen />
       case 'users':        return <UsersScreen />
       case 'import':       return <ImportScreen />
       case 'kpis':         return <KpiScreen />

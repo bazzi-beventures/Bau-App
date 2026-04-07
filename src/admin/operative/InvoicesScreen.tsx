@@ -10,6 +10,14 @@ interface Invoice {
   created_at: string
   paid_at: string | null
   pdf_url: string | null
+  customer_email?: string | null
+}
+
+interface Project {
+  id: string
+  name: string
+  customer_email?: string | null
+  is_closed?: boolean
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -47,6 +55,17 @@ export default function InvoicesScreen() {
   const [acting, setActing] = useState<number | null>(null)
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  // Generate invoice
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [genProject, setGenProject] = useState('')
+  const [genUseQuote, setGenUseQuote] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  // Send invoice
+  const [sendInvoice, setSendInvoice] = useState<Invoice | null>(null)
+  const [sendEmail, setSendEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [hasAcceptedQuote, setHasAcceptedQuote] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -59,6 +78,72 @@ export default function InvoicesScreen() {
   }
 
   useEffect(() => { load() }, [statusFilter])
+
+  async function openGenerate() {
+    try {
+      const p = await apiFetch('/pwa/admin/projects') as Project[]
+      setProjects(p.filter(x => !x.is_closed))
+    } catch { /* ignore */ }
+    setGenProject('')
+    setGenUseQuote(false)
+    setHasAcceptedQuote(false)
+    setShowGenerate(true)
+  }
+
+  async function checkQuote(projectName: string) {
+    setGenProject(projectName)
+    if (!projectName) { setHasAcceptedQuote(false); return }
+    try {
+      const quotes = await apiFetch('/pwa/admin/quotes') as { project_name: string; status: string }[]
+      setHasAcceptedQuote(quotes.some(q => q.project_name === projectName && q.status === 'akzeptiert'))
+    } catch {
+      setHasAcceptedQuote(false)
+    }
+  }
+
+  async function handleGenerate() {
+    if (!genProject) return
+    setGenerating(true)
+    try {
+      const res = await apiFetch('/pwa/admin/invoices/generate', {
+        method: 'POST',
+        body: JSON.stringify({ project_name: genProject, use_quote: genUseQuote }),
+      }) as { invoice_number: string; total_amount: number }
+      showToast(`Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`, 'success')
+      setShowGenerate(false)
+      load()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Erstellen', 'error')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function openSendInvoice(inv: Invoice) {
+    const proj = projects.length > 0
+      ? projects.find(p => p.name === inv.project_name)
+      : null
+    setSendEmail(proj?.customer_email || '')
+    setSendInvoice(inv)
+  }
+
+  async function handleSendInvoice() {
+    if (!sendInvoice || !sendEmail) return
+    setSending(true)
+    try {
+      await apiFetch('/pwa/admin/invoices/send', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: sendInvoice.id, recipient_email: sendEmail }),
+      })
+      showToast(`Rechnung an ${sendEmail} gesendet`, 'success')
+      setSendInvoice(null)
+      load()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
 
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
@@ -110,6 +195,9 @@ export default function InvoicesScreen() {
           <div className="admin-page-title">Rechnungen</div>
           <div className="admin-page-subtitle">{filtered.length} Einträge · Offen: {fmtCHF(totalOpen)}</div>
         </div>
+        <button className="admin-btn admin-btn-primary" onClick={openGenerate}>
+          + Rechnung erstellen
+        </button>
       </div>
 
       <div className="admin-table-wrap">
@@ -174,6 +262,15 @@ export default function InvoicesScreen() {
                           PDF
                         </a>
                       )}
+                      {(inv.status === 'ausstehend' || inv.status === 'offen') && (
+                        <button
+                          className="admin-btn admin-btn-primary admin-btn-sm"
+                          onClick={() => openSendInvoice(inv)}
+                          disabled={acting === inv.id}
+                        >
+                          Senden
+                        </button>
+                      )}
                       {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                         <button
                           className="admin-btn admin-btn-success admin-btn-sm"
@@ -218,6 +315,65 @@ export default function InvoicesScreen() {
                 disabled={acting === confirmPaid.id}
               >
                 {acting === confirmPaid.id ? '…' : 'Ja, bezahlt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog: Rechnung erstellen */}
+      {showGenerate && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Rechnung erstellen</div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label">Projekt</label>
+              <select className="admin-form-select" value={genProject} onChange={e => checkQuote(e.target.value)}>
+                <option value="">-- Projekt wählen --</option>
+                {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+            {hasAcceptedQuote && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={genUseQuote} onChange={e => setGenUseQuote(e.target.checked)} />
+                  Offerten-Positionen verwenden (statt Ist-Daten)
+                </label>
+              </div>
+            )}
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setShowGenerate(false)} disabled={generating}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleGenerate} disabled={!genProject || generating}>
+                {generating ? 'Wird erstellt…' : 'Rechnung erstellen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog: Rechnung senden */}
+      {sendInvoice && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Rechnung senden</div>
+            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+              {sendInvoice.invoice_number} · {fmtCHF(sendInvoice.total_amount)}<br />
+              Projekt: {sendInvoice.project_name}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label">Empfänger E-Mail</label>
+              <input
+                className="admin-form-input"
+                type="email"
+                value={sendEmail}
+                onChange={e => setSendEmail(e.target.value)}
+                placeholder="kunde@example.com"
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setSendInvoice(null)} disabled={sending}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleSendInvoice} disabled={!sendEmail || sending}>
+                {sending ? 'Wird gesendet…' : 'Rechnung senden'}
               </button>
             </div>
           </div>
