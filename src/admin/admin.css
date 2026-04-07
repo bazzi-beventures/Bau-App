@@ -175,6 +175,13 @@
   display: flex;
   align-items: center;
   transition: color 0.15s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.admin-logout-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .admin-logout-btn:hover {
