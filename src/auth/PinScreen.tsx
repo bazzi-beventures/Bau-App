@@ -46,11 +46,12 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
 
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!email || !password || !tenantSlug) return
+    if (!email || !password) return
     setError('')
     setLoading(true)
     try {
-      await loginWithPassword(tenantSlug.trim(), email, password)
+      const { tenant_slug } = await loginWithPassword(email, password)
+      localStorage.setItem('tenantSlug', tenant_slug)
       onLoggedIn?.()
     } catch (err) {
       if (err instanceof ApiError) {
@@ -150,19 +151,6 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
         </form>
       ) : (
         <form onSubmit={handlePasswordLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="field">
-            <label className="field-label">Firmen-Kürzel</label>
-            <input
-              className="input"
-              type="text"
-              value={tenantSlug}
-              onChange={e => setTenantSlug(e.target.value)}
-              placeholder="z.B. gehlhaar"
-              autoCapitalize="none"
-              autoCorrect="off"
-              required
-            />
-          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail</label>
             <input
@@ -225,7 +213,7 @@ export default function PinScreen({ logoUrl, onPinValid, onLoggedIn }: Props) {
 
           {error && <p className="error-msg">{error}</p>}
 
-          <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password || !tenantSlug}>
+          <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password}>
             {loading ? <><Spinner />Anmelden…</> : 'Anmelden'}
           </button>
 

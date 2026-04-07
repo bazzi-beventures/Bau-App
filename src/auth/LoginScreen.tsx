@@ -69,7 +69,8 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
     setError('')
     setLoading(true)
     try {
-      await loginWithPassword(tenantSlug, email, password)
+      const { tenant_slug } = await loginWithPassword(email, password)
+      localStorage.setItem('tenantSlug', tenant_slug)
       onLoggedIn()
     } catch (err) {
       if (err instanceof ApiError) {

@@ -59,11 +59,11 @@ export async function generateStaffPin(staffId: string): Promise<{ pin: string; 
 
 // ─── Password Auth ─────────────────────────────────────────
 
-export async function loginWithPassword(tenantSlug: string, email: string, password: string): Promise<void> {
-  await apiFetch('/pwa/auth/login-password', {
+export async function loginWithPassword(email: string, password: string): Promise<{ tenant_slug: string }> {
+  return apiFetch('/pwa/auth/login-password', {
     method: 'POST',
-    body: JSON.stringify({ tenant_slug: tenantSlug, email, password }),
-  })
+    body: JSON.stringify({ email, password }),
+  }) as Promise<{ tenant_slug: string }>
 }
 
 export async function setAdminPassword(currentPassword: string | null, newPassword: string): Promise<void> {
