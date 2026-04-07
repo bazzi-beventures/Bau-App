@@ -1078,6 +1078,7 @@ input, textarea { font-family: var(--font); color: var(--text); }
   animation: kpi-spin 0.8s linear infinite;
 }
 @keyframes kpi-spin { to { transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .kpi-error {
   text-align: center; color: var(--accent-red);
