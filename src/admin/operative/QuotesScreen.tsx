@@ -15,7 +15,7 @@ interface Project {
   id: string
   name: string
   customer_name?: string
-  status?: string
+  is_closed?: boolean
 }
 
 interface StaffRole {
@@ -91,7 +91,7 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
       apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>,
       apiFetch('/pwa/admin/materials') as Promise<Material[]>,
     ]).then(([p, r, m]) => {
-      setProjects(p.filter(x => x.status !== 'abgeschlossen'))
+      setProjects(p.filter(x => !x.is_closed))
       setRoles(r)
       setMaterials(m)
     })
@@ -391,6 +391,10 @@ export default function QuotesScreen() {
   const [acting, setActing] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  // Send quote
+  const [sendQuote, setSendQuote] = useState<Quote | null>(null)
+  const [sendEmail, setSendEmail] = useState('')
+  const [sending, setSending] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -421,6 +425,24 @@ export default function QuotesScreen() {
       showToast('Fehler beim Aktualisieren', 'error')
     } finally {
       setActing(null)
+    }
+  }
+
+  async function handleSendQuote() {
+    if (!sendQuote || !sendEmail) return
+    setSending(true)
+    try {
+      await apiFetch('/pwa/admin/quotes/send', {
+        method: 'POST',
+        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail }),
+      })
+      showToast(`Offerte an ${sendEmail} gesendet`, 'success')
+      setSendQuote(null)
+      load()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen', 'error')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -517,6 +539,15 @@ export default function QuotesScreen() {
                           PDF
                         </a>
                       )}
+                      {['entwurf', 'akzeptiert'].includes(q.status) && (
+                        <button
+                          className="admin-btn admin-btn-primary admin-btn-sm"
+                          onClick={() => { setSendEmail(''); setSendQuote(q) }}
+                          disabled={acting === q.id}
+                        >
+                          Senden
+                        </button>
+                      )}
                       {q.status === 'gesendet' && (
                         <>
                           <button
@@ -553,6 +584,35 @@ export default function QuotesScreen() {
           </table>
         )}
       </div>
+
+      {/* Dialog: Offerte senden */}
+      {sendQuote && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Offerte senden</div>
+            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+              {sendQuote.quote_number} · {fmtCHF(sendQuote.total_amount)}<br />
+              Projekt: {sendQuote.project_name}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label">Empfänger E-Mail</label>
+              <input
+                className="admin-form-input"
+                type="email"
+                value={sendEmail}
+                onChange={e => setSendEmail(e.target.value)}
+                placeholder="kunde@example.com"
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sending}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sending}>
+                {sending ? 'Wird gesendet…' : 'Offerte senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="admin-toast-container">

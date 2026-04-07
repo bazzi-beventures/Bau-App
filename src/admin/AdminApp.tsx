@@ -109,15 +109,17 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
         badges={badges}
       />
       <main className="admin-content">
-        {logoUrl && !logoError && (
-          <img
-            className="admin-content-logo"
-            src={logoUrl}
-            alt={tenantName}
-            onError={() => setLogoError(true)}
-          />
-        )}
-        {renderScreen()}
+        <div className="admin-content-inner">
+          {logoUrl && !logoError && (
+            <img
+              className="admin-content-logo"
+              src={logoUrl}
+              alt={tenantName}
+              onError={() => setLogoError(true)}
+            />
+          )}
+          {renderScreen()}
+        </div>
       </main>
     </div>
   )

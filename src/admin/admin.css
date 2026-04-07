@@ -32,14 +32,12 @@
 }
 
 .admin-content-logo {
-  position: absolute;
-  top: 16px;
-  right: 24px;
+  float: right;
   height: 40px;
+  margin: 16px 24px 12px 20px;
   object-fit: contain;
   opacity: 0.85;
   pointer-events: none;
-  z-index: 10;
 }
 
 .admin-sidebar-tenant {
@@ -185,15 +183,15 @@
 
 /* ─── Main Content ────────────────────────────────────────── */
 .admin-content {
-  position: relative;
   overflow-y: auto;
   height: 100vh;
-  display: flex;
-  flex-direction: column;
+}
+
+.admin-content-inner {
+  min-height: 100%;
 }
 
 .admin-page {
-  flex: 1;
   padding: 28px 32px;
   max-width: 1200px;
 }
@@ -203,7 +201,6 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
-  padding-right: 140px;
 }
 
 .admin-page-title {
