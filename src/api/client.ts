@@ -1,5 +1,20 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
+const TOKEN_KEY = 'pwa_token'
+
+export function saveToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message)
@@ -9,9 +24,10 @@ export class ApiError extends Error {
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<unknown> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    credentials: 'include', // send/receive HttpOnly session cookie cross-origin
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...(options.headers ?? {}),
     },
   })
@@ -31,6 +47,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
 export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
+    headers: authHeaders(),
   })
 
   if (!res.ok) {
@@ -54,6 +71,7 @@ export async function apiFormFetch(path: string, form: FormData): Promise<unknow
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     credentials: 'include',
+    headers: authHeaders(),
     body: form,
   })
 

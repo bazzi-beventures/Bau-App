@@ -60,10 +60,15 @@ export async function generateStaffPin(staffId: string): Promise<{ pin: string; 
 // ─── Password Auth ─────────────────────────────────────────
 
 export async function loginWithPassword(email: string, password: string): Promise<{ tenant_slug: string }> {
-  return apiFetch('/pwa/auth/login-password', {
+  const result = await apiFetch('/pwa/auth/login-password', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
-  }) as Promise<{ tenant_slug: string }>
+  }) as { tenant_slug: string; token?: string }
+  if (result.token) {
+    const { saveToken } = await import('./client')
+    saveToken(result.token)
+  }
+  return result
 }
 
 export async function setAdminPassword(currentPassword: string | null, newPassword: string): Promise<void> {
@@ -181,7 +186,11 @@ export async function markInvoicePaid(id: string): Promise<void> {
 }
 
 export async function getInvoicePdf(id: string): Promise<Blob> {
-  const resp = await fetch(`/pwa/admin/invoices/${id}/pdf`, { credentials: 'include' })
+  const token = localStorage.getItem('pwa_token')
+  const resp = await fetch(`/pwa/admin/invoices/${id}/pdf`, {
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
   if (!resp.ok) throw new Error('PDF-Download fehlgeschlagen')
   return resp.blob()
 }

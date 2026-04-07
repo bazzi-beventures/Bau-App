@@ -102,10 +102,14 @@ export default function HrReportsScreen() {
   async function handleExport() {
     setExporting(true)
     try {
+      const token = localStorage.getItem('pwa_token')
       const res = await fetch(`${BASE_URL}/pwa/admin/hr/export-timesheets`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
       })
       if (!res.ok) {

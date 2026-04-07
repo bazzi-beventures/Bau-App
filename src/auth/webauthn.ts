@@ -1,4 +1,4 @@
-import { apiFetch } from '../api/client'
+import { apiFetch, saveToken } from '../api/client'
 
 // ── base64url helpers ────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export async function registerPasskey(
   const response = credential.response as AuthenticatorAttestationResponse
 
   // 4. Send to server
-  await apiFetch('/pwa/auth/register-complete', {
+  const regResult = (await apiFetch('/pwa/auth/register-complete', {
     method: 'POST',
     body: JSON.stringify({
       tenant_slug: tenantSlug,
@@ -72,7 +72,8 @@ export async function registerPasskey(
         },
       },
     }),
-  })
+  })) as { token?: string }
+  if (regResult.token) saveToken(regResult.token)
 }
 
 // ── Authentication ────────────────────────────────────────────
@@ -121,7 +122,8 @@ export async function authenticatePasskey(
         },
       },
     }),
-  })) as { display_name: string }
+  })) as { display_name: string; token?: string }
 
+  if (result.token) saveToken(result.token)
   return result.display_name
 }
