@@ -242,6 +242,7 @@ export default function App() {
         logoUrl={logoUrl}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
