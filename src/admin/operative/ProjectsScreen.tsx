@@ -2,12 +2,32 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import ProjectDetailScreen from './ProjectDetailScreen'
 
+export interface Termin {
+  datum: string
+  uhrzeit: string
+  notiz: string
+}
+
+export interface Kontakt {
+  name: string
+  rolle: string
+  telefon: string
+  email: string
+}
+
 export interface Project {
   id: string
   name: string
   customer_name: string | null
   customer_email: string | null
   customer_address: string | null
+  auftraggeber: string | null
+  eigentuemer: string | null
+  art_der_arbeit: string | null
+  sachbearbeiter_id: string | null
+  monteur_ids: string[]
+  termine: Termin[]
+  kontakte: Kontakt[]
   is_closed: boolean
   created_at: string
 }
