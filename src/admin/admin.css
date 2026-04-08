@@ -231,8 +231,8 @@
 }
 
 .admin-kpi-card {
-  background: #133550;
-  border: 1px solid #1c3e60;
+  background: #1a4e72;
+  border: 1px solid #266090;
   border-radius: 12px;
   padding: 18px 20px;
   cursor: pointer;
@@ -281,8 +281,8 @@
 
 /* ─── Table ───────────────────────────────────────────────── */
 .admin-table-wrap {
-  background: #133550;
-  border: 1px solid #1c3e60;
+  background: #1a4e72;
+  border: 1px solid #266090;
   border-radius: 12px;
   overflow: hidden;
 }
@@ -328,8 +328,8 @@
   color: var(--muted, #6b7280);
   padding: 10px 16px;
   text-align: left;
-  background: #133550;
-  border-bottom: 1px solid #1c3e60;
+  background: #1a4e72;
+  border-bottom: 1px solid #266090;
   white-space: nowrap;
 }
 
@@ -395,8 +395,8 @@
 }
 
 .admin-modal {
-  background: #133550;
-  border-left: 1px solid #1c3e60;
+  background: #1a4e72;
+  border-left: 1px solid #266090;
   width: 480px;
   max-width: 95vw;
   height: 100vh;
@@ -416,10 +416,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid #1c3e60;
+  border-bottom: 1px solid #266090;
   position: sticky;
   top: 0;
-  background: #133550;
+  background: #1a4e72;
   z-index: 1;
 }
 
@@ -475,8 +475,8 @@
 }
 
 .admin-confirm-box {
-  background: #133550;
-  border: 1px solid #1c3e60;
+  background: #1a4e72;
+  border: 1px solid #266090;
   border-radius: 14px;
   padding: 28px;
   max-width: 380px;
@@ -538,7 +538,7 @@
 }
 
 .admin-form-select option {
-  background: #133550;
+  background: #1a4e72;
 }
 
 .admin-form-hint {
