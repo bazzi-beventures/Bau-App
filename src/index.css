@@ -3,9 +3,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0d2d41;
-  --surface: #134060;
-  --surface2: #1a5278;
+  --bg: #133550;
+  --surface: #1a4e72;
+  --surface2: #226390;
   --border: rgba(255,255,255,0.09);
   --text: #f1f5f9;
   --muted: #93bcd4;
@@ -30,7 +30,7 @@
 
 html, body, #root {
   height: 100%;
-  background: #071e2a;
+  background: #0c2840;
   font-family: var(--font);
   color: var(--text);
   overscroll-behavior: none;
