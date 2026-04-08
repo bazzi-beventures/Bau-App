@@ -1003,6 +1003,7 @@ input, textarea { font-family: var(--font); color: var(--text); }
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: border-color 0.15s;
+  color: var(--text);
 }
 .projekt-card:active { transform: scale(0.99); }
 .projekt-card-open { border-color: var(--accent-blue-20); }
@@ -1013,11 +1014,15 @@ input, textarea { font-family: var(--font); color: var(--text); }
   justify-content: space-between;
   padding: 14px 16px;
   gap: 10px;
+  min-height: 52px;
 }
 .projekt-card-title {
   font-size: 15px;
   font-weight: 600;
   flex: 1;
+  color: var(--text);
+  min-width: 0;
+  word-break: break-word;
 }
 .projekt-card-meta {
   display: flex;
