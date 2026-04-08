@@ -6,6 +6,7 @@ interface Props {
   logoUrl?: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
+  onNavProjekte: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
 }
@@ -34,7 +35,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const firstName = displayName.split(' ')[0]
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
@@ -109,6 +110,24 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
             </svg>
           </div>
         </div>
+
+        <div className="tile tile-amber" style={{ gridColumn: 'span 2' }} onClick={onNavProjekte}>
+          <div className="tile-icon tile-icon-amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <path d="M9 22V12h6v10"/>
+            </svg>
+          </div>
+          <div>
+            <div className="tile-label">Projekte</div>
+            <div className="tile-desc">Auftraggeber, Termine &amp; Kontakte</div>
+          </div>
+          <div className="tile-arrow">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 8h10M9 4l4 4-4 4"/>
+            </svg>
+          </div>
+        </div>
       </div>
 
       {/* Status card */}
@@ -166,6 +185,13 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
             <polyline points="12 6 12 12 16 14"/>
           </svg>
           <span>Arbeitszeit</span>
+        </div>
+        <div className="nav-item" onClick={onNavProjekte}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          <span>Projekte</span>
         </div>
         <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

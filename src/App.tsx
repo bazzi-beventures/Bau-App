@@ -10,9 +10,10 @@ import ChatScreen from './chat/ChatScreen'
 import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
+import ProjekteScreen from './screens/ProjekteScreen'
 import AdminApp from './admin/AdminApp'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'admin'
+type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin'
 
 interface PinState {
   tenantSlug: string
@@ -184,6 +185,7 @@ export default function App() {
         logoUrl={logoUrl}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
@@ -228,6 +230,18 @@ export default function App() {
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}
+      />
+    )
+  }
+
+  if (screen === 'projekte' && user) {
+    return (
+      <ProjekteScreen
+        logoUrl={logoUrl}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   }
