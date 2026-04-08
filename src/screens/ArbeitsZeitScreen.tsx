@@ -8,6 +8,7 @@ interface Props {
   logoUrl?: string
   onNavHome: () => void
   onNavRapport: () => void
+  onNavProjekte: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
   onOpenBericht: (type: BerichtType) => void
@@ -83,7 +84,7 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProfile, onLoggedOut, onOpenBericht }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading] = useState(false)
@@ -346,6 +347,13 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
             <polyline points="12 6 12 12 16 14"/>
           </svg>
           <span>Arbeitszeit</span>
+        </div>
+        <div className="nav-item" onClick={onNavProjekte}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          <span>Projekte</span>
         </div>
         <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

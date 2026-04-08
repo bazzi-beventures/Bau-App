@@ -214,6 +214,7 @@ export default function App() {
         activeNav="rapport"
         onNavHome={() => setScreen('home')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
@@ -227,6 +228,7 @@ export default function App() {
         logoUrl={logoUrl}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
+        onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}

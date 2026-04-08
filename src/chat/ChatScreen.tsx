@@ -21,6 +21,7 @@ interface Props {
   activeNav: 'rapport' | 'arbeitszeit'
   onNavHome: () => void
   onNavArbeitszeit: () => void
+  onNavProjekte: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
 }
@@ -32,7 +33,7 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -338,7 +339,14 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Zeit</span>
+          <span>Arbeitszeit</span>
+        </div>
+        <div className="nav-item" onClick={onNavProjekte}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          <span>Projekte</span>
         </div>
         <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
