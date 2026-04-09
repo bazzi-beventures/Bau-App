@@ -361,41 +361,73 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
           <div className="projekte-empty">Du bist keinem Projekt zugewiesen.</div>
         )}
 
-        {!loading && projects.length > 0 && viewMode === 'grid' && (
-          <div className="projekte-grid">
-            {projects.map(p => {
-              const termin = nextTermin(p.termine)
-              return (
-                <div key={p.id} className="projekte-tile" onClick={() => setSelected(p)}>
-                  <div className="projekte-tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                      <path d="M9 22V12h6v10"/>
-                    </svg>
+        {!loading && projects.length > 0 && viewMode === 'grid' && (() => {
+          // Gruppiere Projekte nach nächstem Termin (Datum). Projekte ohne
+          // kommenden Termin landen in einer Fallback-Gruppe am Ende.
+          const groupMap = new Map<string, Project[]>()
+          const noDateKey = '__none__'
+          projects.forEach(p => {
+            const t = nextTermin(p.termine)
+            const key = t ? t.datum : noDateKey
+            const arr = groupMap.get(key) ?? []
+            arr.push(p)
+            groupMap.set(key, arr)
+          })
+          const groups = Array.from(groupMap.entries())
+            .sort(([a], [b]) => {
+              if (a === noDateKey) return 1
+              if (b === noDateKey) return -1
+              return a.localeCompare(b)
+            })
+
+          return (
+            <div className="projekte-grouped">
+              {groups.map(([dateKey, groupProjects]) => (
+                <div key={dateKey} className="projekte-group">
+                  <div className="projekte-group-header">
+                    <span className="projekte-group-date">
+                      {dateKey === noDateKey ? 'Ohne Termin' : formatDate(dateKey)}
+                    </span>
+                    <span className="projekte-group-line" />
                   </div>
-                  <div className="projekte-tile-name">{p.name}</div>
-                  <div className="projekte-tile-sub">
-                    {p.art_der_arbeit || p.auftraggeber || p.customer_name || '—'}
-                  </div>
-                  {termin && (
-                    <div className="projekte-tile-termin">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="1" y="3" width="14" height="12" rx="2"/>
-                        <path d="M5 1v3M11 1v3M1 7h14"/>
-                      </svg>
-                      {formatDate(termin.datum)}
-                    </div>
-                  )}
-                  <div className="projekte-tile-arrow">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 8h10M9 4l4 4-4 4"/>
-                    </svg>
+                  <div className="projekte-group-tiles">
+                    {groupProjects.map(p => {
+                      const termin = nextTermin(p.termine)
+                      return (
+                        <div key={p.id} className="projekte-tile" onClick={() => setSelected(p)}>
+                          <div className="projekte-tile-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+                              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                              <path d="M9 22V12h6v10"/>
+                            </svg>
+                          </div>
+                          <div className="projekte-tile-name">{p.name}</div>
+                          <div className="projekte-tile-sub">
+                            {p.art_der_arbeit || p.auftraggeber || p.customer_name || '—'}
+                          </div>
+                          {termin && (
+                            <div className="projekte-tile-termin">
+                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <rect x="1" y="3" width="14" height="12" rx="2"/>
+                                <path d="M5 1v3M11 1v3M1 7h14"/>
+                              </svg>
+                              {termin.uhrzeit || formatDate(termin.datum)}
+                            </div>
+                          )}
+                          <div className="projekte-tile-arrow">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 8h10M9 4l4 4-4 4"/>
+                            </svg>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
 
         {!loading && projects.length > 0 && viewMode === 'timeline' && timeline && (() => {
           const DAY_WIDTH = 36

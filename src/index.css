@@ -1173,6 +1173,40 @@ input, textarea { font-family: var(--font); color: var(--text); }
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.projekte-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.projekte-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.projekte-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+.projekte-group-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.projekte-group-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.projekte-group-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
 .projekte-tile {
   background: var(--surface);
   border: 1px solid var(--accent-amber-dim);
