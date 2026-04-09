@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
 import { ApiError } from './api/client'
 import PinScreen from './auth/PinScreen'
-import RegisterScreen from './auth/RegisterScreen'
 import LoginScreen from './auth/LoginScreen'
 import ConsentScreen from './auth/ConsentScreen'
 import HomeScreen from './screens/HomeScreen'
@@ -13,14 +12,7 @@ import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 import ProjekteScreen from './screens/ProjekteScreen'
 import AdminApp from './admin/AdminApp'
 
-type Screen = 'loading' | 'login' | 'pin' | 'register' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin'
-
-interface PinState {
-  tenantSlug: string
-  authorizedUserId: string
-  displayName: string
-  pin: string
-}
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -79,7 +71,6 @@ function nextScreenAfterLogin(u: UserInfo): Screen {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [user, setUser] = useState<UserInfo | null>(null)
-  const [pinState, setPinState] = useState<PinState | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
@@ -131,25 +122,8 @@ export default function App() {
     return (
       <PinScreen
         logoUrl={logoUrl}
-        onPinValid={(tenantSlug, authorizedUserId, displayName, pin) => {
-          setPinState({ tenantSlug, authorizedUserId, displayName, pin })
-          loadBranding()
-          setScreen('register')
-        }}
         onLoggedIn={() => {
           getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
-        }}
-      />
-    )
-  }
-
-  if (screen === 'register' && pinState) {
-    return (
-      <RegisterScreen
-        {...pinState}
-        logoUrl={logoUrl}
-        onRegistered={() => {
-          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('login'))
         }}
       />
     )

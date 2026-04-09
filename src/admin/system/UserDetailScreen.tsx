@@ -21,10 +21,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const [pin, setPin] = useState<string | null>(null)
-  const [pinExpiry, setPinExpiry] = useState('')
-  const [generatingPin, setGeneratingPin] = useState(false)
-
   const [newPassword, setNewPassword] = useState('')
   const [settingPassword, setSettingPassword] = useState(false)
 
@@ -60,21 +56,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleGeneratePin() {
-    if (!user) return
-    setGeneratingPin(true)
-    setPin(null)
-    try {
-      const res = await apiFetch(`/pwa/admin/users/${user.id}/generate-pin`, { method: 'POST' }) as { pin: string; expires_at: string }
-      setPin(res.pin)
-      setPinExpiry(res.expires_at)
-    } catch {
-      setError('PIN-Generierung fehlgeschlagen')
-    } finally {
-      setGeneratingPin(false)
     }
   }
 
@@ -198,31 +179,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
         {/* Seitenaktionen */}
         {!isNew && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* PIN */}
-            <div className="admin-table-wrap" style={{ padding: 20 }}>
-              <div className="admin-section-title">PWA-Zugang</div>
-              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 14px' }}>
-                Generiere einen Einmal-PIN damit der Benutzer die PWA-Registrierung starten kann.
-              </p>
-              {pin && (
-                <div style={{ background: '#0f1117', borderRadius: 9, padding: '14px 16px', textAlign: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>Einmal-PIN</div>
-                  <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '0.15em', color: 'var(--accent-blue, #3b82f6)' }}>{pin}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                    Ablauf: {pinExpiry ? new Date(pinExpiry).toLocaleString('de-CH') : '—'}
-                  </div>
-                </div>
-              )}
-              <button
-                className="admin-btn admin-btn-secondary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={handleGeneratePin}
-                disabled={generatingPin}
-              >
-                {generatingPin ? 'Generiere…' : pin ? 'Neuen PIN generieren' : 'PIN generieren'}
-              </button>
-            </div>
-
             {/* Passwort setzen */}
             <div className="admin-table-wrap" style={{ padding: 20 }}>
               <div className="admin-section-title">Passwort</div>

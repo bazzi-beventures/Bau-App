@@ -53,10 +53,6 @@ export async function deleteStaff(staffId: string): Promise<void> {
   await apiFetch(`/pwa/admin/staff/${staffId}`, { method: 'DELETE' })
 }
 
-export async function generateStaffPin(staffId: string): Promise<{ pin: string; expires_at: string }> {
-  return apiFetch(`/pwa/admin/staff/${staffId}/generate-pin`, { method: 'POST' }) as Promise<{ pin: string; expires_at: string }>
-}
-
 // ─── Password Auth ─────────────────────────────────────────
 
 export async function loginWithPassword(email: string, password: string): Promise<{ tenant_slug: string }> {
