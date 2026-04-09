@@ -47,7 +47,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default function InvoicesScreen() {
+export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
@@ -112,6 +112,7 @@ export default function InvoicesScreen() {
       showToast(`Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`, 'success')
       setShowGenerate(false)
       load()
+      onBadgeChange?.()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler beim Erstellen', 'error')
     } finally {
@@ -157,6 +158,7 @@ export default function InvoicesScreen() {
       showToast('Rechnung als bezahlt markiert', 'success')
       setConfirmPaid(null)
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler', 'error')
     } finally {
@@ -170,6 +172,7 @@ export default function InvoicesScreen() {
       await apiFetch(`/pwa/admin/invoices/${id}/archive`, { method: 'POST' })
       showToast('Rechnung archiviert', 'success')
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler beim Archivieren', 'error')
     } finally {

@@ -17,7 +17,7 @@ function dayCount(start: string, end: string) {
   return d > 1 ? `${d} Tage` : '1 Tag'
 }
 
-export default function AbsencesScreen() {
+export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [absences, setAbsences] = useState<Absence[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'requested' | 'approved' | 'rejected'>('requested')
@@ -46,6 +46,7 @@ export default function AbsencesScreen() {
       await approveAbsence(id)
       showToast('Absenz genehmigt', 'success')
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler beim Genehmigen', 'error')
     } finally {
@@ -59,6 +60,7 @@ export default function AbsencesScreen() {
       await rejectAbsence(id)
       showToast('Absenz abgelehnt', 'success')
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler beim Ablehnen', 'error')
     } finally {

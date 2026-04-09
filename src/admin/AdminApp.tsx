@@ -84,13 +84,13 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} />
       case 'staff':        return <StaffScreen />
-      case 'absences':     return <AbsencesScreen />
+      case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
       case 'projects':     return <ProjectsScreen />
       case 'materials':    return <MaterialsScreen />
       case 'quotes':       return <QuotesScreen />
-      case 'invoices':     return <InvoicesScreen />
+      case 'invoices':     return <InvoicesScreen onBadgeChange={loadDashboard} />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'project-overview': return <ProjectOverviewScreen />
       case 'users':        return <UsersScreen />
