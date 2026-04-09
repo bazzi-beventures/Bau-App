@@ -99,7 +99,7 @@ export default function CorrectionsScreen() {
                 <>
                   <tr key={c.id} onClick={() => setExpanded(expanded === c.id ? null : c.id)} style={{ cursor: 'pointer' }}>
                     <td><strong>{c.staff_name}</strong></td>
-                    <td>{fmtDate(c.date)}</td>
+                    <td>{fmtDate(c.session_date)}</td>
                     <td>
                       <div style={{ fontSize: 13 }}>
                         {c.requested_clock_in && <span>Ein: <strong>{c.requested_clock_in}</strong></span>}

@@ -114,7 +114,7 @@ export async function rejectAbsence(id: string, note?: string): Promise<void> {
 export interface Correction {
   id: string
   staff_name: string
-  date: string
+  session_date: string
   requested_clock_in: string | null
   requested_clock_out: string | null
   current_clock_in: string | null
