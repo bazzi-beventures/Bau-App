@@ -17,7 +17,7 @@ function TimeChange({ before, after, label }: { before: string | null; after: st
   )
 }
 
-export default function CorrectionsScreen() {
+export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [corrections, setCorrections] = useState<Correction[]>([])
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
@@ -46,6 +46,7 @@ export default function CorrectionsScreen() {
       await approveCorrection(id)
       showToast('Korrektur genehmigt — Session aktualisiert', 'success')
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler beim Genehmigen', 'error')
     } finally {
@@ -59,6 +60,7 @@ export default function CorrectionsScreen() {
       await rejectCorrection(id)
       showToast('Korrektur abgelehnt', 'success')
       load()
+      onBadgeChange?.()
     } catch {
       showToast('Fehler beim Ablehnen', 'error')
     } finally {

@@ -85,7 +85,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} />
       case 'staff':        return <StaffScreen />
       case 'absences':     return <AbsencesScreen />
-      case 'corrections':  return <CorrectionsScreen />
+      case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
       case 'projects':     return <ProjectsScreen />
       case 'materials':    return <MaterialsScreen />
