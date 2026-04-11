@@ -1,3 +1,5 @@
+import type React from 'react'
+
 /* ── TypeScript-Interfaces für Supabase KPI-Views ─────────── */
 
 export interface KpiDashboardRow {
@@ -147,6 +149,7 @@ export interface ColumnDef<T> {
   label: string
   align?: 'left' | 'right'
   format?: (value: unknown, row: T) => string
+  render?: (value: unknown, row: T) => React.ReactNode
 }
 
 export interface SortState {

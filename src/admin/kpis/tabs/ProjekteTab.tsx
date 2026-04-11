@@ -1,16 +1,112 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useKpiData } from '../useKpiData'
-import type { KpiProjektRow, ColumnDef, FilterGroup } from '../types'
+import type { KpiProjektRow, ColumnDef } from '../types'
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
-import FilterPanel from '../components/FilterPanel'
 
-const chf = (v: unknown) => typeof v === 'number' ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0 })}` : '—'
-const num = (v: unknown) => typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 1 }) : '—'
+const chf = (v: unknown) =>
+  typeof v === 'number'
+    ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+    : '—'
+const num = (v: unknown) =>
+  typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 1 }) : '—'
+
+/* ── Date presets ─────────────────────────────────────── */
+
+type DatePreset = 'all' | 'year' | '3months' | 'month'
+
+const PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'all', label: 'Alles' },
+  { key: 'year', label: 'Dieses Jahr' },
+  { key: '3months', label: 'Letzte 3 Monate' },
+  { key: 'month', label: 'Letzter Monat' },
+]
+
+function presetFrom(p: DatePreset): string | null {
+  const now = new Date()
+  if (p === 'year') return `${now.getFullYear()}-01-01`
+  if (p === '3months') {
+    const d = new Date(now); d.setMonth(d.getMonth() - 3)
+    return d.toISOString().slice(0, 10)
+  }
+  if (p === 'month') return new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10)
+  return null
+}
+
+function presetTo(p: DatePreset): string | null {
+  if (p === 'month') {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10)
+  }
+  return null
+}
+
+/* ── Multi-select dropdown ────────────────────────────── */
+
+function MultiDropdown({ label, options, selected, onToggle, onToggleAll }: {
+  label: string
+  options: { value: string; count: number }[]
+  selected: Set<string>
+  onToggle: (v: string) => void
+  onToggleAll: (all: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  const allSelected = selected.size >= options.length
+  const partial = selected.size > 0 && !allSelected
+
+  return (
+    <div className="kpi-dropdown" ref={ref}>
+      <button
+        className={`kpi-dropdown-btn${partial ? ' partial' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label}
+        {partial && <span className="kpi-dropdown-badge">{selected.size}</span>}
+        <span className="kpi-dropdown-arrow">▾</span>
+      </button>
+      {open && (
+        <div className="kpi-dropdown-menu">
+          <label className="kpi-dropdown-all">
+            <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} />
+            Alle
+          </label>
+          {options.map((o) => (
+            <label key={o.value} className="kpi-dropdown-option">
+              <input type="checkbox" checked={selected.has(o.value)} onChange={() => onToggle(o.value)} />
+              <span className="kpi-dropdown-label">{o.value || '(leer)'}</span>
+              <span className="kpi-dropdown-count">{o.count}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Table columns ────────────────────────────────────── */
 
 const COLUMNS: ColumnDef<KpiProjektRow>[] = [
   { key: 'projekt_name', label: 'Projekt' },
+  {
+    key: 'ist_abgeschlossen',
+    label: 'Status',
+    render: (_, row) => (
+      <span className={`kpi-status-badge ${row.ist_abgeschlossen ? 'abgeschlossen' : 'offen'}`}>
+        {row.ist_abgeschlossen ? 'Abgeschlossen' : 'Offen'}
+      </span>
+    ),
+  },
   { key: 'anzahl_rapporte', label: 'Rapporte', align: 'right' },
   { key: 'total_arbeitsstunden', label: 'Stunden', align: 'right', format: num },
   { key: 'total_lohnkosten', label: 'Lohnkosten', align: 'right', format: chf },
@@ -18,78 +114,61 @@ const COLUMNS: ColumnDef<KpiProjektRow>[] = [
   { key: 'total_kosten', label: 'Total Kosten', align: 'right', format: chf },
 ]
 
+/* ── Component ────────────────────────────────────────── */
+
 export default function ProjekteTab() {
   const { data, loading, error } = useKpiData<KpiProjektRow>('vw_kpi_projekt')
-  const [selected, setSelected] = useState<Record<string, Set<string>>>({})
+  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set(['offen', 'abgeschlossen']))
+  const [mitarbeiterSel, setMitarbeiterSel] = useState<Set<string> | null>(null) // null = all
 
-  const filterGroups = useMemo<FilterGroup[]>(() => {
+  const mitarbeiterOptions = useMemo(() => {
     if (!data) return []
-    const counts = { offen: 0, abgeschlossen: 0 }
-    data.forEach((r) => r.ist_abgeschlossen ? counts.abgeschlossen++ : counts.offen++)
-
-    const mitarbeiterCounts = new Map<string, number>()
+    const counts = new Map<string, number>()
     data.forEach((r) => {
       if (r.mitarbeiter_liste) {
         r.mitarbeiter_liste.split(',').forEach((m) => {
           const name = m.trim()
-          if (name) mitarbeiterCounts.set(name, (mitarbeiterCounts.get(name) ?? 0) + 1)
+          if (name) counts.set(name, (counts.get(name) ?? 0) + 1)
         })
       }
     })
-    const mitarbeiterOptions = Array.from(mitarbeiterCounts.entries())
+    return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([value, count]) => ({ value, count }))
-
-    return [
-      {
-        key: 'status',
-        label: 'Status',
-        options: [
-          { value: 'offen', count: counts.offen },
-          { value: 'abgeschlossen', count: counts.abgeschlossen },
-        ],
-      },
-      ...(mitarbeiterOptions.length > 0 ? [{
-        key: 'mitarbeiter',
-        label: 'Mitarbeiter',
-        options: mitarbeiterOptions,
-      }] : []),
-    ]
   }, [data])
 
-  // Init filters: all selected
-  const sel = useMemo(() => {
-    if (Object.keys(selected).length > 0) return selected
-    const init: Record<string, Set<string>> = {}
-    filterGroups.forEach((g) => { init[g.key] = new Set(g.options.map((o) => o.value)) })
-    return init
-  }, [filterGroups, selected])
+  const allMitarbeiterNames = useMemo(
+    () => new Set(mitarbeiterOptions.map((o) => o.value)),
+    [mitarbeiterOptions],
+  )
+  const effectiveMitarbeiterSel = mitarbeiterSel ?? allMitarbeiterNames
+
+  const statusOptions = useMemo(() => [
+    { value: 'offen', count: data?.filter((r) => !r.ist_abgeschlossen).length ?? 0 },
+    { value: 'abgeschlossen', count: data?.filter((r) => r.ist_abgeschlossen).length ?? 0 },
+  ], [data])
 
   const filtered = useMemo(() => {
     if (!data) return []
-    const statusSel = sel['status']
-    const mitarbeiterSel = sel['mitarbeiter']
+    const from = presetFrom(datePreset)
+    const to = presetTo(datePreset)
     return data.filter((r) => {
-      if (statusSel && statusSel.size > 0) {
-        const v = r.ist_abgeschlossen ? 'abgeschlossen' : 'offen'
-        if (!statusSel.has(v)) return false
+      if (from) {
+        if (!r.letzter_rapport || r.letzter_rapport < from) return false
       }
-      if (mitarbeiterSel && mitarbeiterSel.size > 0) {
+      if (to) {
+        if (!r.letzter_rapport || r.letzter_rapport > to) return false
+      }
+      const statusVal = r.ist_abgeschlossen ? 'abgeschlossen' : 'offen'
+      if (!statusSel.has(statusVal)) return false
+      if (mitarbeiterSel !== null && mitarbeiterSel.size > 0) {
         const names = r.mitarbeiter_liste ? r.mitarbeiter_liste.split(',').map((m) => m.trim()) : []
         if (!names.some((n) => mitarbeiterSel.has(n))) return false
       }
       return true
     })
-  }, [data, sel])
-
-  const chartData = useMemo(
-    () => filtered
-      .filter((r) => r.total_kosten > 0)
-      .sort((a, b) => b.total_kosten - a.total_kosten)
-      .slice(0, 12)
-      .map((r) => ({ name: r.projekt_name.slice(0, 18), Lohnkosten: r.total_lohnkosten, Materialkosten: r.total_materialkosten })),
-    [filtered],
-  )
+  }, [data, datePreset, statusSel, mitarbeiterSel])
 
   const cards = useMemo(() => {
     if (!filtered.length) return []
@@ -97,7 +176,9 @@ export default function ProjekteTab() {
     const stunden = filtered.reduce((s, r) => s + r.total_arbeitsstunden, 0)
     const kosten = filtered.reduce((s, r) => s + r.total_kosten, 0)
     const diffs = filtered.filter((r) => r.differenz_offerte_ist != null)
-    const avgDiff = diffs.length ? diffs.reduce((s, r) => s + (r.differenz_offerte_ist ?? 0), 0) / diffs.length : 0
+    const avgDiff = diffs.length
+      ? diffs.reduce((s, r) => s + (r.differenz_offerte_ist ?? 0), 0) / diffs.length
+      : 0
     return [
       { label: 'Projekte aktiv', value: String(aktiv) },
       { label: 'Total Stunden', value: num(stunden) as string },
@@ -106,21 +187,33 @@ export default function ProjekteTab() {
     ]
   }, [filtered])
 
-  function onToggle(groupKey: string, value: string) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const s = new Set(sel[groupKey] ?? [])
-      s.has(value) ? s.delete(value) : s.add(value)
-      next[groupKey] = s
+  const chartData = useMemo(
+    () =>
+      filtered
+        .filter((r) => r.total_kosten > 0)
+        .sort((a, b) => b.total_kosten - a.total_kosten)
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.projekt_name.slice(0, 18),
+          Lohnkosten: r.total_lohnkosten,
+          Materialkosten: r.total_materialkosten,
+        })),
+    [filtered],
+  )
+
+  function toggleStatus(v: string) {
+    setStatusSel((prev) => {
+      const next = new Set(prev)
+      next.has(v) ? next.delete(v) : next.add(v)
       return next
     })
   }
 
-  function onToggleAll(groupKey: string, selectAll: boolean) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const g = filterGroups.find((g) => g.key === groupKey)
-      next[groupKey] = selectAll && g ? new Set(g.options.map((o) => o.value)) : new Set()
+  function toggleMitarbeiter(v: string) {
+    setMitarbeiterSel((prev) => {
+      const base = prev ?? allMitarbeiterNames
+      const next = new Set(base)
+      next.has(v) ? next.delete(v) : next.add(v)
       return next
     })
   }
@@ -130,23 +223,56 @@ export default function ProjekteTab() {
 
   return (
     <div className="kpi-bi-layout">
-      <KpiCards cards={cards} columns={2} />
-      <div className="kpi-bi-content">
-        <div className="kpi-bi-main">
-          <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_kosten', dir: 'desc' }} />
-        </div>
-        <div className="kpi-bi-side">
-          <FilterPanel groups={filterGroups} selected={sel} onToggle={onToggle} onToggleAll={onToggleAll} />
-          <BiBarChart
-            data={chartData}
-            xKey="name"
-            bars={[
-              { dataKey: 'Lohnkosten', color: '#f59e0b', label: 'Lohnkosten' },
-              { dataKey: 'Materialkosten', color: '#3b82f6', label: 'Materialkosten' },
-            ]}
-          />
-        </div>
+      {/* Date presets */}
+      <div className="kpi-date-presets">
+        {PRESETS.map((p) => (
+          <button
+            key={p.key}
+            className={`kpi-date-btn${datePreset === p.key ? ' active' : ''}`}
+            onClick={() => setDatePreset(p.key)}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
+
+      {/* KPI Cards — horizontal 4 columns */}
+      <KpiCards cards={cards} columns={4} />
+
+      {/* Horizontal filter bar */}
+      <div className="kpi-filter-bar">
+        <MultiDropdown
+          label="Status"
+          options={statusOptions}
+          selected={statusSel}
+          onToggle={toggleStatus}
+          onToggleAll={(all) => setStatusSel(all ? new Set(['offen', 'abgeschlossen']) : new Set())}
+        />
+        {mitarbeiterOptions.length > 0 && (
+          <MultiDropdown
+            label="Mitarbeiter"
+            options={mitarbeiterOptions}
+            selected={effectiveMitarbeiterSel}
+            onToggle={toggleMitarbeiter}
+            onToggleAll={(all) => setMitarbeiterSel(all ? null : new Set())}
+          />
+        )}
+        <span className="kpi-filter-count">{filtered.length} Projekte</span>
+      </div>
+
+      {/* Full-width table */}
+      <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_kosten', dir: 'desc' }} />
+
+      {/* Chart — full width below table */}
+      <BiBarChart
+        data={chartData}
+        xKey="name"
+        bars={[
+          { dataKey: 'Lohnkosten', color: '#f59e0b', label: 'Lohnkosten' },
+          { dataKey: 'Materialkosten', color: '#3b82f6', label: 'Materialkosten' },
+        ]}
+        height={300}
+      />
     </div>
   )
 }

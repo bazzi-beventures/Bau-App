@@ -75,7 +75,9 @@ export default function DataTable<T extends object>({
             <tr key={ri}>
               {columns.map((col) => (
                 <td key={col.key} style={{ textAlign: col.align ?? 'left' }}>
-                  {cell(col, row)}
+                  {col.render
+                    ? col.render((row as Record<string, unknown>)[col.key], row)
+                    : cell(col, row)}
                 </td>
               ))}
             </tr>
