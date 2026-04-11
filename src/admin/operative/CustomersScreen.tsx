@@ -5,6 +5,7 @@ import { AddressAutocomplete } from '../components/AddressAutocomplete'
 export interface Customer {
   id: string
   name: string
+  company: string | null
   email: string | null
   phone: string | null
   address: string | null
@@ -23,6 +24,7 @@ function CustomerForm({
 }) {
   const isNew = !initial
   const [name, setName] = useState(initial?.name ?? '')
+  const [company, setCompany] = useState(initial?.company ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
@@ -42,6 +44,7 @@ function CustomerForm({
         method,
         body: JSON.stringify({
           name: name.trim(),
+          company: company.trim() || null,
           email: email || null,
           phone: phone || null,
           address: address || null,
@@ -61,9 +64,15 @@ function CustomerForm({
       <div className="admin-section-title">{isNew ? 'Neuer Kunde' : 'Kunde bearbeiten'}</div>
       {error && <div className="admin-form-error">{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
-        <div className="admin-form-group">
-          <label className="admin-form-label">Name *</label>
-          <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Name *</label>
+            <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
+          </div>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Firma</label>
+            <input className="admin-form-input" value={company} onChange={e => setCompany(e.target.value)} />
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div className="admin-form-group">
@@ -145,6 +154,7 @@ export default function CustomersScreen() {
 
   const filtered = customers.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.company ?? '').toLowerCase().includes(search.toLowerCase()) ||
     (c.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
     (c.address ?? '').toLowerCase().includes(search.toLowerCase())
   )
@@ -199,6 +209,7 @@ export default function CustomersScreen() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Firma</th>
                 <th>E-Mail</th>
                 <th>Telefon</th>
                 <th>Adresse</th>
@@ -209,6 +220,7 @@ export default function CustomersScreen() {
               {filtered.map(c => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 500 }}>{c.name}</td>
+                  <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
                   <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.address ?? '—'}</td>
