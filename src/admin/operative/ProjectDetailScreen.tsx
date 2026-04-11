@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
+import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 
@@ -363,7 +364,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kundenadresse</label>
-                <input className="admin-form-input" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
+                <AddressAutocomplete className="admin-form-input" value={customerAddress} onChange={setCustomerAddress} />
               </div>
             </div>
           </div>

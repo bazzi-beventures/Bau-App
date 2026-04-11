@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { AddressAutocomplete } from '../components/AddressAutocomplete'
 
 export interface Customer {
   id: string
@@ -76,7 +77,7 @@ function CustomerForm({
         </div>
         <div className="admin-form-group">
           <label className="admin-form-label">Adresse</label>
-          <input className="admin-form-input" value={address} onChange={e => setAddress(e.target.value)} />
+          <AddressAutocomplete className="admin-form-input" value={address} onChange={setAddress} />
         </div>
         <div className="admin-form-group">
           <label className="admin-form-label">Notizen</label>
