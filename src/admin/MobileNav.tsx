@@ -4,7 +4,7 @@ import { logout } from '../api/auth'
 import {
   IconDashboard, IconFolder, IconClock, IconCash,
   IconUsers, IconAddressBook, IconReceipt, IconCalendar,
-  IconDocument, IconBox, IconTag, IconChart, IconKey, IconUpload, IconLogout,
+  IconDocument, IconBox, IconTag, IconChart, IconKey, IconLogout,
 } from './AdminIcons'
 
 interface Props {
@@ -166,9 +166,6 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 </button>
                 <button className={`admin-mobile-drawer-item${screen === 'users' ? ' active' : ''}`} onClick={() => navigate('users')}>
                   <IconKey /><span>Benutzerverwaltung</span>
-                </button>
-                <button className={`admin-mobile-drawer-item${screen === 'import' ? ' active' : ''}`} onClick={() => navigate('import')}>
-                  <IconUpload /><span>Import / Upload</span>
                 </button>
               </div>
             </div>

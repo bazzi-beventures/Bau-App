@@ -144,12 +144,14 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwi
       <main className="admin-content">
         <div className="admin-content-inner">
           {logoUrl && !logoError && (
-            <img
-              className="admin-content-logo"
-              src={logoUrl}
-              alt={tenantName}
-              onError={() => setLogoError(true)}
-            />
+            <div className="admin-content-topbar">
+              <img
+                className="admin-content-logo"
+                src={logoUrl}
+                alt={tenantName}
+                onError={() => setLogoError(true)}
+              />
+            </div>
           )}
           {renderScreen()}
         </div>

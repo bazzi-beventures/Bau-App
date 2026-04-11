@@ -31,13 +31,19 @@
   border-bottom: 1px solid #1c3e60;
 }
 
+.admin-content-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 28px 0;
+  flex-shrink: 0;
+}
+
 .admin-content-logo {
-  float: right;
-  height: 40px;
-  margin: 16px 24px 12px 20px;
+  height: 36px;
   object-fit: contain;
   opacity: 0.85;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 .admin-sidebar-tenant {
