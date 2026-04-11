@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 
+interface Supplier {
+  id: string
+  name: string
+  prefix: string
+}
+
 interface Material {
   id: string
   art_nr: string
   name: string
-  manufacturer: string | null
+  supplier_id: string | null
   category: string | null
   unit: string | null
   unit_price: number | null
@@ -90,7 +96,7 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   )
 }
 
-function MaterialModal({ material, onClose, onSaved, existingCategories, existingManufacturers }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; existingManufacturers: string[] }) {
+function MaterialModal({ material, onClose, onSaved, existingCategories, suppliers }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; suppliers: Supplier[] }) {
   const isNew = !material
   const [artNr, setArtNr] = useState(material?.art_nr ?? '')
   const [name, setName] = useState(material?.name ?? '')
@@ -98,8 +104,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
   const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
   const [unit, setUnit] = useState(material?.unit ?? '')
   const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
-  const [manufacturer, setManufacturer] = useState(material?.manufacturer ?? '')
-  const [isNewManufacturer, setIsNewManufacturer] = useState(!!(material?.manufacturer && !existingManufacturers.includes(material.manufacturer)))
+  const [supplierId, setSupplierId] = useState(material?.supplier_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -119,7 +124,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
           category: category || null,
           unit: unit || null,
           unit_price: unitPrice ? parseFloat(unitPrice) : null,
-          manufacturer: manufacturer || null,
+          supplier_id: supplierId || null,
         }),
       })
       onSaved()
@@ -177,22 +182,11 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
               <input className="admin-form-input" type="number" step="0.01" min="0" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} />
             </div>
             <div className="admin-form-group">
-              <label className="admin-form-label">Hersteller</label>
-              {isNewManufacturer ? (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input className="admin-form-input" value={manufacturer} onChange={e => setManufacturer(e.target.value)} placeholder="Neuer Hersteller…" autoFocus />
-                  <button type="button" className="admin-btn admin-btn-secondary" style={{ flexShrink: 0, padding: '6px 10px' }} onClick={() => { setIsNewManufacturer(false); setManufacturer('') }}>×</button>
-                </div>
-              ) : (
-                <select className="admin-form-select" value={manufacturer} onChange={e => {
-                  if (e.target.value === '__new__') { setIsNewManufacturer(true); setManufacturer('') }
-                  else setManufacturer(e.target.value)
-                }}>
-                  <option value="">— Kein —</option>
-                  {existingManufacturers.map(m => <option key={m} value={m}>{m}</option>)}
-                  <option value="__new__">+ Neuer Hersteller…</option>
-                </select>
-              )}
+              <label className="admin-form-label">Lieferant</label>
+              <select className="admin-form-select" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
+                <option value="">— Kein —</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             </div>
           </div>
         </form>
@@ -220,10 +214,11 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 export default function MaterialsScreen() {
   const [materials, setMaterials] = useState<Material[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [manufacturerFilter, setManufacturerFilter] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')
   const [sortKey, setSortKey] = useState<MaterialSortKey>('art_nr')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [editMaterial, setEditMaterial] = useState<Material | null | 'new'>()
@@ -232,7 +227,12 @@ export default function MaterialsScreen() {
   async function load() {
     setLoading(true)
     try {
-      setMaterials(await apiFetch('/pwa/admin/materials') as Material[])
+      const [mats, sups] = await Promise.all([
+        apiFetch('/pwa/admin/materials') as Promise<Material[]>,
+        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
+      ])
+      setMaterials(mats)
+      setSuppliers(sups)
     } finally {
       setLoading(false)
     }
@@ -245,15 +245,16 @@ export default function MaterialsScreen() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
+  const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]))
   const categories = Array.from(new Set(materials.map(m => m.category).filter(Boolean))).sort() as string[]
-  const manufacturers = Array.from(new Set(materials.map(m => m.manufacturer).filter(Boolean))).sort() as string[]
 
   const filtered = materials.filter(m => {
     const q = search.toLowerCase()
-    const matchSearch = m.name.toLowerCase().includes(q) || m.art_nr.toLowerCase().includes(q) || (m.manufacturer || '').toLowerCase().includes(q)
+    const supplierName = m.supplier_id ? (supplierMap[m.supplier_id] ?? '') : ''
+    const matchSearch = m.name.toLowerCase().includes(q) || m.art_nr.toLowerCase().includes(q) || supplierName.toLowerCase().includes(q)
     const matchCat = !categoryFilter || m.category === categoryFilter
-    const matchMfr = !manufacturerFilter || m.manufacturer === manufacturerFilter
-    return matchSearch && matchCat && matchMfr
+    const matchSup = !supplierFilter || m.supplier_id === supplierFilter
+    return matchSearch && matchCat && matchSup
   }).sort((a, b) => {
     let aVal: string | number
     let bVal: string | number
@@ -288,14 +289,14 @@ export default function MaterialsScreen() {
 
       <div className="admin-table-wrap">
         <div className="admin-filter-bar">
-          <input className="admin-search" placeholder="Art.-Nr., Bezeichnung oder Hersteller…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="admin-search" placeholder="Art.-Nr., Bezeichnung oder Lieferant…" value={search} onChange={e => setSearch(e.target.value)} />
           <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
             <option value="">Alle Kategorien</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={manufacturerFilter} onChange={e => setManufacturerFilter(e.target.value)}>
-            <option value="">Alle Hersteller</option>
-            {manufacturers.map(m => <option key={m} value={m}>{m}</option>)}
+          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)}>
+            <option value="">Alle Lieferanten</option>
+            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 
@@ -333,10 +334,11 @@ export default function MaterialsScreen() {
                 const stock = m.inventory[0]?.quantity ?? null
                 const minStock = m.inventory[0]?.min_quantity ?? null
                 const stockLow = stock !== null && minStock !== null && stock <= minStock
+                const supplierName = m.supplier_id ? (supplierMap[m.supplier_id] ?? null) : null
                 return (
                   <tr key={m.id} onClick={() => setEditMaterial(m)}>
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{m.art_nr}</td>
-                    <td><strong>{m.name}</strong>{m.manufacturer ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{m.manufacturer}</span> : null}</td>
+                    <td><strong>{m.name}</strong>{supplierName ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{supplierName}</span> : null}</td>
                     <td style={{ color: 'var(--muted)' }}>{m.category || '—'}</td>
                     <td>{m.unit || '—'}</td>
                     <td>{m.unit_price != null ? `CHF ${m.unit_price.toFixed(2)}` : '—'}</td>
@@ -368,7 +370,7 @@ export default function MaterialsScreen() {
           onClose={() => setEditMaterial(undefined)}
           onSaved={() => { setEditMaterial(undefined); load() }}
           existingCategories={categories}
-          existingManufacturers={manufacturers}
+          suppliers={suppliers}
         />
       )}
 
