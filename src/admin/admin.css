@@ -122,6 +122,30 @@
 .admin-sidebar-footer {
   padding: 12px 8px;
   border-top: 1px solid #1c3e60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.admin-switch-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .admin-user-row {

@@ -5,6 +5,7 @@ interface Props {
   screen: AdminScreen
   onNav: (screen: AdminScreen) => void
   onLoggedOut: () => void
+  onSwitchToUser: () => void
   displayName: string
   role: string
   tenantName: string
@@ -86,7 +87,7 @@ function IconAddressBook() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 0 0-1 1v1H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V3a1 1 0 0 0-1-1H9zm0 2h2v1a1 1 0 0 0 1 1h1v8H7V6h1a1 1 0 0 0 1-1V4zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5a3 3 0 0 1 6 0H7z"/></svg>
 }
 
-export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, role, tenantName, badges }: Props) {
+export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   async function handleLogout() {
@@ -126,6 +127,12 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
       </nav>
 
       <div className="admin-sidebar-footer">
+        <button className="admin-switch-btn" onClick={onSwitchToUser} title="Zur Mitarbeiter-App wechseln">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+            <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-7 9a7 7 0 1 1 14 0H3z" />
+          </svg>
+          <span>Mitarbeiter-App</span>
+        </button>
         <div className="admin-user-row">
           <div className="admin-avatar">{initials}</div>
           <div className="admin-user-info">

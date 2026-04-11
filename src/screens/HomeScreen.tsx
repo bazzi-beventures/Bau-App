@@ -9,6 +9,7 @@ interface Props {
   onNavProjekte: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
+  onSwitchToAdmin?: () => void
 }
 
 interface SessionStatus {
@@ -35,7 +36,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
@@ -63,7 +64,33 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
             <div className="home-greeting">{getGreeting()}</div>
             <div className="home-name">{firstName}</div>
           </div>
-          {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {onSwitchToAdmin && (
+              <button
+                onClick={onSwitchToAdmin}
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: 8,
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: '5px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+                title="Zur Admin-Ansicht"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                  <path fillRule="evenodd" d="M18 8a6 6 0 0 1-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1 1 18 8zm-6-4a1 1 0 1 0 0 2 2 2 0 0 1 2 2 1 1 0 1 0 2 0 4 4 0 0 0-4-4z" clipRule="evenodd" />
+                </svg>
+                Admin
+              </button>
+            )}
+            {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
+          </div>
         </div>
         <div className="date-chip">
           <div className="date-dot" />

@@ -163,6 +163,7 @@ export default function App() {
         onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onSwitchToAdmin={(user.role === 'admin' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
     )
   }
@@ -259,6 +260,7 @@ export default function App() {
         logoUrl={logoUrl}
         tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onSwitchToUser={() => setScreen('home')}
       />
     )
   }

@@ -44,6 +44,7 @@ interface Props {
   logoUrl: string
   tenantName: string
   onLoggedOut: () => void
+  onSwitchToUser: () => void
 }
 
 const SCREEN_TITLES: Record<AdminScreen, string> = {
@@ -64,7 +65,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'kpis': 'Kennzahlen',
 }
 
-export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Props) {
+export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwitchToUser }: Props) {
   const { screen, nav } = useAdminNav()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
@@ -109,6 +110,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
         screen={screen}
         onNav={nav}
         onLoggedOut={onLoggedOut}
+        onSwitchToUser={onSwitchToUser}
         displayName={user.display_name}
         role={user.role}
         tenantName={tenantName}
