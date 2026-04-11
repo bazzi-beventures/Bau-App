@@ -355,16 +355,29 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div className="admin-section-title">Kundenkontakt</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
+                <label className="admin-form-label">Kunde aus Kundenstamm</label>
+                <select
+                  className="admin-form-select"
+                  value={customerId}
+                  onChange={e => handleSelectCustomer(e.target.value)}
+                >
+                  <option value="">— manuell eintragen —</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}{c.address ? ` · ${c.address}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="admin-form-group">
                 <label className="admin-form-label">Kundenname</label>
-                <input className="admin-form-input" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+                <input className="admin-form-input" value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId('') }} />
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kunden-E-Mail</label>
-                <input className="admin-form-input" type="email" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
+                <input className="admin-form-input" type="email" value={customerEmail} onChange={e => { setCustomerEmail(e.target.value); setCustomerId('') }} />
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kundenadresse</label>
-                <AddressAutocomplete className="admin-form-input" value={customerAddress} onChange={setCustomerAddress} />
+                <AddressAutocomplete className="admin-form-input" value={customerAddress} onChange={v => { setCustomerAddress(v); setCustomerId('') }} />
               </div>
             </div>
           </div>
