@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin } from './ProjectsScreen'
+import { Customer } from './CustomersScreen'
 
 interface StaffMember {
   id: string
@@ -19,6 +20,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const isNew = !project
 
   const [name, setName] = useState(project?.name ?? '')
+  const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
   const [customerName, setCustomerName] = useState(project?.customer_name ?? '')
   const [customerEmail, setCustomerEmail] = useState(project?.customer_email ?? '')
   const [customerAddress, setCustomerAddress] = useState(project?.customer_address ?? '')
@@ -30,6 +32,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [termine, setTermine] = useState<Termin[]>(project?.termine ?? [])
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
 
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [saving, setSaving] = useState(false)
   const [settingStatus, setSettingStatus] = useState(false)
@@ -44,11 +47,25 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       const arr = data as { id: string; name: string }[]
       setStaff(arr.map(s => ({ id: s.id, name: s.name })))
     }).catch(() => {})
+    apiFetch('/pwa/admin/customers').then((data: unknown) => {
+      setCustomers(data as Customer[])
+    }).catch(() => {})
   }, [])
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
+  }
+
+  // ── Kunde auswählen → Felder vorausfüllen ───────────────────
+  function handleSelectCustomer(id: string) {
+    setCustomerId(id)
+    if (!id) return
+    const c = customers.find(x => x.id === id)
+    if (!c) return
+    setCustomerName(c.name)
+    setCustomerEmail(c.email ?? '')
+    setCustomerAddress(c.address ?? '')
   }
 
   // ── Termine helpers ──────────────────────────────────────────
@@ -90,6 +107,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         method,
         body: JSON.stringify({
           name: name.trim(),
+          customer_id: customerId || null,
           customer_name: customerName || null,
           customer_email: customerEmail || null,
           customer_address: customerAddress || null,
@@ -208,6 +226,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-table-wrap" style={{ padding: 24 }}>
             <div className="admin-section-title">Kundenkontakt</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {customers.length > 0 && (
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Kunde aus Kundenstamm</label>
+                  <select
+                    className="admin-form-select"
+                    value={customerId}
+                    onChange={e => handleSelectCustomer(e.target.value)}
+                  >
+                    <option value="">— Kunden wählen oder manuell erfassen —</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}{c.address ? ` · ${c.address}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="admin-form-group">
                 <label className="admin-form-label">Kundenname</label>
                 <input className="admin-form-input" value={customerName} onChange={e => setCustomerName(e.target.value)} />

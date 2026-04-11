@@ -20,6 +20,7 @@ export type ProjectStatus = 'offen' | 'bestellung_ausgeloest' | 'demontage' | 'a
 export interface Project {
   id: string
   name: string
+  customer_id: string | null
   customer_name: string | null
   customer_email: string | null
   customer_address: string | null
@@ -36,6 +37,7 @@ export interface Project {
   created_at: string
   created_by: string | null
   created_by_id: string | null
+  bemerkung: string | null
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {

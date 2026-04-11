@@ -82,6 +82,9 @@ function IconChart() {
 function IconLogout() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 0 0-1 1v12a1 1 0 1 0 2 0V5h10v11a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H3zm7 9a1 1 0 0 0 1-1V7.414l1.293 1.293a1 1 0 1 0 1.414-1.414l-3-3a1 1 0 0 0-1.414 0l-3 3a1 1 0 1 0 1.414 1.414L9 7.414V11a1 1 0 0 0 1 1z" clipRule="evenodd"/></svg>
 }
+function IconAddressBook() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 0 0-1 1v1H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V3a1 1 0 0 0-1-1H9zm0 2h2v1a1 1 0 0 0 1 1h1v8H7V6h1a1 1 0 0 0 1-1V4zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5a3 3 0 0 1 6 0H7z"/></svg>
+}
 
 export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, role, tenantName, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -107,6 +110,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, displayName, 
 
         <div className="admin-nav-group-label">Operativ</div>
         <NavItem label="Projekte" target="projects" current={screen} onNav={onNav} icon={<IconFolder />} />
+        <NavItem label="Kundenstamm" target="customers" current={screen} onNav={onNav} icon={<IconAddressBook />} />
         <NavItem label="Material / Lager" target="materials" current={screen} onNav={onNav} icon={<IconBox />} />
         <NavItem label="Offerten" target="quotes" current={screen} onNav={onNav} icon={<IconReceipt />} />
         <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} badge={badges?.invoices} />

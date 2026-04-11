@@ -9,6 +9,7 @@ import AbsencesScreen from './personal/AbsencesScreen'
 import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
 import ProjectsScreen from './operative/ProjectsScreen'
+import CustomersScreen from './operative/CustomersScreen'
 import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
@@ -52,6 +53,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'corrections': 'Zeitkorrekturen',
   'hr-reports': 'HR-Berichte',
   'projects': 'Projekte',
+  'customers': 'Kundenstamm',
   'materials': 'Material / Lager',
   'quotes': 'Offerten',
   'invoices': 'Rechnungen',
@@ -88,6 +90,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut }: Pro
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
       case 'projects':     return <ProjectsScreen />
+      case 'customers':    return <CustomersScreen />
       case 'materials':    return <MaterialsScreen />
       case 'quotes':       return <QuotesScreen />
       case 'invoices':     return <InvoicesScreen onBadgeChange={loadDashboard} />

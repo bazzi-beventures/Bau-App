@@ -7,6 +7,7 @@ export type AdminScreen =
   | 'corrections'
   | 'hr-reports'
   | 'projects'
+  | 'customers'
   | 'materials'
   | 'quotes'
   | 'invoices'
