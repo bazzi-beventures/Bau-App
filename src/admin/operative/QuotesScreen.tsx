@@ -19,8 +19,24 @@ interface Project {
 }
 
 interface StaffRole {
-  funktion: string
+  name: string
+  job_title: string | null
   hourly_rate: number
+}
+
+interface QuoteDetail {
+  id: number
+  quote_number: string
+  project_name: string
+  labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  travel_items: { description: string; total_price: number }[]
+  extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  extra_charge_items: { description: string; total_price: number }[]
+  installation_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  labor_discount_pct: number
+  material_discount_pct: number
+  notes: string | null
 }
 
 interface Material {
@@ -245,12 +261,16 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
               style={{ flex: 2 }}
               value={row.description}
               onChange={e => {
-                const role = roles.find(r => r.funktion === e.target.value)
+                const role = roles.find(r => r.name === e.target.value)
                 updateLabor(i, { description: e.target.value, unit_price: role?.hourly_rate ?? null })
               }}
             >
               <option value="">Funktion wählen…</option>
-              {roles.map(r => <option key={r.funktion} value={r.funktion}>{r.funktion} ({fmtCHF(r.hourly_rate)}/h)</option>)}
+              {roles.map(r => (
+                <option key={r.name} value={r.name}>
+                  {r.name}{r.job_title ? ` — ${r.job_title}` : ''} ({fmtCHF(r.hourly_rate)}/h)
+                </option>
+              ))}
             </select>
             <input
               className="admin-form-input"
@@ -381,6 +401,216 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
 function round2(n: number) { return Math.round(n * 100) / 100 }
 
+// ─── Edit Form ──────────────────────────────────────────────
+
+type EditLaborRow = { description: string; quantity: string; unit_price: string }
+type EditFreeRow = { description: string; quantity: string; unit: string; unit_price: string }
+type EditChargeRow = { description: string; total_price: string }
+type EditTravelRow = { description: string; total_price: string }
+
+function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: () => void; onCancel: () => void }) {
+  const [roles, setRoles] = useState<StaffRole[]>([])
+  const [laborRows, setLaborRows] = useState<EditLaborRow[]>(() =>
+    quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price) }))
+  )
+  const [materialRows, setMaterialRows] = useState<EditFreeRow[]>(() =>
+    quote.material_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price) }))
+  )
+  const [extraProducts, setExtraProducts] = useState<EditFreeRow[]>(() =>
+    quote.extra_product_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price) }))
+  )
+  const [extraCharges, setExtraCharges] = useState<EditChargeRow[]>(() =>
+    quote.extra_charge_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
+  )
+  const [travelRows, setTravelRows] = useState<EditTravelRow[]>(() =>
+    quote.travel_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
+  )
+  const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
+  const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
+  const [notes, setNotes] = useState(quote.notes || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    (apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>).then(setRoles)
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      const payload = {
+        labor_items: laborRows
+          .filter(r => r.description && parseNum(r.quantity) > 0)
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: 'h', unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+        material_items: materialRows
+          .filter(r => r.description && parseNum(r.quantity) > 0)
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+        travel_items: travelRows
+          .filter(r => parseNum(r.total_price) > 0)
+          .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
+        extra_product_items: extraProducts
+          .filter(r => r.description)
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+        extra_charge_items: extraCharges
+          .filter(r => r.description && parseNum(r.total_price) > 0)
+          .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
+        labor_discount_pct: parseNum(laborDiscount),
+        material_discount_pct: parseNum(materialDiscount),
+        notes: notes || null,
+      }
+      await apiFetch(`/pwa/admin/quotes/${quote.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24 }}>
+      <h3 style={{ margin: '0 0 4px' }}>Offerte bearbeiten</h3>
+      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>{quote.quote_number} · {quote.project_name}</div>
+
+      {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {/* Labor */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Lohnpositionen</legend>
+        {laborRows.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <select
+              className="admin-form-select"
+              style={{ flex: 2 }}
+              value={row.description}
+              onChange={e => {
+                const role = roles.find(r => r.name === e.target.value)
+                setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value, unit_price: role ? String(role.hourly_rate) : r.unit_price } : r))
+              }}
+            >
+              <option value="">Funktion wählen…</option>
+              {roles.map(r => (
+                <option key={r.name} value={r.name}>
+                  {r.name}{r.job_title ? ` — ${r.job_title}` : ''} ({fmtCHF(r.hourly_rate)}/h)
+                </option>
+              ))}
+            </select>
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Stunden" value={row.quantity}
+              onChange={e => setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="CHF/h" value={row.unit_price}
+              onChange={e => setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            {laborRows.length > 1 && <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setLaborRows(r => r.filter((_, j) => j !== i))}>✕</button>}
+          </div>
+        ))}
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setLaborRows(r => [...r, { description: '', quantity: '', unit_price: '' }])}>+ Lohnposition</button>
+      </fieldset>
+
+      {/* Materials */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Materialpositionen</legend>
+        {materialRows.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Bezeichnung" value={row.description}
+              onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity}
+              onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit}
+              onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, unit: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="CHF/Stk" value={row.unit_price}
+              onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setMaterialRows(r => r.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setMaterialRows(r => [...r, { description: '', quantity: '', unit: 'Stk', unit_price: '' }])}>+ Materialposition</button>
+      </fieldset>
+
+      {/* Extra Products */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
+        {extraProducts.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Beschreibung" value={row.description}
+              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity}
+              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit}
+              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="Preis/Stk" value={row.unit_price}
+              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExtraProducts(r => r.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }])}>+ Freie Position</button>
+      </fieldset>
+
+      {/* Extra Charges */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderaufwände</legend>
+        {extraCharges.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description}
+              onChange={e => setExtraCharges(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price}
+              onChange={e => setExtraCharges(rows => rows.map((r, j) => j === i ? { ...r, total_price: e.target.value } : r))} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExtraCharges(r => r.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraCharges(r => [...r, { description: '', total_price: '' }])}>+ Sonderaufwand</button>
+      </fieldset>
+
+      {/* Travel */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Fahrtkosten</legend>
+        {travelRows.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description}
+              onChange={e => setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price}
+              onChange={e => setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, total_price: e.target.value } : r))} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setTravelRows(r => r.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setTravelRows(r => [...r, { description: 'Fahrtpauschale', total_price: '' }])}>+ Fahrtkosten</button>
+      </fieldset>
+
+      {/* Discounts */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label className="admin-form-label">Rabatt auf Lohn (%)</label>
+            <input className="admin-form-input" placeholder="0" value={laborDiscount} onChange={e => setLaborDiscount(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="admin-form-label">Rabatt auf Material (%)</label>
+            <input className="admin-form-input" placeholder="0" value={materialDiscount} onChange={e => setMaterialDiscount(e.target.value)} />
+          </div>
+        </div>
+      </fieldset>
+
+      {/* Notes */}
+      <div style={{ marginBottom: 20 }}>
+        <label className="admin-form-label">Bemerkungen</label>
+        <textarea className="admin-form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen…" />
+      </div>
+
+      {quote.installation_items?.length > 0 && (
+        <div style={{ marginBottom: 20, padding: '10px 14px', background: 'var(--surface-alt, #f9f9f9)', borderRadius: 6, fontSize: 13, color: 'var(--muted)' }}>
+          Montagepositionen ({quote.installation_items.length}) werden beibehalten und nicht bearbeitet.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button className="admin-btn admin-btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? 'Wird gespeichert…' : 'Änderungen speichern'}
+        </button>
+        <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>Abbrechen</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Screen ────────────────────────────────────────────
 
 export default function QuotesScreen() {
@@ -391,6 +621,7 @@ export default function QuotesScreen() {
   const [acting, setActing] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   // Send quote
   const [sendQuote, setSendQuote] = useState<Quote | null>(null)
   const [sendEmail, setSendEmail] = useState('')
@@ -410,6 +641,15 @@ export default function QuotesScreen() {
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  async function handleEdit(id: number) {
+    try {
+      const detail = await apiFetch(`/pwa/admin/quotes/${id}`) as QuoteDetail
+      setEditQuote(detail)
+    } catch {
+      showToast('Offerte konnte nicht geladen werden', 'error')
+    }
   }
 
   async function handleStatus(id: number, status: string) {
@@ -461,6 +701,18 @@ export default function QuotesScreen() {
         <QuoteCreateForm
           onDone={() => { setShowCreate(false); load(); showToast('Offerte erstellt', 'success') }}
           onCancel={() => setShowCreate(false)}
+        />
+      </div>
+    )
+  }
+
+  if (editQuote) {
+    return (
+      <div className="admin-page">
+        <QuoteEditForm
+          quote={editQuote}
+          onDone={() => { setEditQuote(null); load(); showToast('Offerte gespeichert', 'success') }}
+          onCancel={() => setEditQuote(null)}
         />
       </div>
     )
@@ -538,6 +790,15 @@ export default function QuotesScreen() {
                         >
                           PDF
                         </a>
+                      )}
+                      {['entwurf', 'gesendet'].includes(q.status) && (
+                        <button
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={() => handleEdit(q.id)}
+                          disabled={acting === q.id}
+                        >
+                          Bearbeiten
+                        </button>
                       )}
                       {['entwurf', 'akzeptiert'].includes(q.status) && (
                         <button
