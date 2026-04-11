@@ -9,6 +9,7 @@ interface Quote {
   status: string
   created_at: string
   pdf_url: string | null
+  reminder_sent_at: string | null
 }
 
 interface Project {
@@ -778,6 +779,11 @@ export default function QuotesScreen() {
                     <span className={`admin-badge ${STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>
                       {STATUS_LABELS[q.status] || q.status}
                     </span>
+                    {q.reminder_sent_at && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                        Erinnerung gesendet {fmtDate(q.reminder_sent_at)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(q.created_at)}</td>
                   <td>
