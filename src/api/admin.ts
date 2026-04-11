@@ -148,6 +148,18 @@ export async function rejectAbsence(id: string, note?: string): Promise<void> {
   })
 }
 
+export interface AbsenceAnalytics {
+  year: number
+  totals: { vacation: number; sick: number; public_holiday: number; other: number }
+  by_month: { month: string; vacation: number; sick: number; public_holiday: number; other: number }[]
+  by_staff: { name: string; vacation: number; sick: number; public_holiday: number; other: number; total: number }[]
+}
+
+export async function getAbsenceAnalytics(year?: number): Promise<AbsenceAnalytics> {
+  const q = year ? `?year=${year}` : ''
+  return apiFetch(`/pwa/admin/absences/analytics${q}`) as Promise<AbsenceAnalytics>
+}
+
 // ─── Corrections ───────────────────────────────────────────
 
 export interface Correction {
