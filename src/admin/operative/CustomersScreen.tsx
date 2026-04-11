@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
+import { CompanySearch } from '../components/CompanySearch'
 
 export interface Customer {
   id: string
@@ -64,6 +65,17 @@ function CustomerForm({
       <div className="admin-section-title">{isNew ? 'Neuer Kunde' : 'Kunde bearbeiten'}</div>
       {error && <div className="admin-form-error">{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+        <div className="admin-form-group">
+          <label className="admin-form-label">Firma suchen via search.ch</label>
+          <CompanySearch
+            onSelect={result => {
+              if (result.name) setCompany(result.name)
+              if (result.address) setAddress(result.address)
+              if (result.phone) setPhone(result.phone)
+              if (result.email) setEmail(result.email)
+            }}
+          />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div className="admin-form-group">
             <label className="admin-form-label">Name *</label>
