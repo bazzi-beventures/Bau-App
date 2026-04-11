@@ -1,0 +1,310 @@
+/* ─── Mobile Admin Shell (≤767px) ─────────────────────────── */
+
+.admin-shell-mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg, #0d2233);
+}
+
+.admin-content-mobile {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* clear the fixed bottom tab bar */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ─── Bottom Tab Bar ───────────────────────────────────────── */
+
+.admin-mobile-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #133550;
+  border-top: 1px solid #1c3e60;
+  display: flex;
+  align-items: stretch;
+  z-index: 50;
+}
+
+.admin-mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #6b8caa;
+  background: none;
+  border: none;
+  padding: 6px 4px;
+  min-width: 0;
+  cursor: pointer;
+  transition: color 0.15s;
+  position: relative;
+}
+
+.admin-mobile-tab:active {
+  opacity: 0.7;
+}
+
+.admin-mobile-tab.active {
+  color: var(--accent-blue, #3b82f6);
+}
+
+.admin-mobile-tab svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.admin-mobile-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Badge on tab */
+.admin-mobile-tab-badge {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 18px);
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  line-height: 1;
+}
+
+/* Dot badge (for More button when secondary screens have badges) */
+.admin-mobile-tab-dot {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 16px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+/* ─── Mehr Drawer ──────────────────────────────────────────── */
+
+.admin-mobile-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+}
+
+.admin-mobile-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #133550;
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid #1c3e60;
+  z-index: 61;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  animation: adminMobileDrawerUp 0.22s ease;
+}
+
+@keyframes adminMobileDrawerUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.admin-mobile-drawer-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #2a5070;
+  margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+
+.admin-mobile-drawer-scroll {
+  overflow-y: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-mobile-drawer-group {
+  padding: 8px 0 0;
+}
+
+.admin-mobile-drawer-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #4a7090;
+  padding: 4px 20px 6px;
+}
+
+.admin-mobile-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px;
+  min-height: 52px;
+  font-size: 15px;
+  color: var(--text, #e8eaf0);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.admin-mobile-drawer-item:active {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.admin-mobile-drawer-item.active {
+  color: var(--accent-blue, #3b82f6);
+}
+
+.admin-mobile-drawer-item svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.admin-mobile-drawer-item-badge {
+  margin-left: auto;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+.admin-mobile-drawer-divider {
+  height: 1px;
+  background: #1c3e60;
+  margin: 8px 0;
+}
+
+.admin-mobile-drawer-footer {
+  padding: 4px 12px 8px;
+  flex-shrink: 0;
+}
+
+.admin-mobile-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 8px;
+  font-size: 14px;
+  color: #6b8caa;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+
+.admin-mobile-switch-btn:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-mobile-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 4px;
+}
+
+.admin-mobile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #1c4a70;
+  color: #7db8e8;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-mobile-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-mobile-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text, #e8eaf0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-mobile-user-role {
+  font-size: 11px;
+  color: #4a7090;
+  margin-top: 1px;
+}
+
+.admin-mobile-logout-btn {
+  background: none;
+  border: none;
+  color: #4a7090;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  display: flex;
+  transition: color 0.12s;
+}
+
+.admin-mobile-logout-btn:active {
+  color: #ef4444;
+}
+
+.admin-mobile-logout-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ─── Mobile content tweaks ────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .admin-content-logo {
+    display: none;
+  }
+
+  .admin-table-wrap {
+    overflow-x: auto;
+  }
+}

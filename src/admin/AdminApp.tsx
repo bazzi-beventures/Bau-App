@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { UserInfo } from '../api/auth'
 import { getAdminDashboard, AdminDashboard } from '../api/admin'
 import AdminSidebar from './AdminSidebar'
+import MobileNav from './MobileNav'
 import { useAdminNav, AdminScreen } from './useAdminNav'
+import { useIsMobile } from './useIsMobile'
 import DashboardScreen from './dashboard/DashboardScreen'
 import StaffScreen from './personal/StaffScreen'
 import AbsencesScreen from './personal/AbsencesScreen'
@@ -19,6 +21,7 @@ import UsersScreen from './system/UsersScreen'
 import ImportScreen from './system/ImportScreen'
 import KpiScreen from './kpis/KpiScreen'
 import './admin.css'
+import './mobile.css'
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -67,6 +70,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
 
 export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwitchToUser }: Props) {
   const { screen, nav } = useAdminNav()
+  const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
 
@@ -102,6 +106,27 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwi
       case 'kpis':         return <KpiScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
+  }
+
+  if (isMobile) {
+    return (
+      <div className="admin-shell-mobile">
+        <main className="admin-content admin-content-mobile">
+          <div className="admin-content-inner">
+            {renderScreen()}
+          </div>
+        </main>
+        <MobileNav
+          screen={screen}
+          onNav={nav}
+          onLoggedOut={onLoggedOut}
+          onSwitchToUser={onSwitchToUser}
+          displayName={user.display_name}
+          role={user.role}
+          badges={badges}
+        />
+      </div>
+    )
   }
 
   return (

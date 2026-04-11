@@ -702,6 +702,12 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@media (max-width: 767px) {
+  .admin-toast-container {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* ─── Divider / Section ───────────────────────────────────── */
 .admin-section-title {
   font-size: 13px;
