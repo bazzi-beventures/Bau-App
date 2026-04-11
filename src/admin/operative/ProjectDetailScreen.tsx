@@ -21,6 +21,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [customerEmail, setCustomerEmail] = useState(project?.customer_email ?? '')
   const [customerAddress, setCustomerAddress] = useState(project?.customer_address ?? '')
   const [auftraggeber, setAuftraggeber] = useState(project?.auftraggeber ?? '')
+  const [rechnungszahler, setRechnungszahler] = useState(project?.rechnungszahler ?? '')
   const [eigentuemer, setEigentuemer] = useState(project?.eigentuemer ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
   const [sachbearbeiterId, setSachbearbeiterId] = useState(project?.sachbearbeiter_id ?? '')
@@ -90,6 +91,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           customer_email: customerEmail || null,
           customer_address: customerAddress || null,
           auftraggeber: auftraggeber || null,
+          rechnungszahler: rechnungszahler || null,
           eigentuemer: eigentuemer || null,
           art_der_arbeit: artDerArbeit || null,
           sachbearbeiter_id: sachbearbeiterId || null,
@@ -164,6 +166,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <div className="admin-form-group">
                 <label className="admin-form-label">Auftraggeber</label>
                 <input className="admin-form-input" value={auftraggeber} onChange={e => setAuftraggeber(e.target.value)} />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Rechnungszahler</label>
+                <input className="admin-form-input" value={rechnungszahler} onChange={e => setRechnungszahler(e.target.value)} placeholder="Falls abweichend vom Auftraggeber" />
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Eigentümer</label>
@@ -266,6 +272,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-table-wrap" style={{ padding: 24 }}>
             <div className="admin-section-title">Zuständigkeiten</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {!isNew && project.created_by && (
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Erfasser</label>
+                  <div style={{ fontSize: 13, color: 'var(--text)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    {project.created_by}
+                  </div>
+                </div>
+              )}
               <div className="admin-form-group">
                 <label className="admin-form-label">Sachbearbeiter</label>
                 <select className="admin-form-select" value={sachbearbeiterId} onChange={e => setSachbearbeiterId(e.target.value)}>

@@ -15,6 +15,8 @@ export interface Kontakt {
   email: string
 }
 
+export type ProjectStatus = 'offen' | 'bestellung_ausgeloest' | 'demontage' | 'abgeschlossen'
+
 export interface Project {
   id: string
   name: string
@@ -22,18 +24,43 @@ export interface Project {
   customer_email: string | null
   customer_address: string | null
   auftraggeber: string | null
+  rechnungszahler: string | null
   eigentuemer: string | null
   art_der_arbeit: string | null
   sachbearbeiter_id: string | null
   monteur_ids: string[]
   termine: Termin[]
   kontakte: Kontakt[]
+  status: ProjectStatus
   is_closed: boolean
   created_at: string
+  created_by: string | null
+  created_by_id: string | null
+}
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  offen: 'Offen',
+  bestellung_ausgeloest: 'Bestellung ausgelöst',
+  demontage: 'Demontage',
+  abgeschlossen: 'Abgeschlossen',
+}
+
+export const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
+  offen: 'admin-badge-active',
+  bestellung_ausgeloest: 'admin-badge-warning',
+  demontage: 'admin-badge-info',
+  abgeschlossen: 'admin-badge-closed',
 }
 
 type ProjectSortKey = 'name' | 'customer_name' | 'customer_email' | 'status' | 'created_at'
 type SortDir = 'asc' | 'desc'
+
+const STATUS_ORDER: Record<ProjectStatus, number> = {
+  offen: 0,
+  bestellung_ausgeloest: 1,
+  demontage: 2,
+  abgeschlossen: 3,
+}
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -71,19 +98,22 @@ export default function ProjectsScreen() {
   }
 
   const filtered = projects.filter(p => {
-    if (!showClosed && p.is_closed) return false
+    const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
+    if (!showClosed && effectiveStatus === 'abgeschlossen') return false
     const q = search.toLowerCase()
     const matchSearch = p.name.toLowerCase().includes(q) || (p.customer_name || '').toLowerCase().includes(q)
-    const matchStatus = !statusFilter || (statusFilter === 'offen' ? !p.is_closed : p.is_closed)
+    const matchStatus = !statusFilter || effectiveStatus === statusFilter
     return matchSearch && matchStatus
   }).sort((a, b) => {
+    const sA: ProjectStatus = a.status ?? (a.is_closed ? 'abgeschlossen' : 'offen')
+    const sB: ProjectStatus = b.status ?? (b.is_closed ? 'abgeschlossen' : 'offen')
     let aVal: string | number
     let bVal: string | number
     switch (sortKey) {
       case 'name':          aVal = a.name; bVal = b.name; break
       case 'customer_name': aVal = a.customer_name ?? ''; bVal = b.customer_name ?? ''; break
       case 'customer_email': aVal = a.customer_email ?? ''; bVal = b.customer_email ?? ''; break
-      case 'status':        aVal = a.is_closed ? 1 : 0; bVal = b.is_closed ? 1 : 0; break
+      case 'status':        aVal = STATUS_ORDER[sA]; bVal = STATUS_ORDER[sB]; break
       case 'created_at':    aVal = a.created_at; bVal = b.created_at; break
     }
     if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -92,8 +122,8 @@ export default function ProjectsScreen() {
     return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
   })
 
-  const open = filtered.filter(p => !p.is_closed).length
-  const closed = filtered.filter(p => p.is_closed).length
+  const open = filtered.filter(p => (p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')) !== 'abgeschlossen').length
+  const closed = filtered.filter(p => (p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')) === 'abgeschlossen').length
 
   const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 
@@ -139,7 +169,9 @@ export default function ProjectsScreen() {
           <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="">Alle Status</option>
             <option value="offen">Offen</option>
-            <option value="geschlossen">Geschlossen</option>
+            <option value="bestellung_ausgeloest">Bestellung ausgelöst</option>
+            <option value="demontage">Demontage</option>
+            <option value="abgeschlossen">Abgeschlossen</option>
           </select>
         </div>
 
@@ -169,21 +201,24 @@ export default function ProjectsScreen() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={5} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
-              ) : filtered.map(p => (
-                <tr key={p.id} onClick={() => setSelected(p)}>
-                  <td><strong>{p.name}</strong></td>
-                  <td>{p.customer_name || '—'}</td>
-                  <td style={{ color: 'var(--muted)' }}>{p.customer_email || '—'}</td>
-                  <td>
-                    <span className={`admin-badge ${p.is_closed ? 'admin-badge-closed' : 'admin-badge-active'}`}>
-                      {p.is_closed ? 'Geschlossen' : 'Offen'}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--muted)' }}>
-                    {new Date(p.created_at).toLocaleDateString('de-CH')}
-                  </td>
-                </tr>
-              ))}
+              ) : filtered.map(p => {
+                const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
+                return (
+                  <tr key={p.id} onClick={() => setSelected(p)}>
+                    <td><strong>{p.name}</strong></td>
+                    <td>{p.customer_name || '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{p.customer_email || '—'}</td>
+                    <td>
+                      <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`}>
+                        {PROJECT_STATUS_LABELS[effectiveStatus]}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--muted)' }}>
+                      {new Date(p.created_at).toLocaleDateString('de-CH')}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
