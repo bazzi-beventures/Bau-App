@@ -9,10 +9,29 @@ export interface AdminDashboard {
   open_invoices: number
   open_sessions: number
   draft_quotes: number
+  quotes_pending_reminder: number
+}
+
+export interface PendingReminderQuote {
+  id: number
+  quote_number: string
+  customer_name: string
+  customer_email: string
+  project_name: string
+  total_amount: number
+  sent_at: string | null
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
   return apiFetch('/pwa/admin/dashboard') as Promise<AdminDashboard>
+}
+
+export async function getPendingReminderQuotes(): Promise<PendingReminderQuote[]> {
+  return apiFetch('/pwa/admin/quotes/pending-reminders') as Promise<PendingReminderQuote[]>
+}
+
+export async function sendQuoteReminder(quoteId: number): Promise<void> {
+  await apiFetch(`/pwa/admin/quotes/${quoteId}/send-reminder`, { method: 'POST' })
 }
 
 // ─── Staff ─────────────────────────────────────────────────

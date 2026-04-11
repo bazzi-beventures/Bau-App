@@ -89,7 +89,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwi
 
   function renderScreen() {
     switch (screen) {
-      case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} />
+      case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
       case 'staff':        return <StaffScreen />
       case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
