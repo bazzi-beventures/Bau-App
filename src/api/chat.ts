@@ -135,3 +135,33 @@ export async function fetchMonthlyData(): Promise<MonthlyReportData> {
 export async function fetchWeeklyData(period: 'this_week' | 'last_week'): Promise<WeeklyReportData> {
   return apiFetch(`/pwa/report/weekly-data?period=${period}`, { method: 'GET' }) as Promise<WeeklyReportData>
 }
+
+// ─── Absenzen ──────────────────────────────────────────────
+
+export interface UserAbsence {
+  id: string
+  staff_name: string
+  type: string
+  date_start: string
+  date_end: string
+  status: string
+  comment: string | null
+}
+
+export interface AbsenceCreatePayload {
+  absence_type: 'vacation' | 'sick' | 'public_holiday' | 'other'
+  date_start: string
+  date_end: string
+  comment?: string
+}
+
+export async function fetchMyAbsences(): Promise<UserAbsence[]> {
+  return apiFetch('/pwa/absences', { method: 'GET' }) as Promise<UserAbsence[]>
+}
+
+export async function createAbsenceRequest(payload: AbsenceCreatePayload): Promise<UserAbsence> {
+  return apiFetch('/pwa/absences', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }) as Promise<UserAbsence>
+}

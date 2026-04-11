@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { apiFetch, ApiError } from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { apiFetch, ApiError, apiFormFetch } from '../api/client'
 
 interface Termin {
   datum: string
@@ -24,6 +24,22 @@ interface Project {
   customer_address: string | null
   termine: Termin[]
   kontakte: Kontakt[]
+  bemerkung: string | null
+}
+
+interface ProjectFile {
+  id: string
+  filename: string
+  file_url: string | null
+  mime_type: string | null
+  created_at: string
+}
+
+interface ProjectComment {
+  id: string
+  author_name: string | null
+  text: string
+  created_at: string
 }
 
 interface Props {
@@ -44,6 +60,11 @@ function nextTermin(termine: Termin[]): Termin | null {
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-')
   return `${d}.${m}.${y}`
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 // ── Timeline-Utilities ──────────────────────────────────────
@@ -76,18 +97,18 @@ function diffDays(startISO: string, endISO: string): number {
 }
 
 interface TimelineInfo {
-  start: string            // erster Tag der Achse
-  days: string[]           // alle Tage im Fenster (ISO)
-  todayIndex: number       // Index von heute in days (-1 falls außerhalb)
+  start: string
+  days: string[]
+  todayIndex: number
 }
 
 interface ProjectSpan {
   project: Project
   firstDatum: string | null
   lastDatum: string | null
-  startOffset: number      // Index in days
-  length: number           // Anzahl Tage
-  terminIndices: number[]  // Indices der einzelnen Termine
+  startOffset: number
+  length: number
+  terminIndices: number[]
 }
 
 function buildTimeline(projects: Project[]): { info: TimelineInfo; spans: ProjectSpan[] } {
@@ -104,7 +125,6 @@ function buildTimeline(projects: Project[]): { info: TimelineInfo; spans: Projec
     endISO = maxDate > addDays(today, 13) ? maxDate : addDays(today, 13)
   }
 
-  // Mindestens ein paar Tage Puffer am Ende
   endISO = addDays(endISO, 1)
 
   const dayCount = diffDays(startISO, endISO) + 1
@@ -128,7 +148,6 @@ function buildTimeline(projects: Project[]): { info: TimelineInfo; spans: Projec
     return { project: p, firstDatum: first, lastDatum: last, startOffset, length, terminIndices }
   })
 
-  // Projekte ohne Termine ans Ende, sonst chronologisch nach erstem Termin
   spans.sort((a, b) => {
     if (!a.firstDatum && !b.firstDatum) return a.project.name.localeCompare(b.project.name)
     if (!a.firstDatum) return 1
@@ -145,6 +164,15 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
   const [selected, setSelected] = useState<Project | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
+  // Detail: Dateien & Kommentare
+  const [files, setFiles] = useState<ProjectFile[]>([])
+  const [comments, setComments] = useState<ProjectComment[]>([])
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [addingComment, setAddingComment] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -160,6 +188,56 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
     load()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!selected) return
+    setFiles([])
+    setComments([])
+    setLoadingDetail(true)
+    Promise.all([
+      apiFetch(`/pwa/projects/${selected.id}/files`).catch(() => []) as Promise<ProjectFile[]>,
+      apiFetch(`/pwa/projects/${selected.id}/comments`).catch(() => []) as Promise<ProjectComment[]>,
+    ]).then(([f, c]) => {
+      setFiles(f)
+      setComments(c)
+    }).finally(() => setLoadingDetail(false))
+  }, [selected?.id])
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selected || !e.target.files?.length) return
+    const file = e.target.files[0]
+    const form = new FormData()
+    form.append('file', file)
+    setUploading(true)
+    try {
+      await apiFormFetch(`/pwa/projects/${selected.id}/files`, form)
+      const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
+      setFiles(updated)
+    } catch {
+      // silently ignore upload errors in user view
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function handleAddComment() {
+    if (!selected || !newComment.trim()) return
+    setAddingComment(true)
+    try {
+      await apiFetch(`/pwa/projects/${selected.id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ text: newComment.trim() }),
+      })
+      const updated = await apiFetch(`/pwa/projects/${selected.id}/comments`) as ProjectComment[]
+      setComments(updated)
+      setNewComment('')
+    } catch {
+      // silently ignore
+    } finally {
+      setAddingComment(false)
+    }
+  }
 
   // ── Detail-Ansicht ──────────────────────────────────────────
   if (selected) {
@@ -180,6 +258,16 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
           {selected.art_der_arbeit && (
             <div className="projekte-detail-badge-row">
               <span className="projekte-detail-badge">{selected.art_der_arbeit}</span>
+            </div>
+          )}
+
+          {/* Bemerkung — rot hervorgehoben */}
+          {selected.bemerkung && (
+            <div className="projekte-detail-card" style={{ background: '#fff0f0', border: '1.5px solid #e53e3e' }}>
+              <div className="projekte-detail-title" style={{ color: '#c53030' }}>Hinweis</div>
+              <div style={{ fontSize: 14, color: '#c53030', fontWeight: 500, whiteSpace: 'pre-wrap' }}>
+                {selected.bemerkung}
+              </div>
             </div>
           )}
 
@@ -272,6 +360,84 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
               ))}
             </div>
           )}
+
+          {/* Dokumente & Fotos */}
+          {!loadingDetail && (
+            <div className="projekte-detail-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div className="projekte-detail-title" style={{ margin: 0 }}>Dokumente & Fotos</div>
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    style={{ display: 'none' }}
+                    onChange={handleUpload}
+                  />
+                  <button
+                    type="button"
+                    className="projekte-kontakt-link-btn"
+                    style={{ fontSize: 12 }}
+                    disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {uploading ? 'Lädt…' : '+ Hochladen'}
+                  </button>
+                </div>
+              </div>
+              {files.length === 0 && (
+                <div className="projekte-detail-empty">Noch keine Dateien hochgeladen.</div>
+              )}
+              {files.map(f => (
+                <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
+                  <span style={{ fontSize: 16 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+                  <span className="projekte-detail-value" style={{ flex: 1 }}>
+                    {f.file_url
+                      ? <a href={f.file_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
+                      : f.filename
+                    }
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>{formatDateTime(f.created_at)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Kommentare */}
+          {!loadingDetail && (
+            <div className="projekte-detail-card">
+              <div className="projekte-detail-title">Kommentare</div>
+              {comments.length === 0 && (
+                <div className="projekte-detail-empty" style={{ marginBottom: 10 }}>Noch keine Kommentare.</div>
+              )}
+              {comments.map(c => (
+                <div key={c.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--card-border, #eee)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{c.author_name || 'Unbekannt'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted, #888)' }}>{formatDateTime(c.created_at)}</span>
+                  </div>
+                  <div style={{ fontSize: 13 }}>{c.text}</div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <input
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--card-border, #ddd)', fontSize: 13, background: 'var(--surface, #fff)', color: 'var(--text)' }}
+                  placeholder="Kommentar…"
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleAddComment() } }}
+                />
+                <button
+                  type="button"
+                  disabled={addingComment || !newComment.trim()}
+                  onClick={handleAddComment}
+                  style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--accent-blue)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: addingComment || !newComment.trim() ? 0.5 : 1 }}
+                >
+                  {addingComment ? '…' : 'Senden'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="nav-bar">
@@ -362,8 +528,6 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
         )}
 
         {!loading && projects.length > 0 && viewMode === 'grid' && (() => {
-          // Gruppiere Projekte nach nächstem Termin (Datum). Projekte ohne
-          // kommenden Termin landen in einer Fallback-Gruppe am Ende.
           const groupMap = new Map<string, Project[]>()
           const noDateKey = '__none__'
           projects.forEach(p => {
@@ -405,6 +569,11 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
                           <div className="projekte-tile-sub">
                             {p.art_der_arbeit || p.auftraggeber || p.customer_name || '—'}
                           </div>
+                          {p.bemerkung && (
+                            <div style={{ fontSize: 11, color: '#c53030', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              ⚠ {p.bemerkung}
+                            </div>
+                          )}
                           {termin && (
                             <div className="projekte-tile-termin">
                               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -462,7 +631,6 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
 
                   {/* Zeilen */}
                   <div className="projekte-timeline-body">
-                    {/* Heute-Linie */}
                     {info.todayIndex >= 0 && (
                       <div
                         className="projekte-timeline-today-line"

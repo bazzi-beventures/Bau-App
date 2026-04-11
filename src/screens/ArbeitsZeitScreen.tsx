@@ -12,6 +12,7 @@ interface Props {
   onNavProfile: () => void
   onLoggedOut: () => void
   onOpenBericht: (type: BerichtType) => void
+  onNavAbsenzen: () => void
 }
 
 interface Action {
@@ -84,7 +85,7 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading] = useState(false)
@@ -233,6 +234,48 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
           <div className="menu-text">
             <div className="menu-label">Arbeitszeitbericht</div>
             <div className="menu-sub">Monatszeiten &amp; Überstunden anzeigen</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Wochenansicht */}
+        <div
+          className="menu-item"
+          onClick={() => loadingIdx === null && onOpenBericht('weekly-this')}
+          style={{ opacity: loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">Wochenansicht</div>
+            <div className="menu-sub">Stundenjournal der aktuellen Woche</div>
+          </div>
+          <div className="menu-chevron">›</div>
+        </div>
+
+        {/* Absenzen */}
+        <div
+          className="menu-item"
+          onClick={() => loadingIdx === null && onNavAbsenzen()}
+          style={{ opacity: loadingIdx !== null ? 0.5 : 1 }}
+        >
+          <div className="menu-icon menu-icon-amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-label">Absenzen</div>
+            <div className="menu-sub">Urlaub &amp; Abwesenheiten beantragen</div>
           </div>
           <div className="menu-chevron">›</div>
         </div>

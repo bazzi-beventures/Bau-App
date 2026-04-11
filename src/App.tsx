@@ -10,9 +10,10 @@ import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 import ProjekteScreen from './screens/ProjekteScreen'
+import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 
-type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin'
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin' | 'absenzen'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -206,6 +207,20 @@ export default function App() {
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}
+        onNavAbsenzen={() => setScreen('absenzen')}
+      />
+    )
+  }
+
+  if (screen === 'absenzen' && user) {
+    return (
+      <AbsenzenScreen
+        logoUrl={logoUrl}
+        onBack={() => setScreen('arbeitszeit')}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   }
