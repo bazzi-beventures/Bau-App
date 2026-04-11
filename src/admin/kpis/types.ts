@@ -130,7 +130,13 @@ export interface CategoryPricingRow {
   tenant_id: string
   category: string
   margin_factor: number
-  base_installation_fee: number | null
+  notes: string | null
+}
+
+export interface InstallationTemplateRow {
+  id: string
+  label: string
+  default_fee: number
   notes: string | null
 }
 

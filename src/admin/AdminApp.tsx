@@ -17,6 +17,7 @@ import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import ProjectOverviewScreen from './operative/ProjectOverviewScreen'
+import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
 import ImportScreen from './system/ImportScreen'
 import KpiScreen from './kpis/KpiScreen'
@@ -58,11 +59,12 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'hr-reports': 'HR-Berichte',
   'projects': 'Projekte',
   'customers': 'Kundenstamm',
-  'materials': 'Material / Lager',
   'quotes': 'Offerten',
   'invoices': 'Rechnungen',
-  'pricing-rules': 'Lieferantenpreise',
   'project-overview': 'Projektfortschritte',
+  'suppliers': 'Lieferanten',
+  'materials': 'Material / Lager',
+  'pricing-rules': 'Preisregeln',
   'users': 'Benutzerverwaltung',
   'import': 'Import / Upload',
   'kpis': 'Kennzahlen',
@@ -96,11 +98,12 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwi
       case 'hr-reports':   return <HrReportsScreen />
       case 'projects':     return <ProjectsScreen />
       case 'customers':    return <CustomersScreen />
-      case 'materials':    return <MaterialsScreen />
       case 'quotes':       return <QuotesScreen />
       case 'invoices':     return <InvoicesScreen onBadgeChange={loadDashboard} />
-      case 'pricing-rules':return <PricingRulesScreen />
       case 'project-overview': return <ProjectOverviewScreen />
+      case 'suppliers':    return <SuppliersScreen />
+      case 'materials':    return <MaterialsScreen />
+      case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
       case 'import':       return <ImportScreen />
       case 'kpis':         return <KpiScreen />

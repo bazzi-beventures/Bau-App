@@ -53,6 +53,8 @@ interface MaterialRow { art_nr: string; quantity: string; description?: string; 
 interface ExtraProductRow { description: string; quantity: string; unit: string; unit_price: string }
 interface ExtraChargeRow { description: string; total_price: string }
 interface TravelRow { description: string; total_price: string }
+interface InstallationRow { description: string; unit_price: string }
+interface InstallationTemplate { id: string; label: string; default_fee: number; notes: string | null }
 
 const STATUS_LABELS: Record<string, string> = {
   entwurf: 'Entwurf',
@@ -96,6 +98,8 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
   const [extraCharges, setExtraCharges] = useState<ExtraChargeRow[]>([])
   const [travelRows, setTravelRows] = useState<TravelRow[]>([])
+  const [installationRows, setInstallationRows] = useState<InstallationRow[]>([])
+  const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
   const [notes, setNotes] = useState('')
@@ -109,10 +113,12 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
       apiFetch('/pwa/admin/projects') as Promise<Project[]>,
       apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>,
       apiFetch('/pwa/admin/materials') as Promise<Material[]>,
-    ]).then(([p, r, m]) => {
+      apiFetch('/pwa/admin/installation-templates') as Promise<InstallationTemplate[]>,
+    ]).then(([p, r, m, t]) => {
       setProjects(p.filter(x => !x.is_closed))
       setRoles(r)
       setMaterials(m)
+      setInstallationTemplates(t)
     })
   }, [])
 
@@ -150,6 +156,15 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
     setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
   }
   function removeTravel(i: number) { setTravelRows(r => r.filter((_, j) => j !== i)) }
+
+  // ── Installation helpers ──
+  function addInstallationFromTemplate(tpl: InstallationTemplate) {
+    setInstallationRows(r => [...r, { description: tpl.label, unit_price: String(tpl.default_fee) }])
+  }
+  function updateInstallation(i: number, patch: Partial<InstallationRow>) {
+    setInstallationRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
+  }
+  function removeInstallation(i: number) { setInstallationRows(r => r.filter((_, j) => j !== i)) }
 
   // ── PDF Upload ──
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -225,6 +240,13 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
         extra_charge_items: extraCharges.filter(r => r.description && parseNum(r.total_price) > 0).map(r => ({
           description: r.description,
           total_price: parseNum(r.total_price),
+        })),
+        installation_items: installationRows.filter(r => r.description && parseNum(r.unit_price) > 0).map(r => ({
+          description: r.description,
+          quantity: 1,
+          unit: 'Pau',
+          unit_price: parseNum(r.unit_price),
+          total_price: parseNum(r.unit_price),
         })),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
@@ -370,6 +392,26 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
         <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addTravel}>+ Fahrtkosten</button>
       </fieldset>
 
+      {/* Installation */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Montagepositionen</legend>
+        {installationRows.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description} onChange={e => updateInstallation(i, { description: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.unit_price} onChange={e => updateInstallation(i, { unit_price: e.target.value })} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeInstallation(i)} title="Entfernen">✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {installationTemplates.map(tpl => (
+            <button key={tpl.id} className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => addInstallationFromTemplate(tpl)} title={tpl.notes ?? undefined}>
+              + {tpl.label} (CHF {tpl.default_fee})
+            </button>
+          ))}
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setInstallationRows(r => [...r, { description: '', unit_price: '' }])}>+ Manuell</button>
+        </div>
+      </fieldset>
+
       {/* Discounts */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
@@ -428,6 +470,10 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
   const [travelRows, setTravelRows] = useState<EditTravelRow[]>(() =>
     quote.travel_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
   )
+  const [installationRows, setInstallationRows] = useState<InstallationRow[]>(() =>
+    quote.installation_items.map(i => ({ description: i.description, unit_price: String(i.unit_price) }))
+  )
+  const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
   const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
   const [notes, setNotes] = useState(quote.notes || '')
@@ -435,7 +481,10 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
   const [error, setError] = useState('')
 
   useEffect(() => {
-    (apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>).then(setRoles)
+    Promise.all([
+      apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>,
+      apiFetch('/pwa/admin/installation-templates') as Promise<InstallationTemplate[]>,
+    ]).then(([r, t]) => { setRoles(r); setInstallationTemplates(t) })
   }, [])
 
   async function handleSave() {
@@ -458,6 +507,9 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         extra_charge_items: extraCharges
           .filter(r => r.description && parseNum(r.total_price) > 0)
           .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
+        installation_items: installationRows
+          .filter(r => r.description && parseNum(r.unit_price) > 0)
+          .map(r => ({ description: r.description, quantity: 1, unit: 'Pau', unit_price: parseNum(r.unit_price), total_price: parseNum(r.unit_price) })),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
@@ -577,6 +629,29 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setTravelRows(r => [...r, { description: 'Fahrtpauschale', total_price: '' }])}>+ Fahrtkosten</button>
       </fieldset>
 
+      {/* Installation */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Montagepositionen</legend>
+        {installationRows.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description}
+              onChange={e => setInstallationRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.unit_price}
+              onChange={e => setInstallationRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setInstallationRows(r => r.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {installationTemplates.map(tpl => (
+            <button key={tpl.id} className="admin-btn admin-btn-secondary admin-btn-sm" title={tpl.notes ?? undefined}
+              onClick={() => setInstallationRows(r => [...r, { description: tpl.label, unit_price: String(tpl.default_fee) }])}>
+              + {tpl.label} (CHF {tpl.default_fee})
+            </button>
+          ))}
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setInstallationRows(r => [...r, { description: '', unit_price: '' }])}>+ Manuell</button>
+        </div>
+      </fieldset>
+
       {/* Discounts */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
@@ -597,12 +672,6 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         <label className="admin-form-label">Bemerkungen</label>
         <textarea className="admin-form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen…" />
       </div>
-
-      {quote.installation_items?.length > 0 && (
-        <div style={{ marginBottom: 20, padding: '10px 14px', background: 'var(--surface-alt, #f9f9f9)', borderRadius: 6, fontSize: 13, color: 'var(--muted)' }}>
-          Montagepositionen ({quote.installation_items.length}) werden beibehalten und nicht bearbeitet.
-        </div>
-      )}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="admin-btn admin-btn-primary" onClick={handleSave} disabled={saving}>

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useKpiData } from '../useKpiData'
-import type { CategoryPricingRow, SupplierPricingRow, ColumnDef } from '../types'
+import type { CategoryPricingRow, SupplierPricingRow, InstallationTemplateRow, ColumnDef } from '../types'
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
@@ -11,8 +11,13 @@ const chf = (v: unknown) => typeof v === 'number' ? `CHF ${v.toLocaleString('de-
 const CAT_COLUMNS: ColumnDef<CategoryPricingRow>[] = [
   { key: 'category', label: 'Kategorie' },
   { key: 'margin_factor', label: 'Margenfaktor', align: 'right', format: num },
-  { key: 'base_installation_fee', label: 'Installationsgebühr', align: 'right', format: chf },
   { key: 'notes', label: 'Notizen' },
+]
+
+const INSTALL_COLUMNS: ColumnDef<InstallationTemplateRow>[] = [
+  { key: 'label', label: 'Bezeichnung' },
+  { key: 'default_fee', label: 'Pauschale', align: 'right', format: chf },
+  { key: 'notes', label: 'Hinweis' },
 ]
 
 const SUP_COLUMNS: ColumnDef<SupplierPricingRow>[] = [
@@ -24,9 +29,10 @@ const SUP_COLUMNS: ColumnDef<SupplierPricingRow>[] = [
 export default function PricingTab() {
   const { data: catData, loading: catLoad, error: catErr } = useKpiData<CategoryPricingRow>('category_pricing_rules')
   const { data: supData, loading: supLoad, error: supErr } = useKpiData<SupplierPricingRow>('supplier_pricing_rules')
+  const { data: installData, loading: installLoad, error: installErr } = useKpiData<InstallationTemplateRow>('installation_templates')
 
-  const loading = catLoad || supLoad
-  const error = catErr || supErr
+  const loading = catLoad || supLoad || installLoad
+  const error = catErr || supErr || installErr
 
   const cards = useMemo(() => {
     const catRows = catData ?? []
@@ -69,6 +75,9 @@ export default function PricingTab() {
 
       <h3 className="kpi-bi-section-title" style={{ marginTop: 8 }}>Lieferanten-Aufschläge</h3>
       <DataTable data={supData ?? []} columns={SUP_COLUMNS} defaultSort={{ key: 'markup_pct', dir: 'desc' }} />
+
+      <h3 className="kpi-bi-section-title" style={{ marginTop: 8 }}>Montage-Vorlagen</h3>
+      <DataTable data={installData ?? []} columns={INSTALL_COLUMNS} defaultSort={{ key: 'default_fee', dir: 'asc' }} />
     </div>
   )
 }
