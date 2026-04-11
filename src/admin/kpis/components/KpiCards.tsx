@@ -7,11 +7,15 @@ interface CardDef {
 
 interface Props {
   cards: CardDef[]
+  columns?: number
 }
 
-export default function KpiCards({ cards }: Props) {
+export default function KpiCards({ cards, columns }: Props) {
   return (
-    <div className="kpi-bi-cards">
+    <div
+      className="kpi-bi-cards"
+      style={columns ? { gridTemplateColumns: `repeat(${columns}, 1fr)` } : undefined}
+    >
       {cards.map((c, i) => (
         <div key={i} className="kpi-bi-card">
           <div className="kpi-bi-card-label">{c.label}</div>

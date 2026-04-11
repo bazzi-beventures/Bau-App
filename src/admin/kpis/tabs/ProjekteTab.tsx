@@ -26,14 +26,35 @@ export default function ProjekteTab() {
     if (!data) return []
     const counts = { offen: 0, abgeschlossen: 0 }
     data.forEach((r) => r.ist_abgeschlossen ? counts.abgeschlossen++ : counts.offen++)
-    return [{
-      key: 'status',
-      label: 'Status',
-      options: [
-        { value: 'offen', count: counts.offen },
-        { value: 'abgeschlossen', count: counts.abgeschlossen },
-      ],
-    }]
+
+    const mitarbeiterCounts = new Map<string, number>()
+    data.forEach((r) => {
+      if (r.mitarbeiter_liste) {
+        r.mitarbeiter_liste.split(',').forEach((m) => {
+          const name = m.trim()
+          if (name) mitarbeiterCounts.set(name, (mitarbeiterCounts.get(name) ?? 0) + 1)
+        })
+      }
+    })
+    const mitarbeiterOptions = Array.from(mitarbeiterCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => ({ value, count }))
+
+    return [
+      {
+        key: 'status',
+        label: 'Status',
+        options: [
+          { value: 'offen', count: counts.offen },
+          { value: 'abgeschlossen', count: counts.abgeschlossen },
+        ],
+      },
+      ...(mitarbeiterOptions.length > 0 ? [{
+        key: 'mitarbeiter',
+        label: 'Mitarbeiter',
+        options: mitarbeiterOptions,
+      }] : []),
+    ]
   }, [data])
 
   // Init filters: all selected
@@ -47,10 +68,17 @@ export default function ProjekteTab() {
   const filtered = useMemo(() => {
     if (!data) return []
     const statusSel = sel['status']
-    if (!statusSel || statusSel.size === 0) return data
+    const mitarbeiterSel = sel['mitarbeiter']
     return data.filter((r) => {
-      const v = r.ist_abgeschlossen ? 'abgeschlossen' : 'offen'
-      return statusSel.has(v)
+      if (statusSel && statusSel.size > 0) {
+        const v = r.ist_abgeschlossen ? 'abgeschlossen' : 'offen'
+        if (!statusSel.has(v)) return false
+      }
+      if (mitarbeiterSel && mitarbeiterSel.size > 0) {
+        const names = r.mitarbeiter_liste ? r.mitarbeiter_liste.split(',').map((m) => m.trim()) : []
+        if (!names.some((n) => mitarbeiterSel.has(n))) return false
+      }
+      return true
     })
   }, [data, sel])
 
@@ -102,7 +130,7 @@ export default function ProjekteTab() {
 
   return (
     <div className="kpi-bi-layout">
-      <KpiCards cards={cards} />
+      <KpiCards cards={cards} columns={2} />
       <div className="kpi-bi-content">
         <div className="kpi-bi-main">
           <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_kosten', dir: 'desc' }} />
