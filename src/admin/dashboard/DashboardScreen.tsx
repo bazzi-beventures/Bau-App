@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
-import { AdminDashboard, PendingReminderQuote, getPendingReminderQuotes, sendQuoteReminder } from '../../api/admin'
+import {
+  AdminDashboard,
+  PendingReminderQuote, getPendingReminderQuotes, sendQuoteReminder,
+  PendingActionInvoice, getPendingActionInvoices, sendZahlungserinnerung, sendMahnung,
+} from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 
 interface Props {
@@ -46,6 +50,9 @@ function IconCalendar() {
 function IconBell() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 0 0-6 6v3.586l-.707.707A1 1 0 0 0 4 14h12a1 1 0 0 0 .707-1.707L16 11.586V8a6 6 0 0 0-6-6zm0 16a2 2 0 0 1-2-2h4a2 2 0 0 1-2 2z"/></svg>
 }
+function IconExclamation() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1-8a1 1 0 0 0-1 1v3a1 1 0 0 0 2 0V6a1 1 0 0 0-1-1z" clipRule="evenodd"/></svg>
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
@@ -60,6 +67,8 @@ function daysSince(iso: string | null): number {
   if (!iso) return 0
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
 }
+
+// ─── Modal: Offerten-Erinnerungen ───────────────────────────
 
 interface ReminderModalProps {
   onClose: () => void
@@ -102,15 +111,9 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
           <button className="admin-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
-          {toast && (
-            <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-          )}
-          {quotes === null && (
-            <div className="admin-loading"><div className="admin-spinner" />Lade…</div>
-          )}
-          {quotes !== null && quotes.length === 0 && (
-            <div className="admin-empty">Keine fälligen Erinnerungen</div>
-          )}
+          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          {quotes === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
+          {quotes !== null && quotes.length === 0 && <div className="admin-empty">Keine fälligen Erinnerungen</div>}
           {quotes !== null && quotes.length > 0 && (
             <div className="admin-list">
               {quotes.map(q => (
@@ -123,9 +126,7 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
                     <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
                       Gesendet: {fmtDate(q.sent_at)} ({daysSince(q.sent_at)} Tage) · CHF {fmtCHF(q.total_amount)}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      {q.customer_email}
-                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{q.customer_email}</div>
                   </div>
                   <button
                     className="admin-btn admin-btn-primary"
@@ -145,8 +146,131 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
   )
 }
 
+// ─── Modal: Rechnungs-Mahnungen ──────────────────────────────
+
+interface MahnungModalProps {
+  onClose: () => void
+  onSent: () => void
+}
+
+function MahnungModal({ onClose, onSent }: MahnungModalProps) {
+  const [invoices, setInvoices] = useState<PendingActionInvoice[] | null>(null)
+  const [sending, setSending] = useState<{ id: number; type: 'erinnerung' | 'mahnung' } | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    getPendingActionInvoices().then(setInvoices).catch(() => setInvoices([]))
+  }, [])
+
+  function showToast(msg: string, type: 'success' | 'error') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  async function handleErinnerung(invoiceId: number) {
+    setSending({ id: invoiceId, type: 'erinnerung' })
+    try {
+      await sendZahlungserinnerung(invoiceId)
+      showToast('Zahlungserinnerung gesendet', 'success')
+      setInvoices(list => list
+        ? list.map(inv => inv.id === invoiceId ? { ...inv, zahlungserinnerung_sent_at: new Date().toISOString() } : inv)
+        : list
+      )
+      onSent()
+    } catch {
+      showToast('Fehler beim Senden', 'error')
+    } finally {
+      setSending(null)
+    }
+  }
+
+  async function handleMahnung(invoiceId: number) {
+    setSending({ id: invoiceId, type: 'mahnung' })
+    try {
+      await sendMahnung(invoiceId)
+      showToast('Mahnung gesendet', 'success')
+      setInvoices(list => list
+        ? list.map(inv => inv.id === invoiceId ? { ...inv, mahnung_sent_at: new Date().toISOString() } : inv)
+        : list
+      )
+      onSent()
+    } catch {
+      showToast('Fehler beim Senden', 'error')
+    } finally {
+      setSending(null)
+    }
+  }
+
+  const isSending = (id: number, type: 'erinnerung' | 'mahnung') =>
+    sending?.id === id && sending?.type === type
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+        <div className="admin-modal-header">
+          <div className="admin-modal-title">Überfällige Rechnungen</div>
+          <button className="admin-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="admin-modal-body">
+          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          {invoices === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
+          {invoices !== null && invoices.length === 0 && <div className="admin-empty">Keine überfälligen Rechnungen</div>}
+          {invoices !== null && invoices.length > 0 && (
+            <div className="admin-list">
+              {invoices.map(inv => (
+                <div key={inv.id} className="admin-list-item" style={{ flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{inv.invoice_number}</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{inv.project_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                        Gesendet: {fmtDate(inv.sent_at)} ({daysSince(inv.sent_at)} Tage offen)
+                        {inv.due_date ? ` · Fällig: ${fmtDate(inv.due_date)}` : ''}
+                        {' · CHF '}{fmtCHF(inv.total_amount)}
+                      </div>
+                      <div style={{ fontSize: 12, marginTop: 4, display: 'flex', gap: 12 }}>
+                        {inv.zahlungserinnerung_sent_at && (
+                          <span style={{ color: '#ca8a04' }}>Erinnerung: {fmtDate(inv.zahlungserinnerung_sent_at)}</span>
+                        )}
+                        {inv.mahnung_sent_at && (
+                          <span style={{ color: '#ef4444' }}>Mahnung: {fmtDate(inv.mahnung_sent_at)}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="admin-btn admin-btn-secondary"
+                      style={{ flex: 1 }}
+                      disabled={sending !== null}
+                      onClick={() => handleErinnerung(inv.id)}
+                    >
+                      {isSending(inv.id, 'erinnerung') ? 'Sende…' : 'Zahlungserinnerung'}
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-danger"
+                      style={{ flex: 1 }}
+                      disabled={sending !== null}
+                      onClick={() => handleMahnung(inv.id)}
+                    >
+                      {isSending(inv.id, 'mahnung') ? 'Sende…' : 'Mahnung senden'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Dashboard ───────────────────────────────────────────────
+
 export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Props) {
   const [showReminderModal, setShowReminderModal] = useState(false)
+  const [showMahnungModal, setShowMahnungModal] = useState(false)
 
   return (
     <div className="admin-page">
@@ -194,11 +318,19 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
           icon={<IconReceipt />}
         />
         <KpiCard
-          label="Erinnerungen fällig"
+          label="Offerten-Erinnerungen"
           value={dashboard?.quotes_pending_reminder ?? null}
           colorClass="yellow"
           onClick={() => setShowReminderModal(true)}
           icon={<IconBell />}
+          badge
+        />
+        <KpiCard
+          label="Rechnungen überfällig"
+          value={dashboard?.invoices_pending_action ?? null}
+          colorClass="red"
+          onClick={() => setShowMahnungModal(true)}
+          icon={<IconExclamation />}
           badge
         />
       </div>
@@ -213,7 +345,14 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
       {showReminderModal && (
         <ReminderModal
           onClose={() => setShowReminderModal(false)}
-          onSent={() => { onBadgeChange?.() }}
+          onSent={() => onBadgeChange?.()}
+        />
+      )}
+
+      {showMahnungModal && (
+        <MahnungModal
+          onClose={() => setShowMahnungModal(false)}
+          onSent={() => onBadgeChange?.()}
         />
       )}
     </div>

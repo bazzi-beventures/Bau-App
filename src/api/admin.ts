@@ -10,6 +10,18 @@ export interface AdminDashboard {
   open_sessions: number
   draft_quotes: number
   quotes_pending_reminder: number
+  invoices_pending_action: number
+}
+
+export interface PendingActionInvoice {
+  id: number
+  invoice_number: string
+  project_name: string
+  total_amount: number
+  sent_at: string | null
+  due_date: string | null
+  zahlungserinnerung_sent_at: string | null
+  mahnung_sent_at: string | null
 }
 
 export interface PendingReminderQuote {
@@ -32,6 +44,18 @@ export async function getPendingReminderQuotes(): Promise<PendingReminderQuote[]
 
 export async function sendQuoteReminder(quoteId: number): Promise<void> {
   await apiFetch(`/pwa/admin/quotes/${quoteId}/send-reminder`, { method: 'POST' })
+}
+
+export async function getPendingActionInvoices(): Promise<PendingActionInvoice[]> {
+  return apiFetch('/pwa/admin/invoices/pending-action') as Promise<PendingActionInvoice[]>
+}
+
+export async function sendZahlungserinnerung(invoiceId: number): Promise<void> {
+  await apiFetch(`/pwa/admin/invoices/${invoiceId}/send-zahlungserinnerung`, { method: 'POST' })
+}
+
+export async function sendMahnung(invoiceId: number): Promise<void> {
+  await apiFetch(`/pwa/admin/invoices/${invoiceId}/send-mahnung`, { method: 'POST' })
 }
 
 // ─── Staff ─────────────────────────────────────────────────
