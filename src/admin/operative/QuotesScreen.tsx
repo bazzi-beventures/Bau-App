@@ -58,6 +58,7 @@ const STATUS_LABELS: Record<string, string> = {
   gesendet: 'Gesendet',
   akzeptiert: 'Akzeptiert',
   abgelehnt: 'Abgelehnt',
+  absage: 'Absage',
   archiviert: 'Archiviert',
 }
 
@@ -66,6 +67,7 @@ const STATUS_BADGE: Record<string, string> = {
   gesendet: 'admin-badge-sent',
   akzeptiert: 'admin-badge-approved',
   abgelehnt: 'admin-badge-rejected',
+  absage: 'admin-badge-rejected',
   archiviert: 'admin-badge-closed',
 }
 
@@ -686,7 +688,7 @@ export default function QuotesScreen() {
     }
   }
 
-  const statuses = ['', 'entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'archiviert']
+  const statuses = ['', 'entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage', 'archiviert']
 
   const filtered = quotes.filter(q => {
     const matchStatus = !statusFilter || q.status === statusFilter
@@ -827,7 +829,16 @@ export default function QuotesScreen() {
                           </button>
                         </>
                       )}
-                      {['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt'].includes(q.status) && (
+                      {['entwurf', 'gesendet', 'akzeptiert'].includes(q.status) && (
+                        <button
+                          className="admin-btn admin-btn-danger admin-btn-sm"
+                          onClick={() => handleStatus(q.id, 'absage')}
+                          disabled={acting === q.id}
+                        >
+                          {acting === q.id ? '…' : 'Absage'}
+                        </button>
+                      )}
+                      {['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage'].includes(q.status) && (
                         <button
                           className="admin-btn admin-btn-secondary admin-btn-sm"
                           onClick={() => handleStatus(q.id, 'archiviert')}
