@@ -1,5 +1,10 @@
 import { AdminScreen } from './useAdminNav'
 import { logout } from '../api/auth'
+import {
+  IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
+  IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconUpload, IconChart,
+  IconLogout, IconAddressBook,
+} from './AdminIcons'
 
 interface Props {
   screen: AdminScreen
