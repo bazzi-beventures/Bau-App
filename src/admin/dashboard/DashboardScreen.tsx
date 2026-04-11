@@ -36,6 +36,9 @@ function IconUsers() {
 function IconReceipt() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 0 0-1 1v14l3-2 2 2 2-2 2 2 2-2 3 2V3a1 1 0 0 0-1-1H4zm2 5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1zm1 3a1 1 0 1 0 0 2h4a1 1 0 1 0 0-2H7z" clipRule="evenodd"/></svg>
 }
+function IconCalendar() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1V3a1 1 0 1 0-2 0v1H7V3a1 1 0 0 0-1-1zm0 5a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H6z" clipRule="evenodd"/></svg>
+}
 
 export default function DashboardScreen({ dashboard, onNav }: Props) {
   return (
@@ -68,6 +71,13 @@ export default function DashboardScreen({ dashboard, onNav }: Props) {
           colorClass="green"
           onClick={() => onNav('hr-reports')}
           icon={<IconUsers />}
+        />
+        <KpiCard
+          label="Absenzen pendent"
+          value={dashboard?.pending_absences ?? null}
+          colorClass="blue"
+          onClick={() => onNav('absences')}
+          icon={<IconCalendar />}
         />
         <KpiCard
           label="Offerten in Bearbeitung"
