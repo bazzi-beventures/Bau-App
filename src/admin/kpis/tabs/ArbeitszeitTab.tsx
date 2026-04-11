@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useKpiData } from '../useKpiData'
-import type { KpiMitarbeiterRow, ColumnDef, FilterGroup } from '../types'
+import type { KpiMitarbeiterRow, ColumnDef } from '../types'
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
-import FilterPanel from '../components/FilterPanel'
+import MultiDropdown from '../components/MultiDropdown'
 
 const num = (v: unknown) => typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 1 }) : '—'
 
@@ -20,39 +20,40 @@ const COLUMNS: ColumnDef<KpiMitarbeiterRow>[] = [
 
 export default function ArbeitszeitTab() {
   const { data, loading, error } = useKpiData<KpiMitarbeiterRow>('vw_kpi_mitarbeiter')
-  const [selected, setSelected] = useState<Record<string, Set<string>>>({})
+  const [funktionSel, setFunktionSel] = useState<Set<string> | null>(null) // null = all
 
-  const filterGroups = useMemo<FilterGroup[]>(() => {
+  const funktionOptions = useMemo(() => {
     if (!data) return []
-    const funcs: Record<string, number> = {}
-    data.forEach((r) => { const f = r.funktion ?? '(leer)'; funcs[f] = (funcs[f] || 0) + 1 })
-    return [{
-      key: 'funktion',
-      label: 'Funktion',
-      options: Object.entries(funcs).sort((a, b) => b[1] - a[1]).map(([v, c]) => ({ value: v, count: c })),
-    }]
+    const counts = new Map<string, number>()
+    data.forEach((r) => {
+      const f = r.funktion ?? '(leer)'
+      counts.set(f, (counts.get(f) ?? 0) + 1)
+    })
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => ({ value, count }))
   }, [data])
 
-  const sel = useMemo(() => {
-    if (Object.keys(selected).length > 0) return selected
-    const init: Record<string, Set<string>> = {}
-    filterGroups.forEach((g) => { init[g.key] = new Set(g.options.map((o) => o.value)) })
-    return init
-  }, [filterGroups, selected])
+  const allFunktionen = useMemo(() => new Set(funktionOptions.map((o) => o.value)), [funktionOptions])
+  const effectiveFunktionSel = funktionSel ?? allFunktionen
 
   const filtered = useMemo(() => {
     if (!data) return []
-    const fSel = sel['funktion']
-    if (!fSel || fSel.size === 0) return data
-    return data.filter((r) => fSel.has(r.funktion ?? '(leer)'))
-  }, [data, sel])
+    if (funktionSel === null || funktionSel.size === 0) return data
+    return data.filter((r) => funktionSel.has(r.funktion ?? '(leer)'))
+  }, [data, funktionSel])
 
   const chartData = useMemo(
-    () => filtered
-      .filter((r) => r.total_rapportstunden > 0 || r.total_stempelstunden > 0)
-      .sort((a, b) => b.total_rapportstunden - a.total_rapportstunden)
-      .slice(0, 15)
-      .map((r) => ({ name: r.kuerzel || r.mitarbeiter_name.slice(0, 10), Rapport: r.total_rapportstunden, Stempel: r.total_stempelstunden })),
+    () =>
+      filtered
+        .filter((r) => r.total_rapportstunden > 0 || r.total_stempelstunden > 0)
+        .sort((a, b) => b.total_rapportstunden - a.total_rapportstunden)
+        .slice(0, 15)
+        .map((r) => ({
+          name: r.kuerzel || r.mitarbeiter_name.slice(0, 10),
+          Rapport: r.total_rapportstunden,
+          Stempel: r.total_stempelstunden,
+        })),
     [filtered],
   )
 
@@ -70,20 +71,11 @@ export default function ArbeitszeitTab() {
     ]
   }, [filtered])
 
-  function onToggle(groupKey: string, value: string) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const s = new Set(sel[groupKey] ?? [])
-      s.has(value) ? s.delete(value) : s.add(value)
-      next[groupKey] = s
-      return next
-    })
-  }
-  function onToggleAll(groupKey: string, selectAll: boolean) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const g = filterGroups.find((g) => g.key === groupKey)
-      next[groupKey] = selectAll && g ? new Set(g.options.map((o) => o.value)) : new Set()
+  function toggleFunktion(v: string) {
+    setFunktionSel((prev) => {
+      const base = prev ?? allFunktionen
+      const next = new Set(base)
+      next.has(v) ? next.delete(v) : next.add(v)
       return next
     })
   }
@@ -93,23 +85,36 @@ export default function ArbeitszeitTab() {
 
   return (
     <div className="kpi-bi-layout">
-      <KpiCards cards={cards} />
-      <div className="kpi-bi-content">
-        <div className="kpi-bi-main">
-          <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_rapportstunden', dir: 'desc' }} />
-        </div>
-        <div className="kpi-bi-side">
-          <FilterPanel groups={filterGroups} selected={sel} onToggle={onToggle} onToggleAll={onToggleAll} />
-          <BiBarChart
-            data={chartData}
-            xKey="name"
-            bars={[
-              { dataKey: 'Rapport', color: '#f59e0b', label: 'Rapportstunden' },
-              { dataKey: 'Stempel', color: '#3b82f6', label: 'Stempelstunden' },
-            ]}
+      {/* KPI Cards */}
+      <KpiCards cards={cards} columns={4} />
+
+      {/* Horizontal filter bar */}
+      {funktionOptions.length > 0 && (
+        <div className="kpi-filter-bar">
+          <MultiDropdown
+            label="Funktion"
+            options={funktionOptions}
+            selected={effectiveFunktionSel}
+            onToggle={toggleFunktion}
+            onToggleAll={(all) => setFunktionSel(all ? null : new Set())}
           />
+          <span className="kpi-filter-count">{filtered.length} Mitarbeiter</span>
         </div>
-      </div>
+      )}
+
+      {/* Chart — full width */}
+      <BiBarChart
+        data={chartData}
+        xKey="name"
+        bars={[
+          { dataKey: 'Rapport', color: '#f59e0b', label: 'Rapportstunden' },
+          { dataKey: 'Stempel', color: '#3b82f6', label: 'Stempelstunden' },
+        ]}
+        height={300}
+      />
+
+      {/* Table — full width */}
+      <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_rapportstunden', dir: 'desc' }} />
     </div>
   )
 }

@@ -52,24 +52,23 @@ export default function PricingTab() {
 
   return (
     <div className="kpi-bi-layout">
-      <KpiCards cards={cards} />
-      <div className="kpi-bi-content">
-        <div className="kpi-bi-main">
-          <h3 className="kpi-bi-section-title">Kategorie-Margen</h3>
-          <DataTable data={catData ?? []} columns={CAT_COLUMNS} defaultSort={{ key: 'margin_factor', dir: 'desc' }} />
-          <h3 className="kpi-bi-section-title" style={{ marginTop: 24 }}>Lieferanten-Aufschläge</h3>
-          <DataTable data={supData ?? []} columns={SUP_COLUMNS} defaultSort={{ key: 'markup_pct', dir: 'desc' }} />
-        </div>
-        <div className="kpi-bi-side">
-          <BiBarChart
-            data={chartData}
-            xKey="name"
-            bars={[
-              { dataKey: 'Marge', color: '#7c3aed', label: 'Margenfaktor' },
-            ]}
-          />
-        </div>
-      </div>
+      {/* KPI Cards */}
+      <KpiCards cards={cards} columns={4} />
+
+      {/* Chart — full width */}
+      <BiBarChart
+        data={chartData}
+        xKey="name"
+        bars={[{ dataKey: 'Marge', color: '#7c3aed', label: 'Margenfaktor' }]}
+        height={300}
+      />
+
+      {/* Tables — full width, stacked */}
+      <h3 className="kpi-bi-section-title">Kategorie-Margen</h3>
+      <DataTable data={catData ?? []} columns={CAT_COLUMNS} defaultSort={{ key: 'margin_factor', dir: 'desc' }} />
+
+      <h3 className="kpi-bi-section-title" style={{ marginTop: 8 }}>Lieferanten-Aufschläge</h3>
+      <DataTable data={supData ?? []} columns={SUP_COLUMNS} defaultSort={{ key: 'markup_pct', dir: 'desc' }} />
     </div>
   )
 }

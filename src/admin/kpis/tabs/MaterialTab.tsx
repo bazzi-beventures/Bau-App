@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useKpiData } from '../useKpiData'
-import type { KpiMaterialRow, ColumnDef, FilterGroup } from '../types'
+import type { KpiMaterialRow, ColumnDef } from '../types'
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
-import FilterPanel from '../components/FilterPanel'
+import MultiDropdown from '../components/MultiDropdown'
 
 const chf = (v: unknown) => typeof v === 'number' ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0 })}` : '—'
 const num = (v: unknown) => typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 1 }) : '—'
@@ -21,58 +21,56 @@ const COLUMNS: ColumnDef<KpiMaterialRow>[] = [
 
 export default function MaterialTab() {
   const { data, loading, error } = useKpiData<KpiMaterialRow>('vw_kpi_material')
-  const [selected, setSelected] = useState<Record<string, Set<string>>>({})
+  const [kategorieSel, setKategorieSel] = useState<Set<string> | null>(null) // null = all
+  const [lagerSel, setLagerSel] = useState<Set<string>>(new Set(['OK', 'Kritisch']))
 
-  const filterGroups = useMemo<FilterGroup[]>(() => {
+  const kategorieOptions = useMemo(() => {
     if (!data) return []
-    const cats: Record<string, number> = {}
-    data.forEach((r) => { const c = r.kategorie ?? '(leer)'; cats[c] = (cats[c] || 0) + 1 })
+    const counts = new Map<string, number>()
+    data.forEach((r) => {
+      const k = r.kategorie ?? '(leer)'
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    })
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => ({ value, count }))
+  }, [data])
+
+  const lagerOptions = useMemo(() => {
+    if (!data) return []
     const kritisch = data.filter((r) => r.lager_kritisch).length
-    const ok = data.length - kritisch
     return [
-      {
-        key: 'kategorie',
-        label: 'Kategorie',
-        options: Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([v, c]) => ({ value: v, count: c })),
-      },
-      {
-        key: 'lager_kritisch',
-        label: 'Lagerstatus',
-        options: [
-          { value: 'OK', count: ok },
-          { value: 'Kritisch', count: kritisch },
-        ],
-      },
+      { value: 'OK', count: data.length - kritisch },
+      { value: 'Kritisch', count: kritisch },
     ]
   }, [data])
 
-  const sel = useMemo(() => {
-    if (Object.keys(selected).length > 0) return selected
-    const init: Record<string, Set<string>> = {}
-    filterGroups.forEach((g) => { init[g.key] = new Set(g.options.map((o) => o.value)) })
-    return init
-  }, [filterGroups, selected])
+  const allKategorien = useMemo(() => new Set(kategorieOptions.map((o) => o.value)), [kategorieOptions])
+  const effectiveKategorieSel = kategorieSel ?? allKategorien
 
   const filtered = useMemo(() => {
     if (!data) return []
     return data.filter((r) => {
-      const catSel = sel['kategorie']
-      if (catSel && catSel.size > 0 && !catSel.has(r.kategorie ?? '(leer)')) return false
-      const lagSel = sel['lager_kritisch']
-      if (lagSel && lagSel.size > 0) {
-        const v = r.lager_kritisch ? 'Kritisch' : 'OK'
-        if (!lagSel.has(v)) return false
+      if (kategorieSel !== null && kategorieSel.size > 0) {
+        if (!kategorieSel.has(r.kategorie ?? '(leer)')) return false
       }
+      const lagerVal = r.lager_kritisch ? 'Kritisch' : 'OK'
+      if (lagerSel.size > 0 && !lagerSel.has(lagerVal)) return false
       return true
     })
-  }, [data, sel])
+  }, [data, kategorieSel, lagerSel])
 
   const chartData = useMemo(
-    () => filtered
-      .filter((r) => r.total_verbrauch > 0)
-      .sort((a, b) => b.total_verbrauch - a.total_verbrauch)
-      .slice(0, 15)
-      .map((r) => ({ name: r.artikelname.slice(0, 16), Verbrauch: r.total_verbrauch, Reichweite: r.reichweite_tage ?? 0 })),
+    () =>
+      filtered
+        .filter((r) => r.total_verbrauch > 0)
+        .sort((a, b) => b.total_verbrauch - a.total_verbrauch)
+        .slice(0, 15)
+        .map((r) => ({
+          name: r.artikelname.slice(0, 16),
+          Verbrauch: r.total_verbrauch,
+          Reichweite: r.reichweite_tage ?? 0,
+        })),
     [filtered],
   )
 
@@ -90,20 +88,19 @@ export default function MaterialTab() {
     ]
   }, [filtered])
 
-  function onToggle(groupKey: string, value: string) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const s = new Set(sel[groupKey] ?? [])
-      s.has(value) ? s.delete(value) : s.add(value)
-      next[groupKey] = s
+  function toggleKategorie(v: string) {
+    setKategorieSel((prev) => {
+      const base = prev ?? allKategorien
+      const next = new Set(base)
+      next.has(v) ? next.delete(v) : next.add(v)
       return next
     })
   }
-  function onToggleAll(groupKey: string, selectAll: boolean) {
-    setSelected((prev) => {
-      const next = { ...prev }
-      const g = filterGroups.find((g) => g.key === groupKey)
-      next[groupKey] = selectAll && g ? new Set(g.options.map((o) => o.value)) : new Set()
+
+  function toggleLager(v: string) {
+    setLagerSel((prev) => {
+      const next = new Set(prev)
+      next.has(v) ? next.delete(v) : next.add(v)
       return next
     })
   }
@@ -113,23 +110,43 @@ export default function MaterialTab() {
 
   return (
     <div className="kpi-bi-layout">
-      <KpiCards cards={cards} />
-      <div className="kpi-bi-content">
-        <div className="kpi-bi-main">
-          <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_verbrauch', dir: 'desc' }} />
-        </div>
-        <div className="kpi-bi-side">
-          <FilterPanel groups={filterGroups} selected={sel} onToggle={onToggle} onToggleAll={onToggleAll} />
-          <BiBarChart
-            data={chartData}
-            xKey="name"
-            bars={[
-              { dataKey: 'Verbrauch', color: '#3b82f6', label: 'Verbrauch (Stk)' },
-              { dataKey: 'Reichweite', color: '#22c55e', label: 'Reichweite (Tage)' },
-            ]}
+      {/* KPI Cards */}
+      <KpiCards cards={cards} columns={4} />
+
+      {/* Horizontal filter bar */}
+      <div className="kpi-filter-bar">
+        {kategorieOptions.length > 0 && (
+          <MultiDropdown
+            label="Kategorie"
+            options={kategorieOptions}
+            selected={effectiveKategorieSel}
+            onToggle={toggleKategorie}
+            onToggleAll={(all) => setKategorieSel(all ? null : new Set())}
           />
-        </div>
+        )}
+        <MultiDropdown
+          label="Lagerstatus"
+          options={lagerOptions}
+          selected={lagerSel}
+          onToggle={toggleLager}
+          onToggleAll={(all) => setLagerSel(all ? new Set(['OK', 'Kritisch']) : new Set())}
+        />
+        <span className="kpi-filter-count">{filtered.length} Artikel</span>
       </div>
+
+      {/* Chart — full width */}
+      <BiBarChart
+        data={chartData}
+        xKey="name"
+        bars={[
+          { dataKey: 'Verbrauch', color: '#3b82f6', label: 'Verbrauch (Stk)' },
+          { dataKey: 'Reichweite', color: '#22c55e', label: 'Reichweite (Tage)' },
+        ]}
+        height={300}
+      />
+
+      {/* Table — full width */}
+      <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_verbrauch', dir: 'desc' }} />
     </div>
   )
 }

@@ -3,6 +3,7 @@ interface CardDef {
   value: string
   color?: string
   sub?: string
+  subColor?: string
 }
 
 interface Props {
@@ -22,7 +23,7 @@ export default function KpiCards({ cards, columns }: Props) {
           <div className="kpi-bi-card-value" style={c.color ? { color: c.color } : undefined}>
             {c.value}
           </div>
-          {c.sub && <div className="kpi-bi-card-sub">{c.sub}</div>}
+          {c.sub && <div className="kpi-bi-card-sub" style={c.subColor ? { color: c.subColor } : undefined}>{c.sub}</div>}
         </div>
       ))}
     </div>
