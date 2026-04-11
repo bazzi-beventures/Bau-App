@@ -29,6 +29,7 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
       <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Datenschutzerklärung</div>
       <div className="auth-sub">Hallo {displayName.split(' ')[0]}, bitte lies und bestätige Folgendes:</div>
+      <div className="consent-version">Version 2 · April 2026</div>
 
       <div className="consent-box">
         <p><strong>Gespeicherte Daten:</strong></p>
