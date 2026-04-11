@@ -1,3 +1,4 @@
+// v2
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useKpiData } from '../useKpiData'
 import type { KpiProjektRow, ColumnDef } from '../types'
@@ -260,10 +261,7 @@ export default function ProjekteTab() {
         <span className="kpi-filter-count">{filtered.length} Projekte</span>
       </div>
 
-      {/* Full-width table */}
-      <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_kosten', dir: 'desc' }} />
-
-      {/* Chart — full width below table */}
+      {/* Chart — full width above table */}
       <BiBarChart
         data={chartData}
         xKey="name"
@@ -273,6 +271,9 @@ export default function ProjekteTab() {
         ]}
         height={300}
       />
+
+      {/* Full-width table */}
+      <DataTable data={filtered} columns={COLUMNS} defaultSort={{ key: 'total_kosten', dir: 'desc' }} />
     </div>
   )
 }
