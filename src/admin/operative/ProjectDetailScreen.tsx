@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
-import { Kontakt, Project, Termin } from './ProjectsScreen'
+import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin } from './ProjectsScreen'
 
 interface StaffMember {
   id: string
@@ -13,6 +13,8 @@ interface Props {
   onSaved: () => void
 }
 
+const STATUS_SEQUENCE: ProjectStatus[] = ['offen', 'bestellung_ausgeloest', 'demontage', 'abgeschlossen']
+
 export default function ProjectDetailScreen({ project, onClose, onSaved }: Props) {
   const isNew = !project
 
@@ -21,7 +23,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [customerEmail, setCustomerEmail] = useState(project?.customer_email ?? '')
   const [customerAddress, setCustomerAddress] = useState(project?.customer_address ?? '')
   const [auftraggeber, setAuftraggeber] = useState(project?.auftraggeber ?? '')
-  const [rechnungszahler, setRechnungszahler] = useState(project?.rechnungszahler ?? '')
   const [eigentuemer, setEigentuemer] = useState(project?.eigentuemer ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
   const [sachbearbeiterId, setSachbearbeiterId] = useState(project?.sachbearbeiter_id ?? '')
@@ -31,10 +32,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [saving, setSaving] = useState(false)
-  const [closing, setClosing] = useState(false)
+  const [settingStatus, setSettingStatus] = useState(false)
   const [error, setError] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+
+  const effectiveStatus: ProjectStatus = project?.status ?? (project?.is_closed ? 'abgeschlossen' : 'offen')
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff').then((data: unknown) => {
@@ -91,7 +94,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           customer_email: customerEmail || null,
           customer_address: customerAddress || null,
           auftraggeber: auftraggeber || null,
-          rechnungszahler: rechnungszahler || null,
           eigentuemer: eigentuemer || null,
           art_der_arbeit: artDerArbeit || null,
           sachbearbeiter_id: sachbearbeiterId || null,
@@ -108,17 +110,41 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  async function handleSetStatus(newStatus: ProjectStatus) {
+    if (!project) return
+    if (newStatus === 'abgeschlossen') {
+      setConfirmClose(true)
+      return
+    }
+    setSettingStatus(true)
+    try {
+      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      })
+      showToast(`Status: ${PROJECT_STATUS_LABELS[newStatus]}`)
+      setTimeout(onSaved, 1000)
+    } catch {
+      setError('Fehler beim Setzen des Status')
+    } finally {
+      setSettingStatus(false)
+    }
+  }
+
   async function handleClose() {
     if (!project) return
-    setClosing(true)
+    setSettingStatus(true)
     try {
-      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/close`, { method: 'POST' })
+      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'abgeschlossen' }),
+      })
       showToast('Projekt geschlossen')
       setTimeout(onSaved, 1000)
     } catch {
       setError('Fehler beim Schliessen')
     } finally {
-      setClosing(false)
+      setSettingStatus(false)
       setConfirmClose(false)
     }
   }
@@ -129,7 +155,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <div>
           <div className="admin-page-title">{isNew ? 'Neues Projekt' : project.name}</div>
           <div className="admin-page-subtitle">
-            {isNew ? 'Projekt anlegen' : project.is_closed ? 'Geschlossen' : 'Offen'}
+            {isNew ? 'Projekt anlegen' : (
+              <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`} style={{ fontSize: 12 }}>
+                {PROJECT_STATUS_LABELS[effectiveStatus]}
+              </span>
+            )}
           </div>
         </div>
         <button className="admin-btn admin-btn-secondary" onClick={onClose}>← Zurück</button>
@@ -166,10 +196,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <div className="admin-form-group">
                 <label className="admin-form-label">Auftraggeber</label>
                 <input className="admin-form-input" value={auftraggeber} onChange={e => setAuftraggeber(e.target.value)} />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Rechnungszahler</label>
-                <input className="admin-form-input" value={rechnungszahler} onChange={e => setRechnungszahler(e.target.value)} placeholder="Falls abweichend vom Auftraggeber" />
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Eigentümer</label>
@@ -272,14 +298,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-table-wrap" style={{ padding: 24 }}>
             <div className="admin-section-title">Zuständigkeiten</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {!isNew && project.created_by && (
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Erfasser</label>
-                  <div style={{ fontSize: 13, color: 'var(--text)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                    {project.created_by}
-                  </div>
-                </div>
-              )}
               <div className="admin-form-group">
                 <label className="admin-form-label">Sachbearbeiter</label>
                 <select className="admin-form-select" value={sachbearbeiterId} onChange={e => setSachbearbeiterId(e.target.value)}>
@@ -319,19 +337,36 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
         </form>
 
-        {!isNew && !project.is_closed && (
+        {!isNew && (
           <div className="admin-table-wrap" style={{ padding: 20 }}>
-            <div className="admin-section-title">Aktionen</div>
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 16px' }}>
-              Ein geschlossenes Projekt wird für Mitarbeiter ausgeblendet und kann nicht mehr bebucht werden.
+            <div className="admin-section-title">Status</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              {STATUS_SEQUENCE.map(s => {
+                const isCurrent = effectiveStatus === s
+                const isClosing = s === 'abgeschlossen'
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={isCurrent || settingStatus}
+                    className={`admin-btn ${isClosing ? 'admin-btn-danger' : 'admin-btn-secondary'}`}
+                    style={{
+                      width: '100%',
+                      justifyContent: 'center',
+                      fontWeight: isCurrent ? 700 : undefined,
+                      outline: isCurrent ? '2px solid var(--primary)' : undefined,
+                      outlineOffset: isCurrent ? '2px' : undefined,
+                    }}
+                    onClick={() => handleSetStatus(s)}
+                  >
+                    {isCurrent && '● '}{PROJECT_STATUS_LABELS[s]}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
+              Abgeschlossene Projekte werden für Mitarbeiter ausgeblendet.
             </p>
-            <button
-              className="admin-btn admin-btn-danger"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={() => setConfirmClose(true)}
-            >
-              Projekt schliessen
-            </button>
           </div>
         )}
       </div>
@@ -345,8 +380,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </div>
             <div className="admin-confirm-actions">
               <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmClose(false)}>Abbrechen</button>
-              <button className="admin-btn admin-btn-danger" onClick={handleClose} disabled={closing}>
-                {closing ? 'Schliessen…' : 'Ja, schliessen'}
+              <button className="admin-btn admin-btn-danger" onClick={handleClose} disabled={settingStatus}>
+                {settingStatus ? 'Schliessen…' : 'Ja, schliessen'}
               </button>
             </div>
           </div>
