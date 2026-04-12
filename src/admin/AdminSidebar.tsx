@@ -2,7 +2,7 @@ import { AdminScreen } from './useAdminNav'
 import { logout } from '../api/auth'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
-  IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconUpload, IconChart,
+  IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
   IconLogout, IconAddressBook,
 } from './AdminIcons'
 
@@ -93,7 +93,6 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
         <div className="admin-nav-group-label">System</div>
         <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
-        <NavItem label="Import / Upload" target="import" current={screen} onNav={onNav} icon={<IconUpload />} />
       </nav>
 
       <div className="admin-sidebar-footer">

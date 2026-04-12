@@ -183,6 +183,7 @@ export default function App() {
       <HomeScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
+        role={user.role}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
@@ -204,6 +205,7 @@ export default function App() {
       />
     )
   } else if (screen === 'rapport' && user) {
+    if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ChatScreen
         displayName={user.display_name}
@@ -242,6 +244,7 @@ export default function App() {
       />
     )
   } else if (screen === 'projekte' && user) {
+    if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ProjekteScreen
         logoUrl={logoUrl}

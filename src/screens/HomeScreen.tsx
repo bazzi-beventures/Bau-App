@@ -4,6 +4,7 @@ import { apiFetch, ApiError, isOfflineError } from '../api/client'
 interface Props {
   displayName: string
   logoUrl?: string
+  role?: string
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProjekte: () => void
@@ -36,8 +37,9 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
+  const isLight = role === 'user_light'
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
 
   useEffect(() => {
@@ -103,27 +105,29 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
 
       {/* Tiles */}
       <div className="tiles">
-        <div className="tile tile-blue" onClick={onNavRapport}>
-          <div className="tile-icon tile-icon-blue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-            </svg>
+        {!isLight && (
+          <div className="tile tile-blue" onClick={onNavRapport}>
+            <div className="tile-icon tile-icon-blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Rapporte</div>
+              <div className="tile-desc">Tagesrapport, Fotos &amp; Notizen</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
           </div>
-          <div>
-            <div className="tile-label">Rapporte</div>
-            <div className="tile-desc">Tagesrapport, Fotos &amp; Notizen</div>
-          </div>
-          <div className="tile-arrow">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 8h10M9 4l4 4-4 4"/>
-            </svg>
-          </div>
-        </div>
+        )}
 
-        <div className="tile tile-green" onClick={onNavArbeitszeit}>
+        <div className={`tile tile-green${isLight ? ' tile-full' : ''}`} onClick={onNavArbeitszeit}>
           <div className="tile-icon tile-icon-green">
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" strokeWidth="1.8">
               <circle cx="12" cy="12" r="10"/>
@@ -141,23 +145,25 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
           </div>
         </div>
 
-        <div className="tile tile-amber" style={{ gridColumn: 'span 2' }} onClick={onNavProjekte}>
-          <div className="tile-icon tile-icon-amber">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <path d="M9 22V12h6v10"/>
-            </svg>
+        {!isLight && (
+          <div className="tile tile-amber" style={{ gridColumn: 'span 2' }} onClick={onNavProjekte}>
+            <div className="tile-icon tile-icon-amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <path d="M9 22V12h6v10"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Projekte</div>
+              <div className="tile-desc">Auftraggeber, Termine &amp; Kontakte</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
           </div>
-          <div>
-            <div className="tile-label">Projekte</div>
-            <div className="tile-desc">Auftraggeber, Termine &amp; Kontakte</div>
-          </div>
-          <div className="tile-arrow">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 8h10M9 4l4 4-4 4"/>
-            </svg>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Status card */}
@@ -202,13 +208,15 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
           </svg>
           <span>Home</span>
         </div>
-        <div className="nav-item" onClick={onNavRapport}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span>Rapporte</span>
-        </div>
+        {!isLight && (
+          <div className="nav-item" onClick={onNavRapport}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>Rapporte</span>
+          </div>
+        )}
         <div className="nav-item" onClick={onNavArbeitszeit}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <circle cx="12" cy="12" r="10"/>
@@ -216,13 +224,15 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
           </svg>
           <span>Arbeitszeit</span>
         </div>
-        <div className="nav-item" onClick={onNavProjekte}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <path d="M9 22V12h6v10"/>
-          </svg>
-          <span>Projekte</span>
-        </div>
+        {!isLight && (
+          <div className="nav-item" onClick={onNavProjekte}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <path d="M9 22V12h6v10"/>
+            </svg>
+            <span>Projekte</span>
+          </div>
+        )}
         <div className="nav-item" onClick={onNavProfile}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>

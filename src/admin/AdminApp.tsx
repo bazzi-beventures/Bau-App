@@ -19,7 +19,6 @@ import PricingRulesScreen from './operative/PricingRulesScreen'
 import ProjectOverviewScreen from './operative/ProjectOverviewScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
-import ImportScreen from './system/ImportScreen'
 import KpiScreen from './kpis/KpiScreen'
 import './admin.css'
 import './mobile.css'
@@ -67,7 +66,6 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'materials': 'Material / Lager',
   'pricing-rules': 'Preisregeln',
   'users': 'Benutzerverwaltung',
-  'import': 'Import / Upload',
   'kpis': 'Kennzahlen',
 }
 
@@ -111,7 +109,6 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'materials':    return <MaterialsScreen />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
-      case 'import':       return <ImportScreen />
       case 'kpis':         return <KpiScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }

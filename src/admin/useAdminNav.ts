@@ -15,7 +15,6 @@ export type AdminScreen =
   | 'materials'
   | 'pricing-rules'
   | 'users'
-  | 'import'
   | 'kpis'
 
 export interface AdminNavState {
