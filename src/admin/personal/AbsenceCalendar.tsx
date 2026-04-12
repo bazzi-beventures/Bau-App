@@ -19,6 +19,61 @@ function getTypeColor(type: string): string {
   return TYPE_COLORS[type] ?? '#6b7280'
 }
 
+// ─── Zurich Public Holidays ───────────────────────────────────────────────────
+
+function getEaster(year: number): Date {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return new Date(year, month, day)
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function toDateStr(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function getZurichHolidays(year: number): Map<string, string> {
+  const easter = getEaster(year)
+  const holidays = new Map<string, string>()
+  const add = (d: Date, name: string) => holidays.set(toDateStr(d), name)
+
+  // Feste Feiertage Kanton Zürich
+  add(new Date(year, 0, 1),  'Neujahr')
+  add(new Date(year, 0, 2),  'Berchtoldstag')
+  add(new Date(year, 4, 1),  'Tag der Arbeit')
+  add(new Date(year, 7, 1),  'Nationalfeiertag')
+  add(new Date(year, 11, 25), 'Weihnachten')
+  add(new Date(year, 11, 26), 'Stephanstag')
+
+  // Bewegliche Feiertage (Easter-basiert)
+  add(addDays(easter, -2),  'Karfreitag')
+  add(addDays(easter, 1),   'Ostermontag')
+  add(addDays(easter, 39),  'Auffahrt')
+  add(addDays(easter, 50),  'Pfingstmontag')
+
+  return holidays
+}
+
+// ─── Calendar Helpers ─────────────────────────────────────────────────────────
+
 function getWeekDays(date: Date): Date[] {
   const d = new Date(date)
   const day = d.getDay()
@@ -44,8 +99,7 @@ function getMonthDays(date: Date): (Date | null)[] {
 }
 
 function absenceCoversDay(absence: Absence, day: Date): boolean {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const dayStr = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
+  const dayStr = toDateStr(day)
   return dayStr >= absence.start_date.slice(0, 10) && dayStr <= absence.end_date.slice(0, 10)
 }
 
@@ -130,13 +184,24 @@ function CalendarLegend() {
         <span className="absence-cal-legend-dot" style={{ background: '#3b82f6', opacity: 0.5 }} />
         Pendent
       </div>
+      <div className="absence-cal-legend-item">
+        <span className="absence-cal-legend-dot absence-cal-legend-dot--holiday" />
+        Feiertag ZH
+      </div>
     </div>
   )
 }
 
 // ─── Month View ───────────────────────────────────────────────────────────────
 
-function MonthView({ absences, currentDate, onSelect }: { absences: Absence[]; currentDate: Date; onSelect: (a: Absence) => void }) {
+function MonthView({
+  absences, currentDate, onSelect, holidays,
+}: {
+  absences: Absence[]
+  currentDate: Date
+  onSelect: (a: Absence) => void
+  holidays: Map<string, string>
+}) {
   const days = getMonthDays(currentDate)
   const DOW = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -155,13 +220,21 @@ function MonthView({ absences, currentDate, onSelect }: { absences: Absence[]; c
           }
 
           const today = isToday(day)
+          const holidayName = holidays.get(toDateStr(day))
           const dayAbsences = absences.filter(a => absenceCoversDay(a, day))
           const visible = dayAbsences.slice(0, 3)
           const overflow = dayAbsences.length - 3
 
           return (
-            <div key={i} className={`absence-cal-day-cell${today ? ' today' : ''}`}>
-              <span className="absence-cal-day-num">{day.getDate()}</span>
+            <div key={i} className={`absence-cal-day-cell${today ? ' today' : ''}${holidayName ? ' holiday' : ''}`}>
+              <div className="absence-cal-day-top">
+                <span className="absence-cal-day-num">{day.getDate()}</span>
+                {holidayName && (
+                  <span className="absence-cal-holiday-label" title={holidayName}>
+                    {holidayName}
+                  </span>
+                )}
+              </div>
               {visible.map((a, j) => (
                 <div
                   key={j}
@@ -190,7 +263,14 @@ function MonthView({ absences, currentDate, onSelect }: { absences: Absence[]; c
 
 // ─── Week View ────────────────────────────────────────────────────────────────
 
-function WeekView({ absences, currentDate, onSelect }: { absences: Absence[]; currentDate: Date; onSelect: (a: Absence) => void }) {
+function WeekView({
+  absences, currentDate, onSelect, holidays,
+}: {
+  absences: Absence[]
+  currentDate: Date
+  onSelect: (a: Absence) => void
+  holidays: Map<string, string>
+}) {
   const days = getWeekDays(currentDate)
 
   const staffThisWeek = Array.from(
@@ -201,7 +281,9 @@ function WeekView({ absences, currentDate, onSelect }: { absences: Absence[]; cu
     )
   ).sort()
 
-  if (staffThisWeek.length === 0) {
+  const hasHolidayThisWeek = days.some(d => holidays.has(toDateStr(d)))
+
+  if (staffThisWeek.length === 0 && !hasHolidayThisWeek) {
     return <div className="absence-cal-empty">Keine Absenzen diese Woche.</div>
   }
 
@@ -211,14 +293,20 @@ function WeekView({ absences, currentDate, onSelect }: { absences: Absence[]; cu
         <thead>
           <tr>
             <th style={{ width: 150 }}>Mitarbeiter</th>
-            {days.map((d, i) => (
-              <th
-                key={i}
-                style={isToday(d) ? { color: 'var(--accent-blue, #3b82f6)' } : undefined}
-              >
-                {d.toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'numeric' })}
-              </th>
-            ))}
+            {days.map((d, i) => {
+              const holidayName = holidays.get(toDateStr(d))
+              return (
+                <th
+                  key={i}
+                  style={isToday(d) ? { color: 'var(--accent-blue, #3b82f6)' } : undefined}
+                >
+                  <div>{d.toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'numeric' })}</div>
+                  {holidayName && (
+                    <div className="absence-cal-week-holiday">{holidayName}</div>
+                  )}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
@@ -267,6 +355,14 @@ export default function AbsenceCalendar({ absences, loading }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selected, setSelected] = useState<Absence | null>(null)
+
+  // Pre-compute holidays for visible years (current ± 1 for safety)
+  const year = currentDate.getFullYear()
+  const holidays = new Map<string, string>([
+    ...getZurichHolidays(year - 1),
+    ...getZurichHolidays(year),
+    ...getZurichHolidays(year + 1),
+  ])
 
   function handlePrev() {
     if (viewMode === 'month') {
@@ -338,9 +434,9 @@ export default function AbsenceCalendar({ absences, loading }: Props) {
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
       ) : viewMode === 'month' ? (
-        <MonthView absences={absences} currentDate={currentDate} onSelect={setSelected} />
+        <MonthView absences={absences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
       ) : (
-        <WeekView absences={absences} currentDate={currentDate} onSelect={setSelected} />
+        <WeekView absences={absences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
       )}
 
       {/* Legend */}

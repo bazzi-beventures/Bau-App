@@ -995,6 +995,42 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
+.absence-cal-legend-dot--holiday {
+  background: transparent;
+  border: 2px solid #f59e0b;
+  width: 10px;
+  height: 10px;
+}
+
+/* Holiday markers in calendar */
+.absence-cal-day-cell.holiday {
+  background: #0e2f48;
+}
+.absence-cal-day-top {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+.absence-cal-holiday-label {
+  font-size: 9.5px;
+  color: #f59e0b;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.2;
+}
+.absence-cal-week-holiday {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 600;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Detail Modal */
 .absence-modal-backdrop {
