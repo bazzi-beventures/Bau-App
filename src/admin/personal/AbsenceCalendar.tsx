@@ -19,7 +19,7 @@ function getTypeColor(type: string): string {
   return TYPE_COLORS[type] ?? '#6b7280'
 }
 
-// ─── Zurich Public Holidays ───────────────────────────────────────────────────
+// ─── Swiss Public Holidays (canton-aware) ─────────────────────────────────────
 
 function getEaster(year: number): Date {
   const a = year % 19
@@ -50,24 +50,43 @@ function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-function getZurichHolidays(year: number): Map<string, string> {
+// Katholische Kantone (haben Fronleichnam, Maria Himmelfahrt, Allerheiligen, Mariä Empfängnis)
+const CATHOLIC_CANTONS = new Set(['AG', 'AI', 'FR', 'JU', 'LU', 'NW', 'OW', 'SG', 'SO', 'SZ', 'TI', 'UR', 'VS', 'ZG'])
+// Kantone mit Berchtoldstag (2.1)
+const WITH_BERCHTOLDSTAG = new Set(['ZH', 'BE', 'AG', 'LU', 'SG', 'SH', 'TG', 'ZG', 'AR', 'AI', 'GL', 'GR', 'SZ', 'UR', 'NW', 'OW'])
+// Kantone mit Tag der Arbeit (1.5)
+const WITH_TAG_DER_ARBEIT = new Set(['ZH', 'BL', 'BS', 'JU', 'NE', 'SH', 'TG'])
+// Kantone mit Stephanstag (26.12)
+const WITH_STEPHANSTAG = new Set(['ZH', 'BE', 'AG', 'LU', 'SG', 'SH', 'TG', 'ZG', 'AR', 'AI', 'GL', 'GR', 'SZ', 'UR', 'NW', 'OW', 'BL', 'BS', 'SO'])
+
+function getSwissHolidays(year: number, canton: string): Map<string, string> {
+  const c = canton.toUpperCase()
   const easter = getEaster(year)
   const holidays = new Map<string, string>()
   const add = (d: Date, name: string) => holidays.set(toDateStr(d), name)
 
-  // Feste Feiertage Kanton Zürich
-  add(new Date(year, 0, 1),  'Neujahr')
-  add(new Date(year, 0, 2),  'Berchtoldstag')
-  add(new Date(year, 4, 1),  'Tag der Arbeit')
-  add(new Date(year, 7, 1),  'Nationalfeiertag')
+  // Alle Kantone
+  add(new Date(year, 0, 1),   'Neujahr')
+  add(new Date(year, 7, 1),   'Nationalfeiertag')
   add(new Date(year, 11, 25), 'Weihnachten')
-  add(new Date(year, 11, 26), 'Stephanstag')
 
-  // Bewegliche Feiertage (Easter-basiert)
+  // Bewegliche (fast alle Kantone)
   add(addDays(easter, -2),  'Karfreitag')
   add(addDays(easter, 1),   'Ostermontag')
   add(addDays(easter, 39),  'Auffahrt')
   add(addDays(easter, 50),  'Pfingstmontag')
+
+  if (WITH_BERCHTOLDSTAG.has(c)) add(new Date(year, 0, 2),   'Berchtoldstag')
+  if (WITH_TAG_DER_ARBEIT.has(c)) add(new Date(year, 4, 1),  'Tag der Arbeit')
+  if (WITH_STEPHANSTAG.has(c))    add(new Date(year, 11, 26), 'Stephanstag')
+
+  // Katholische Feiertage
+  if (CATHOLIC_CANTONS.has(c)) {
+    add(addDays(easter, 60),     'Fronleichnam')
+    add(new Date(year, 7, 15),   'Maria Himmelfahrt')
+    add(new Date(year, 10, 1),   'Allerheiligen')
+    add(new Date(year, 11, 8),   'Mariä Empfängnis')
+  }
 
   return holidays
 }
@@ -171,7 +190,7 @@ function AbsenceDetailModal({ absence, onClose }: { absence: Absence; onClose: (
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
-function CalendarLegend() {
+function CalendarLegend({ canton }: { canton: string }) {
   return (
     <div className="absence-cal-legend">
       {Object.entries(TYPE_LABELS).map(([type, label]) => (
@@ -186,7 +205,7 @@ function CalendarLegend() {
       </div>
       <div className="absence-cal-legend-item">
         <span className="absence-cal-legend-dot absence-cal-legend-dot--holiday" />
-        Feiertag ZH
+        Feiertag {canton.toUpperCase()}
       </div>
     </div>
   )
@@ -349,9 +368,10 @@ function WeekView({
 interface Props {
   absences: Absence[]
   loading: boolean
+  canton?: string
 }
 
-export default function AbsenceCalendar({ absences, loading }: Props) {
+export default function AbsenceCalendar({ absences, loading, canton = 'ZH' }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selected, setSelected] = useState<Absence | null>(null)
@@ -359,9 +379,9 @@ export default function AbsenceCalendar({ absences, loading }: Props) {
   // Pre-compute holidays for visible years (current ± 1 for safety)
   const year = currentDate.getFullYear()
   const holidays = new Map<string, string>([
-    ...getZurichHolidays(year - 1),
-    ...getZurichHolidays(year),
-    ...getZurichHolidays(year + 1),
+    ...getSwissHolidays(year - 1, canton),
+    ...getSwissHolidays(year, canton),
+    ...getSwissHolidays(year + 1, canton),
   ])
 
   function handlePrev() {
@@ -440,7 +460,7 @@ export default function AbsenceCalendar({ absences, loading }: Props) {
       )}
 
       {/* Legend */}
-      {!loading && <CalendarLegend />}
+      {!loading && <CalendarLegend canton={canton} />}
 
       {/* Detail Modal */}
       {selected && (

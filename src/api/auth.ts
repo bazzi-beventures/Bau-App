@@ -44,6 +44,7 @@ export interface TenantInfo {
   brand_color: string
   brand_color_dark: string
   logo_url: string
+  canton: string
 }
 
 export async function getTenantInfo(tenantSlug: string): Promise<TenantInfo> {

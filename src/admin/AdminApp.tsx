@@ -47,6 +47,7 @@ interface Props {
   user: UserInfo
   logoUrl: string
   tenantName: string
+  canton: string
   onLoggedOut: () => void
   onSwitchToUser: () => void
 }
@@ -70,7 +71,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'kpis': 'Kennzahlen',
 }
 
-export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwitchToUser }: Props) {
+export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
   const { screen, nav } = useAdminNav()
   const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
@@ -93,7 +94,7 @@ export default function AdminApp({ user, logoUrl, tenantName, onLoggedOut, onSwi
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
       case 'staff':        return <StaffScreen />
-      case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} />
+      case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
       case 'projects':     return <ProjectsScreen />

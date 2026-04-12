@@ -20,7 +20,7 @@ function dayCount(start: string, end: string) {
 
 type TabType = 'requested' | 'approved' | 'rejected' | 'calendar'
 
-export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
+export default function AbsencesScreen({ onBadgeChange, canton = 'ZH' }: { onBadgeChange?: () => void; canton?: string }) {
   const [absences, setAbsences] = useState<Absence[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabType>('requested')
@@ -122,7 +122,7 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
       </div>
 
       {tab === 'calendar' ? (
-        <AbsenceCalendar absences={calendarAbsences} loading={calendarLoading} />
+        <AbsenceCalendar absences={calendarAbsences} loading={calendarLoading} canton={canton} />
       ) : (
         <div className="admin-table-wrap">
           {loading ? (

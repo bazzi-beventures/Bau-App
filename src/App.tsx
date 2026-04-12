@@ -74,6 +74,7 @@ export default function App() {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
   const [tenantName, setTenantName] = useState('')
+  const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
 
   const hasStoredIdentity = Boolean(
@@ -88,6 +89,7 @@ export default function App() {
       applyTenantBranding(info)
       setLogoUrl(info.logo_url)
       setTenantName(info.name)
+      setCanton(info.canton || 'ZH')
     } catch (err) {
       console.warn('[Branding] Fehler beim Laden:', err)
     }
@@ -259,6 +261,7 @@ export default function App() {
         user={user}
         logoUrl={logoUrl}
         tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
+        canton={canton}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onSwitchToUser={() => setScreen('home')}
       />
