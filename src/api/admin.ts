@@ -70,6 +70,7 @@ export interface StaffMember {
   authorized_user_id: string | null
   email: string | null
   role: string | null
+  username: string | null
   is_active: boolean
 }
 

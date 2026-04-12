@@ -109,6 +109,12 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>E-Mail</div>
               <div style={{ fontSize: 13.5 }}>{member.email}</div>
+              {member.username && (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Benutzername</div>
+                  <div style={{ fontSize: 13.5, fontFamily: 'monospace' }}>{member.username}</div>
+                </>
+              )}
               <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Rolle</div>
               <div>
                 <span className={`admin-badge ${member.role === 'admin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>
