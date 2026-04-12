@@ -241,7 +241,7 @@ function MonthView({
           const today = isToday(day)
           const holidayName = holidays.get(toDateStr(day))
           const dayAbsences = absences.filter(a => absenceCoversDay(a, day))
-          const useDots = dayAbsences.length > 3
+          const useDots = window.innerWidth < 640 || dayAbsences.length > 3
 
           return (
             <div key={i} className={`absence-cal-day-cell${today ? ' today' : ''}${holidayName ? ' holiday' : ''}`}>

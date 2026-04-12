@@ -307,4 +307,45 @@
   .admin-table-wrap {
     overflow-x: auto;
   }
+
+  /* ─── Absence Calendar mobile fixes ─────────────────────── */
+
+  .absence-cal-toolbar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .absence-cal-day-cell {
+    min-height: 60px;
+    padding: 4px 3px;
+    gap: 2px;
+  }
+
+  .absence-cal-day-num {
+    font-size: 11px;
+  }
+
+  .absence-cal-holiday-label {
+    font-size: 8px;
+  }
+
+  .absence-cal-dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .absence-cal-dots {
+    gap: 2px;
+  }
+
+  .absence-cal-legend {
+    gap: 10px;
+    padding: 10px 12px;
+    margin-top: 10px;
+  }
+
+  .absence-cal-legend-item {
+    font-size: 11.5px;
+    gap: 5px;
+  }
 }
