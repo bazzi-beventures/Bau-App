@@ -439,16 +439,16 @@
   white-space: nowrap;
 }
 
-.admin-badge-pending  { background: rgba(251,191,36,0.15); color: #fbbf24; }
-.admin-badge-approved { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.admin-badge-rejected { background: rgba(239,68,68,0.15);  color: #ef4444; }
-.admin-badge-open     { background: rgba(59,130,246,0.15); color: #3b82f6; }
-.admin-badge-sent     { background: rgba(168,85,247,0.15); color: #a855f7; }
-.admin-badge-paid     { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.admin-badge-draft    { background: rgba(107,114,128,0.2); color: #9ca3af; }
-.admin-badge-closed   { background: rgba(107,114,128,0.2); color: #9ca3af; }
-.admin-badge-active   { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.admin-badge-admin    { background: var(--accent-blue-dim, rgba(59,130,246,0.15)); color: var(--accent-blue, #3b82f6); }
+.admin-badge-pending  { background: rgba(251,191,36,0.2);  color: #fde68a; }
+.admin-badge-approved { background: rgba(34,197,94,0.2);   color: #6ee7b7; }
+.admin-badge-rejected { background: rgba(239,68,68,0.2);   color: #fca5a5; }
+.admin-badge-open     { background: rgba(59,130,246,0.2);  color: #93c5fd; }
+.admin-badge-sent     { background: rgba(168,85,247,0.2);  color: #d8b4fe; }
+.admin-badge-paid     { background: rgba(34,197,94,0.2);   color: #6ee7b7; }
+.admin-badge-draft    { background: rgba(107,114,128,0.25); color: #d1d5db; }
+.admin-badge-closed   { background: rgba(107,114,128,0.25); color: #d1d5db; }
+.admin-badge-active   { background: rgba(34,197,94,0.2);   color: #6ee7b7; }
+.admin-badge-admin    { background: rgba(59,130,246,0.2);  color: #93c5fd; }
 
 /* ─── Modal / Slide-in Panel ──────────────────────────────── */
 .admin-modal-overlay {
