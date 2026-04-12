@@ -413,7 +413,7 @@ input, textarea { font-family: var(--font); color: var(--text); }
 
 /* ── KORREKTUR FORMULAR ─────────────────────────── */
 .correction-form {
-  margin: 0 16px 4px;
+  margin: 0 0 4px;
   background: var(--surface);
   border: 1px solid var(--accent-amber-dim);
   border-radius: var(--radius-sm);
