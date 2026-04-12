@@ -91,7 +91,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const isManagement = user.role === 'management' || user.role === 'superadmin'
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'kpis') && !isManagement) {
+    if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {

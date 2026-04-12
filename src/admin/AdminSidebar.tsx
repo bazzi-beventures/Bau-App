@@ -91,8 +91,12 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           </>
         )}
 
-        <div className="admin-nav-group-label">System</div>
-        <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
+        {isManagement && (
+          <>
+            <div className="admin-nav-group-label">System</div>
+            <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
+          </>
+        )}
       </nav>
 
       <div className="admin-sidebar-footer">
