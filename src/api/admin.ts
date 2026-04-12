@@ -98,10 +98,10 @@ export async function deleteStaff(staffId: string): Promise<void> {
 
 // ─── Password Auth ─────────────────────────────────────────
 
-export async function loginWithPassword(email: string, password: string): Promise<{ tenant_slug: string }> {
+export async function loginWithPassword(username: string, password: string): Promise<{ tenant_slug: string }> {
   const result = await apiFetch('/pwa/auth/login-password', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   }) as { tenant_slug: string; token?: string }
   if (result.token) {
     const { saveToken } = await import('./client')

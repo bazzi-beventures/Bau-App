@@ -35,7 +35,7 @@ interface Props {
 export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -65,16 +65,16 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
 
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!email || !password) return
+    if (!username || !password) return
     setError('')
     setLoading(true)
     try {
-      const { tenant_slug } = await loginWithPassword(email, password)
+      const { tenant_slug } = await loginWithPassword(username, password)
       localStorage.setItem('tenantSlug', tenant_slug)
       onLoggedIn()
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 401) setError('E-Mail oder Passwort falsch.')
+        if (err.status === 401) setError('Benutzername oder Passwort falsch.')
         else if (err.status === 429) setError('Zu viele Versuche. Bitte warte 15 Minuten.')
         else setError(`Fehler: ${err.message}`)
       } else {
@@ -101,13 +101,13 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
 
       <form onSubmit={handlePasswordLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail</label>
+          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Benutzername</label>
           <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="admin@firma.ch"
-            autoComplete="email"
+            type="text"
+            value={username}
+            onChange={e => setUsername(e.target.value.toLowerCase())}
+            placeholder="ghluba"
+            autoComplete="username"
             required
             style={{
               background: 'var(--surface, #1a1f2e)',
@@ -159,7 +159,7 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
             </button>
           </div>
         </div>
-        <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password}>
+        <button type="submit" className="btn-fingerprint" disabled={loading || !username || !password}>
           {loading ? <><Spinner />Anmelden…</> : 'Anmelden'}
         </button>
       </form>
