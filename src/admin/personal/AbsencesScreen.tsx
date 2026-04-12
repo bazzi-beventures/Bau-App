@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getAdminAbsences, approveAbsence, rejectAbsence, getAbsenceAnalytics, Absence, AbsenceAnalytics } from '../../api/admin'
-import KpiCards from '../kpis/components/KpiCards'
-import BiBarChart from '../kpis/components/BiBarChart'
-import HorizontalBarChart from '../kpis/components/HorizontalBarChart'
+import { getAdminAbsences, approveAbsence, rejectAbsence, Absence } from '../../api/admin'
+import AbsenceCalendar from './AbsenceCalendar'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
@@ -20,7 +18,7 @@ function dayCount(start: string, end: string) {
   return d > 1 ? `${d} Tage` : '1 Tag'
 }
 
-type TabType = 'requested' | 'approved' | 'rejected' | 'analytics'
+type TabType = 'requested' | 'approved' | 'rejected' | 'calendar'
 
 export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [absences, setAbsences] = useState<Absence[]>([])
@@ -28,12 +26,13 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [tab, setTab] = useState<TabType>('requested')
   const [acting, setActing] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-  const [analytics, setAnalytics] = useState<AbsenceAnalytics | null>(null)
-  const [analyticsYear, setAnalyticsYear] = useState(new Date().getFullYear())
-  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
+  const [calendarAbsences, setCalendarAbsences] = useState<Absence[]>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarLoaded, setCalendarLoaded] = useState(false)
 
   async function load() {
-    if (tab === 'analytics') return
+    if (tab === 'calendar') return
     setLoading(true)
     try {
       setAbsences(await getAdminAbsences(tab))
@@ -42,22 +41,21 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
     }
   }
 
-  async function loadAnalytics(year: number) {
-    setAnalyticsLoading(true)
-    try {
-      setAnalytics(await getAbsenceAnalytics(year))
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (tab === 'analytics') {
-      loadAnalytics(analyticsYear)
-    } else {
-      load()
+    if (tab === 'calendar') {
+      if (!calendarLoaded) {
+        setCalendarLoading(true)
+        getAdminAbsences()
+          .then(data => {
+            setCalendarAbsences(data.filter(a => a.status !== 'rejected'))
+            setCalendarLoaded(true)
+          })
+          .finally(() => setCalendarLoading(false))
+      }
+      return
     }
-  }, [tab, analyticsYear])
+    load()
+  }, [tab])
 
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
@@ -96,7 +94,7 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
     requested: 'Pendent',
     approved: 'Genehmigt',
     rejected: 'Abgelehnt',
-    analytics: 'Analytik',
+    calendar: 'Kalender',
   }
 
   return (
@@ -105,14 +103,14 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
         <div>
           <div className="admin-page-title">Absenzen</div>
           <div className="admin-page-subtitle">
-            {tab === 'analytics' ? `Jahr ${analyticsYear}` : `${absences.length} Einträge`}
+            {tab === 'calendar' ? 'Kalenderansicht' : `${absences.length} Einträge`}
           </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {(['requested', 'approved', 'rejected', 'analytics'] as const).map(t => (
+        {(['requested', 'approved', 'rejected', 'calendar'] as const).map(t => (
           <button
             key={t}
             className={`admin-btn ${tab === t ? 'admin-btn-primary' : 'admin-btn-secondary'} admin-btn-sm`}
@@ -123,71 +121,8 @@ export default function AbsencesScreen({ onBadgeChange }: { onBadgeChange?: () =
         ))}
       </div>
 
-      {tab === 'analytics' ? (
-        <div>
-          {/* Jahr-Auswahl */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-            <span style={{ color: 'var(--muted)', fontSize: 13 }}>Jahr:</span>
-            {[new Date().getFullYear() - 1, new Date().getFullYear()].map(y => (
-              <button
-                key={y}
-                className={`admin-btn ${analyticsYear === y ? 'admin-btn-primary' : 'admin-btn-secondary'} admin-btn-sm`}
-                onClick={() => setAnalyticsYear(y)}
-              >
-                {y}
-              </button>
-            ))}
-          </div>
-
-          {analyticsLoading ? (
-            <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
-          ) : analytics ? (
-            <>
-              {/* KPI Totals */}
-              <KpiCards
-                columns={4}
-                cards={[
-                  { label: 'Urlaubstage', value: String(analytics.totals.vacation), color: '#3b82f6' },
-                  { label: 'Kranktage', value: String(analytics.totals.sick), color: '#ef4444' },
-                  { label: 'Feiertage', value: String(analytics.totals.public_holiday), color: '#8b5cf6' },
-                  { label: 'Sonstiges', value: String(analytics.totals.other), color: '#6b7280' },
-                ]}
-              />
-
-              {/* Absenzen pro Monat */}
-              <div style={{ marginTop: 24, marginBottom: 8, fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
-                Absenzen pro Monat
-              </div>
-              <BiBarChart
-                data={analytics.by_month}
-                xKey="month"
-                bars={[
-                  { dataKey: 'vacation', color: '#3b82f6', label: 'Urlaub' },
-                  { dataKey: 'sick', color: '#ef4444', label: 'Krankheit' },
-                  { dataKey: 'public_holiday', color: '#8b5cf6', label: 'Feiertag' },
-                  { dataKey: 'other', color: '#6b7280', label: 'Sonstiges' },
-                ]}
-              />
-
-              {/* Pro Mitarbeiter */}
-              {analytics.by_staff.length > 0 && (
-                <>
-                  <div style={{ marginTop: 24, marginBottom: 8, fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
-                    Tage pro Mitarbeiter
-                  </div>
-                  <HorizontalBarChart
-                    data={analytics.by_staff}
-                    yKey="name"
-                    dataKey="total"
-                    color="#3b82f6"
-                  />
-                </>
-              )}
-            </>
-          ) : (
-            <div style={{ color: 'var(--muted)', padding: 24 }}>Keine Daten verfügbar.</div>
-          )}
-        </div>
+      {tab === 'calendar' ? (
+        <AbsenceCalendar absences={calendarAbsences} loading={calendarLoading} />
       ) : (
         <div className="admin-table-wrap">
           {loading ? (
