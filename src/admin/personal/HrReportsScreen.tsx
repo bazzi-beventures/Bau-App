@@ -198,7 +198,7 @@ export default function HrReportsScreen() {
                   {allViolations.length} Verstoss{allViolations.length !== 1 ? 'e' : ''} im Zeitraum
                 </span>
               </div>
-              <div style={{ padding: '8px 16px', maxHeight: 200, overflowY: 'auto' }}>
+              <div className="thin-scroll" style={{ padding: '8px 16px', maxHeight: 200, overflowY: 'auto' }}>
                 {allViolations.map((v, i) => (
                   <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 13, display: 'flex', gap: 12 }}>
                     <span style={{ color: 'var(--muted)', minWidth: 90 }}>{fmtDate(v.date)}</span>

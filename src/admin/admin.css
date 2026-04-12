@@ -2,6 +2,25 @@
    Admin Shell — Desktop-optimiert, .admin-* Prefix (kein Konflikt mit Worker-UI)
    ───────────────────────────────────────────────────────────── */
 
+/* Thin custom scrollbar */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.3);
+}
+
 /* Layout */
 .admin-shell {
   display: grid;
@@ -938,22 +957,24 @@
   color: var(--accent-blue, #3b82f6);
 }
 
-.absence-cal-pill {
-  font-size: 11px;
-  padding: 2px 5px;
-  border-radius: 999px;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: default;
-  line-height: 1.4;
+.absence-cal-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding-top: 2px;
 }
 
-.absence-cal-pill-overflow {
-  font-size: 10.5px;
-  color: var(--muted, #6b7280);
-  padding-left: 2px;
+.absence-cal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+
+.absence-cal-dot:hover {
+  transform: scale(1.4);
 }
 
 .absence-cal-week-block {
