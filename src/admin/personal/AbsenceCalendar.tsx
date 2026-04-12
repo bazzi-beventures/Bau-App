@@ -8,14 +8,15 @@ const TYPE_LABELS: Record<string, string> = {
   other: 'Sonstiges',
 }
 
+const TYPE_COLORS: Record<string, string> = {
+  vacation: '#3b82f6',
+  sick: '#ef4444',
+  public_holiday: '#8b5cf6',
+  other: '#6b7280',
+}
+
 function getTypeColor(type: string): string {
-  const COLORS: Record<string, string> = {
-    vacation: '#3b82f6',
-    sick: '#ef4444',
-    public_holiday: '#8b5cf6',
-    other: '#6b7280',
-  }
-  return COLORS[type] ?? '#6b7280'
+  return TYPE_COLORS[type] ?? '#6b7280'
 }
 
 function getWeekDays(date: Date): Date[] {
@@ -57,22 +58,96 @@ function isToday(date: Date): boolean {
   )
 }
 
+function fmt(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function dayCount(start: string, end: string) {
+  const d = (new Date(end).getTime() - new Date(start).getTime()) / 86400000 + 1
+  return d > 1 ? `${d} Tage` : '1 Tag'
+}
+
+// ─── Detail Modal ─────────────────────────────────────────────────────────────
+
+function AbsenceDetailModal({ absence, onClose }: { absence: Absence; onClose: () => void }) {
+  const color = getTypeColor(absence.absence_type)
+  const statusLabel =
+    absence.status === 'approved' ? 'Genehmigt' :
+    absence.status === 'rejected' ? 'Abgelehnt' : 'Pendent'
+  const statusClass =
+    absence.status === 'approved' ? 'admin-badge-approved' :
+    absence.status === 'rejected' ? 'admin-badge-rejected' : 'admin-badge-pending'
+
+  return (
+    <div className="absence-modal-backdrop" onClick={onClose}>
+      <div className="absence-modal" onClick={e => e.stopPropagation()}>
+        <div className="absence-modal-header" style={{ borderLeft: `4px solid ${color}` }}>
+          <div>
+            <div className="absence-modal-name">{absence.staff_name}</div>
+            <div className="absence-modal-type" style={{ color }}>
+              {TYPE_LABELS[absence.absence_type] ?? absence.absence_type}
+            </div>
+          </div>
+          <button className="absence-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="absence-modal-body">
+          <div className="absence-modal-row">
+            <span className="absence-modal-label">Zeitraum</span>
+            <span>{fmt(absence.start_date)} – {fmt(absence.end_date)}</span>
+          </div>
+          <div className="absence-modal-row">
+            <span className="absence-modal-label">Dauer</span>
+            <span>{dayCount(absence.start_date, absence.end_date)}</span>
+          </div>
+          <div className="absence-modal-row">
+            <span className="absence-modal-label">Status</span>
+            <span className={`admin-badge ${statusClass}`}>{statusLabel}</span>
+          </div>
+          {absence.note && (
+            <div className="absence-modal-row">
+              <span className="absence-modal-label">Notiz</span>
+              <span>{absence.note}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+function CalendarLegend() {
+  return (
+    <div className="absence-cal-legend">
+      {Object.entries(TYPE_LABELS).map(([type, label]) => (
+        <div key={type} className="absence-cal-legend-item">
+          <span className="absence-cal-legend-dot" style={{ background: TYPE_COLORS[type] }} />
+          {label}
+        </div>
+      ))}
+      <div className="absence-cal-legend-item">
+        <span className="absence-cal-legend-dot" style={{ background: '#3b82f6', opacity: 0.5 }} />
+        Pendent
+      </div>
+    </div>
+  )
+}
+
 // ─── Month View ───────────────────────────────────────────────────────────────
 
-function MonthView({ absences, currentDate }: { absences: Absence[]; currentDate: Date }) {
+function MonthView({ absences, currentDate, onSelect }: { absences: Absence[]; currentDate: Date; onSelect: (a: Absence) => void }) {
   const days = getMonthDays(currentDate)
   const DOW = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
   return (
     <div>
-      {/* Wochentag-Köpfe */}
       <div className="absence-cal-month-grid" style={{ marginBottom: 1 }}>
         {DOW.map(d => (
           <div key={d} className="absence-cal-day-header">{d}</div>
         ))}
       </div>
 
-      {/* Tages-Zellen */}
       <div className="absence-cal-month-grid">
         {days.map((day, i) => {
           if (!day) {
@@ -91,11 +166,13 @@ function MonthView({ absences, currentDate }: { absences: Absence[]; currentDate
                 <div
                   key={j}
                   className="absence-cal-pill"
-                  title={`${a.staff_name} – ${TYPE_LABELS[a.absence_type] ?? a.absence_type}${a.status === 'requested' ? ' (pendent)' : ''}`}
+                  title={`${a.staff_name} – ${TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
                   style={{
                     background: getTypeColor(a.absence_type),
                     opacity: a.status === 'requested' ? 0.6 : 1,
+                    cursor: 'pointer',
                   }}
+                  onClick={() => onSelect(a)}
                 >
                   {a.staff_name}
                 </div>
@@ -113,7 +190,7 @@ function MonthView({ absences, currentDate }: { absences: Absence[]; currentDate
 
 // ─── Week View ────────────────────────────────────────────────────────────────
 
-function WeekView({ absences, currentDate }: { absences: Absence[]; currentDate: Date }) {
+function WeekView({ absences, currentDate, onSelect }: { absences: Absence[]; currentDate: Date; onSelect: (a: Absence) => void }) {
   const days = getWeekDays(currentDate)
 
   const staffThisWeek = Array.from(
@@ -161,7 +238,9 @@ function WeekView({ absences, currentDate }: { absences: Absence[]; currentDate:
                         style={{
                           background: getTypeColor(absence.absence_type),
                           opacity: absence.status === 'requested' ? 0.6 : 1,
+                          cursor: 'pointer',
                         }}
+                        onClick={() => onSelect(absence)}
                       >
                         {TYPE_LABELS[absence.absence_type] ?? absence.absence_type}
                       </div>
@@ -187,6 +266,7 @@ interface Props {
 export default function AbsenceCalendar({ absences, loading }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [selected, setSelected] = useState<Absence | null>(null)
 
   function handlePrev() {
     if (viewMode === 'month') {
@@ -258,9 +338,17 @@ export default function AbsenceCalendar({ absences, loading }: Props) {
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
       ) : viewMode === 'month' ? (
-        <MonthView absences={absences} currentDate={currentDate} />
+        <MonthView absences={absences} currentDate={currentDate} onSelect={setSelected} />
       ) : (
-        <WeekView absences={absences} currentDate={currentDate} />
+        <WeekView absences={absences} currentDate={currentDate} onSelect={setSelected} />
+      )}
+
+      {/* Legend */}
+      {!loading && <CalendarLegend />}
+
+      {/* Detail Modal */}
+      {selected && (
+        <AbsenceDetailModal absence={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   )
