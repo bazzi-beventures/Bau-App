@@ -32,7 +32,7 @@ interface Props {
 }
 
 export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -40,16 +40,16 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!email || !password) return
+    if (!username || !password) return
     setError('')
     setLoading(true)
     try {
-      const { tenant_slug } = await loginWithPassword(email, password)
+      const { tenant_slug } = await loginWithPassword(username, password)
       localStorage.setItem('tenantSlug', tenant_slug)
       onLoggedIn()
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 401) setError('E-Mail oder Passwort falsch.')
+        if (err.status === 401) setError('Benutzername oder Passwort falsch.')
         else if (err.status === 429) setError('Zu viele Versuche. Bitte warte 15 Minuten.')
         else setError(`Fehler: ${err.message}`)
       } else {
@@ -68,13 +68,13 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
 
       <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail</label>
+          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Benutzername</label>
           <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="name@firma.ch"
-            autoComplete="email"
+            type="text"
+            value={username}
+            onChange={e => setUsername(e.target.value.toLowerCase())}
+            placeholder="ghtluba"
+            autoComplete="username"
             required
             style={{
               background: 'var(--surface, #1a1f2e)',
@@ -129,7 +129,7 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
 
         {error && <p className="error-msg">{error}</p>}
 
-        <button type="submit" className="btn-fingerprint" disabled={loading || !email || !password}>
+        <button type="submit" className="btn-fingerprint" disabled={loading || !username || !password}>
           {loading ? <><Spinner />Anmelden…</> : 'Anmelden'}
         </button>
       </form>
