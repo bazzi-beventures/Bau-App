@@ -8,7 +8,7 @@ interface Props {
   onSaved: () => void
 }
 
-const ROLES = ['user', 'admin', 'superadmin']
+const ROLES = ['user', 'admin', 'management', 'superadmin']
 const PLATFORMS = ['pwa', 'all']
 
 export default function UserDetailScreen({ user, onClose, onSaved }: Props) {

@@ -43,6 +43,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const isManagement = role === 'management' || role === 'superadmin'
   const isMoreActive = !PRIMARY_TABS.includes(screen)
   const hasSecondaryBadge = (badges?.absences ?? 0) > 0
 
@@ -155,15 +156,19 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>
-                <button className={`admin-mobile-drawer-item${screen === 'pricing-rules' ? ' active' : ''}`} onClick={() => navigate('pricing-rules')}>
-                  <IconTag /><span>Lieferantenpreise</span>
-                </button>
+                {isManagement && (
+                  <button className={`admin-mobile-drawer-item${screen === 'pricing-rules' ? ' active' : ''}`} onClick={() => navigate('pricing-rules')}>
+                    <IconTag /><span>Lieferantenpreise</span>
+                  </button>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'project-overview' ? ' active' : ''}`} onClick={() => navigate('project-overview')}>
                   <IconChart /><span>Projektfortschritte</span>
                 </button>
-                <button className={`admin-mobile-drawer-item${screen === 'kpis' ? ' active' : ''}`} onClick={() => navigate('kpis')}>
-                  <IconChart /><span>Kennzahlen</span>
-                </button>
+                {isManagement && (
+                  <button className={`admin-mobile-drawer-item${screen === 'kpis' ? ' active' : ''}`} onClick={() => navigate('kpis')}>
+                    <IconChart /><span>Kennzahlen</span>
+                  </button>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'users' ? ' active' : ''}`} onClick={() => navigate('users')}>
                   <IconKey /><span>Benutzerverwaltung</span>
                 </button>

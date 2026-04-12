@@ -97,7 +97,7 @@ export default function UsersScreen() {
                   <td><strong>{u.display_name || '—'}</strong></td>
                   <td style={{ color: 'var(--muted)' }}>{u.email || '—'}</td>
                   <td>
-                    <span className={`admin-badge ${u.role === 'admin' || u.role === 'superadmin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>
+                    <span className={`admin-badge ${u.role === 'admin' || u.role === 'management' || u.role === 'superadmin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>
                       {u.role}
                     </span>
                   </td>

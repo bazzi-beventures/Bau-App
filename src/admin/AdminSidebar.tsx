@@ -48,6 +48,7 @@ function NavItem({ label, target, current, onNav, badge, icon }: NavItemProps) {
 
 export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const isManagement = role === 'management' || role === 'superadmin'
 
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
@@ -79,10 +80,16 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />
         <NavItem label="Material / Lager" target="materials" current={screen} onNav={onNav} icon={<IconBox />} />
-        <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
+        {isManagement && (
+          <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
+        )}
 
-        <div className="admin-nav-group-label">Analyse</div>
-        <NavItem label="Kennzahlen" target="kpis" current={screen} onNav={onNav} icon={<IconChart />} />
+        {isManagement && (
+          <>
+            <div className="admin-nav-group-label">Analyse</div>
+            <NavItem label="Kennzahlen" target="kpis" current={screen} onNav={onNav} icon={<IconChart />} />
+          </>
+        )}
 
         <div className="admin-nav-group-label">System</div>
         <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />

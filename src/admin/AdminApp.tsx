@@ -90,7 +90,12 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     invoices: dashboard?.open_invoices ?? 0,
   }
 
+  const isManagement = user.role === 'management' || user.role === 'superadmin'
+
   function renderScreen() {
+    if ((screen === 'pricing-rules' || screen === 'kpis') && !isManagement) {
+      return <ComingSoon title="Kein Zugriff" />
+    }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
       case 'staff':        return <StaffScreen />

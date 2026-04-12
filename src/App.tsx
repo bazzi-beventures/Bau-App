@@ -65,7 +65,7 @@ export function TenantLogo({ logoUrl }: { logoUrl: string }) {
 
 function nextScreenAfterLogin(u: UserInfo): Screen {
   if (u.consent_required) return 'consent'
-  if (u.role === 'admin' || u.role === 'superadmin') return 'admin'
+  if (u.role === 'admin' || u.role === 'management' || u.role === 'superadmin') return 'admin'
   return 'home'
 }
 
@@ -188,7 +188,7 @@ export default function App() {
         onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
-        onSwitchToAdmin={(user.role === 'admin' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
+        onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
     )
   } else if (screen === 'profile' && user) {
