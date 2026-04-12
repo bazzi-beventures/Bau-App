@@ -241,8 +241,6 @@ function MonthView({
           const today = isToday(day)
           const holidayName = holidays.get(toDateStr(day))
           const dayAbsences = absences.filter(a => absenceCoversDay(a, day))
-          const visible = dayAbsences.slice(0, 3)
-          const overflow = dayAbsences.length - 3
 
           return (
             <div key={i} className={`absence-cal-day-cell${today ? ' today' : ''}${holidayName ? ' holiday' : ''}`}>
@@ -254,23 +252,21 @@ function MonthView({
                   </span>
                 )}
               </div>
-              {visible.map((a, j) => (
-                <div
-                  key={j}
-                  className="absence-cal-pill"
-                  title={`${a.staff_name} – ${TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
-                  style={{
-                    background: getTypeColor(a.absence_type),
-                    opacity: a.status === 'requested' ? 0.6 : 1,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => onSelect(a)}
-                >
-                  {a.staff_name}
+              {dayAbsences.length > 0 && (
+                <div className="absence-cal-dots">
+                  {dayAbsences.map((a, j) => (
+                    <span
+                      key={j}
+                      className="absence-cal-dot"
+                      title={`${a.staff_name} – ${TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
+                      style={{
+                        background: getTypeColor(a.absence_type),
+                        opacity: a.status === 'requested' ? 0.5 : 1,
+                      }}
+                      onClick={() => onSelect(a)}
+                    />
+                  ))}
                 </div>
-              ))}
-              {overflow > 0 && (
-                <div className="absence-cal-pill-overflow">+{overflow} mehr</div>
               )}
             </div>
           )
