@@ -2,6 +2,21 @@ import { useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AuthUser } from './UsersScreen'
 
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  )
+}
+
 interface Props {
   user: AuthUser | null
   onClose: () => void
@@ -67,8 +82,9 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       await apiFetch(`/pwa/admin/users/${user.id}`, { method: 'DELETE' })
       showToast('Benutzer gelöscht')
       setTimeout(onSaved, 1000)
-    } catch {
-      setError('Fehler beim Löschen')
+    } catch (e: unknown) {
+      const status = (e as { status?: number })?.status
+      setError(status === 403 ? 'Keine Berechtigung – nur Management-Rolle kann Benutzer löschen' : 'Fehler beim Löschen')
       setActing(false)
     }
     setConfirmDelete(false)
@@ -193,20 +209,22 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                     type={showPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    placeholder="Neues Passwort"
+                    placeholder="••••••••"
                     minLength={8}
-                    style={{ width: '100%', paddingRight: 40 }}
+                    style={{ width: '100%', paddingRight: 44, boxSizing: 'border-box' }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(v => !v)}
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
                     style={{
-                      position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, padding: 0,
+                      position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--muted)', padding: 0, display: 'flex', alignItems: 'center',
                     }}
-                    title={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
                   >
-                    {showPassword ? '🙈' : '👁️'}
+                    <EyeIcon open={showPassword} />
                   </button>
                 </div>
                 <button
