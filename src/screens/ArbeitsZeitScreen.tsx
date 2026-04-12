@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
-import { ApiError } from '../api/client'
+import { ApiError, isOfflineError } from '../api/client'
 import { BerichtType } from './BerichtScreen'
 
 interface Props {
@@ -138,7 +138,7 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
       setCorrForm({ date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '' })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      setResult({ text: 'Fehler beim Einreichen. Bitte erneut versuchen.', isError: true })
+      setResult({ text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Einreichen. Bitte erneut versuchen.', isError: true })
     } finally {
       setCorrLoading(false)
     }
@@ -155,7 +155,7 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
         onLoggedOut()
         return
       }
-      setResult({ text: 'Fehler beim Senden. Bitte erneut versuchen.', isError: true })
+      setResult({ text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Senden. Bitte erneut versuchen.', isError: true })
     } finally {
       setLoadingIdx(null)
     }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch, ApiError } from '../api/client'
+import { apiFetch, ApiError, isOfflineError } from '../api/client'
 
 interface Props {
   displayName: string
@@ -43,11 +43,14 @@ export default function HomeScreen({ displayName, logoUrl, onNavRapport, onNavAr
   useEffect(() => {
     let cancelled = false
     async function fetchStatus() {
+      if (!navigator.onLine) return
       try {
         const data = await apiFetch('/pwa/status') as SessionStatus
         if (!cancelled) setSessionStatus(data)
       } catch (err) {
-        if (!cancelled && err instanceof ApiError && err.status === 401) onLoggedOut()
+        if (cancelled) return
+        if (isOfflineError(err)) return
+        if (err instanceof ApiError && err.status === 401) onLoggedOut()
       }
     }
     fetchStatus()

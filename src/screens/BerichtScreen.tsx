@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { fetchMonthlyData, fetchWeeklyData, MonthlyReportData, WeeklyReportData, ReportData } from '../api/chat'
-import { ApiError, apiBlobFetch } from '../api/client'
+import { ApiError, apiBlobFetch, isOfflineError } from '../api/client'
 
 export type BerichtType = 'monthly' | 'weekly-this' | 'weekly-last'
 
@@ -44,6 +44,8 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
         if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
         if (err instanceof ApiError && err.status === 404) {
           setError('Keine Daten für diesen Zeitraum gefunden.')
+        } else if (isOfflineError(err)) {
+          setError('Keine Internetverbindung')
         } else {
           setError('Fehler beim Laden. Bitte erneut versuchen.')
         }
@@ -73,7 +75,7 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
       setPdfMsg({ text: 'PDF wird heruntergeladen…', isError: false })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      setPdfMsg({ text: 'PDF konnte nicht erstellt werden.', isError: true })
+      setPdfMsg({ text: isOfflineError(err) ? 'Keine Internetverbindung' : 'PDF konnte nicht erstellt werden.', isError: true })
     } finally {
       setPdfLoading(false)
     }

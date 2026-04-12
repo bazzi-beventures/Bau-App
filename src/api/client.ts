@@ -21,68 +21,87 @@ export class ApiError extends Error {
   }
 }
 
+// status 0 = Netzwerkfehler (kein Internet, DNS, Timeout)
+export const isOfflineError = (e: unknown): boolean =>
+  e instanceof ApiError && e.status === 0
+
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(options.headers ?? {}),
-    },
-  })
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        ...(options.headers ?? {}),
+      },
+    })
 
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = body.detail ?? detail
-    } catch {}
-    throw new ApiError(res.status, detail)
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = await res.json()
+        detail = body.detail ?? detail
+      } catch {}
+      throw new ApiError(res.status, detail)
+    }
+
+    return res.json()
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    throw new ApiError(0, 'Keine Internetverbindung')
   }
-
-  return res.json()
 }
 
 export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename: string }> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    credentials: 'include',
-    headers: authHeaders(),
-  })
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      credentials: 'include',
+      headers: authHeaders(),
+    })
 
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = body.detail ?? detail
-    } catch {}
-    throw new ApiError(res.status, detail)
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = await res.json()
+        detail = body.detail ?? detail
+      } catch {}
+      throw new ApiError(res.status, detail)
+    }
+
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = disposition.match(/filename="?([^"]+)"?/)
+    const filename = match ? match[1] : 'download.pdf'
+
+    return { blob: await res.blob(), filename }
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    throw new ApiError(0, 'Keine Internetverbindung')
   }
-
-  const disposition = res.headers.get('Content-Disposition') ?? ''
-  const match = disposition.match(/filename="?([^"]+)"?/)
-  const filename = match ? match[1] : 'download.pdf'
-
-  return { blob: await res.blob(), filename }
 }
 
 export async function apiFormFetch(path: string, form: FormData): Promise<unknown> {
   // No Content-Type header — browser sets it with the multipart boundary
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: authHeaders(),
-    body: form,
-  })
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: authHeaders(),
+      body: form,
+    })
 
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = body.detail ?? detail
-    } catch {}
-    throw new ApiError(res.status, detail)
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = await res.json()
+        detail = body.detail ?? detail
+      } catch {}
+      throw new ApiError(res.status, detail)
+    }
+
+    return res.json()
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    throw new ApiError(0, 'Keine Internetverbindung')
   }
-
-  return res.json()
 }

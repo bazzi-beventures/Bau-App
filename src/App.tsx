@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
 import { ApiError } from './api/client'
 import PinScreen from './auth/PinScreen'
@@ -76,6 +76,18 @@ export default function App() {
   const [tenantName, setTenantName] = useState('')
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+
+  useEffect(() => {
+    const goOnline = () => setIsOffline(false)
+    const goOffline = () => setIsOffline(true)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
 
   const hasStoredIdentity = Boolean(
     localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
@@ -110,19 +122,36 @@ export default function App() {
     })
   }, [])
 
+  const offlineBanner = isOffline ? (
+    <div style={{
+      position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
+      width: '100%', maxWidth: 480, zIndex: 9999,
+      background: '#f59e0b', color: '#1a1a1a',
+      textAlign: 'center', padding: '6px 12px',
+      fontSize: '0.85rem', fontWeight: 600,
+    }}>
+      Kein Internet – Offline-Modus
+    </div>
+  ) : null
+
   if (screen === 'loading') {
     return (
-      <div className="loading-screen">
-        <div className="loading-logo">
-          <LogoSvg />
+      <>
+        {offlineBanner}
+        <div className="loading-screen">
+          <div className="loading-logo">
+            <LogoSvg />
+          </div>
+          <p className="loading-text">Laden…</p>
         </div>
-        <p className="loading-text">Laden…</p>
-      </div>
+      </>
     )
   }
 
+  let inner: React.ReactNode = null
+
   if (screen === 'pin') {
-    return (
+    inner = (
       <PinScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
@@ -130,10 +159,8 @@ export default function App() {
         }}
       />
     )
-  }
-
-  if (screen === 'login') {
-    return (
+  } else if (screen === 'login') {
+    inner = (
       <LoginScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
@@ -141,10 +168,8 @@ export default function App() {
         }}
       />
     )
-  }
-
-  if (screen === 'consent' && user) {
-    return (
+  } else if (screen === 'consent' && user) {
+    inner = (
       <ConsentScreen
         logoUrl={logoUrl}
         displayName={user.display_name}
@@ -153,10 +178,8 @@ export default function App() {
         }}
       />
     )
-  }
-
-  if (screen === 'home' && user) {
-    return (
+  } else if (screen === 'home' && user) {
+    inner = (
       <HomeScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
@@ -168,10 +191,8 @@ export default function App() {
         onSwitchToAdmin={(user.role === 'admin' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
     )
-  }
-
-  if (screen === 'profile' && user) {
-    return (
+  } else if (screen === 'profile' && user) {
+    inner = (
       <ProfileScreen
         displayName={user.display_name}
         email={user.email}
@@ -182,10 +203,8 @@ export default function App() {
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
-  }
-
-  if (screen === 'rapport' && user) {
-    return (
+  } else if (screen === 'rapport' && user) {
+    inner = (
       <ChatScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
@@ -197,10 +216,8 @@ export default function App() {
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
-  }
-
-  if (screen === 'arbeitszeit' && user) {
-    return (
+  } else if (screen === 'arbeitszeit' && user) {
+    inner = (
       <ArbeitsZeitScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
@@ -213,10 +230,8 @@ export default function App() {
         onNavAbsenzen={() => setScreen('absenzen')}
       />
     )
-  }
-
-  if (screen === 'absenzen' && user) {
-    return (
+  } else if (screen === 'absenzen' && user) {
+    inner = (
       <AbsenzenScreen
         logoUrl={logoUrl}
         onBack={() => setScreen('arbeitszeit')}
@@ -226,10 +241,8 @@ export default function App() {
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
-  }
-
-  if (screen === 'projekte' && user) {
-    return (
+  } else if (screen === 'projekte' && user) {
+    inner = (
       <ProjekteScreen
         logoUrl={logoUrl}
         onNavHome={() => setScreen('home')}
@@ -239,10 +252,8 @@ export default function App() {
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
-  }
-
-  if (screen === 'bericht' && user) {
-    return (
+  } else if (screen === 'bericht' && user) {
+    inner = (
       <BerichtScreen
         berichtType={berichtType}
         logoUrl={logoUrl}
@@ -253,10 +264,8 @@ export default function App() {
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
-  }
-
-  if (screen === 'admin' && user) {
-    return (
+  } else if (screen === 'admin' && user) {
+    inner = (
       <AdminApp
         user={user}
         logoUrl={logoUrl}
@@ -268,5 +277,10 @@ export default function App() {
     )
   }
 
-  return null
+  return (
+    <>
+      {offlineBanner}
+      {inner}
+    </>
+  )
 }

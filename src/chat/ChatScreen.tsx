@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
-import { ApiError } from '../api/client'
+import { ApiError, isOfflineError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
@@ -103,7 +103,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
         onLoggedOut()
         return
       }
-      addMessage({ role: 'bot', text: 'Fehler beim Senden. Bitte erneut versuchen.', timestamp: now() })
+      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Senden. Bitte erneut versuchen.', timestamp: now() })
     } finally {
       setLoading(false)
     }
@@ -118,7 +118,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
       handleActionState(res)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      addMessage({ role: 'bot', text: 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
+      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
     } finally {
       setLoading(false)
     }
@@ -155,7 +155,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
       handleActionState(res)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      addMessage({ role: 'bot', text: 'Fehler bei der Auswahl. Bitte erneut versuchen.', timestamp: now() })
+      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler bei der Auswahl. Bitte erneut versuchen.', timestamp: now() })
     } finally {
       setLoading(false)
     }
