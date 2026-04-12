@@ -957,6 +957,19 @@
   color: var(--accent-blue, #3b82f6);
 }
 
+.absence-cal-pill {
+  font-size: 11px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  line-height: 1.4;
+  margin-bottom: 1px;
+}
+
 .absence-cal-dots {
   display: flex;
   flex-wrap: wrap;
@@ -975,6 +988,31 @@
 
 .absence-cal-dot:hover {
   transform: scale(1.4);
+}
+
+/* Staff filter chips */
+.absence-cal-staff-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 0 12px;
+}
+
+.absence-cal-staff-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #3b82f6;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.absence-cal-staff-chip.hidden {
+  background: transparent;
+  color: var(--muted, #6b7280);
+  border-color: #1c3e60;
 }
 
 .absence-cal-week-block {

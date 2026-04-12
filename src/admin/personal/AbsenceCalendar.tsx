@@ -241,6 +241,7 @@ function MonthView({
           const today = isToday(day)
           const holidayName = holidays.get(toDateStr(day))
           const dayAbsences = absences.filter(a => absenceCoversDay(a, day))
+          const useDots = dayAbsences.length > 3
 
           return (
             <div key={i} className={`absence-cal-day-cell${today ? ' today' : ''}${holidayName ? ' holiday' : ''}`}>
@@ -252,7 +253,7 @@ function MonthView({
                   </span>
                 )}
               </div>
-              {dayAbsences.length > 0 && (
+              {useDots ? (
                 <div className="absence-cal-dots">
                   {dayAbsences.map((a, j) => (
                     <span
@@ -267,6 +268,22 @@ function MonthView({
                     />
                   ))}
                 </div>
+              ) : (
+                dayAbsences.map((a, j) => (
+                  <div
+                    key={j}
+                    className="absence-cal-pill"
+                    title={`${a.staff_name} – ${TYPE_LABELS[a.absence_type] ?? a.absence_type}`}
+                    style={{
+                      background: getTypeColor(a.absence_type),
+                      opacity: a.status === 'requested' ? 0.6 : 1,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => onSelect(a)}
+                  >
+                    {a.staff_name}
+                  </div>
+                ))
               )}
             </div>
           )
@@ -371,6 +388,21 @@ export default function AbsenceCalendar({ absences, loading, canton = 'ZH' }: Pr
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selected, setSelected] = useState<Absence | null>(null)
+  const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
+
+  const allStaff = Array.from(new Set(absences.map(a => a.staff_name))).sort()
+
+  function toggleStaff(name: string) {
+    setHiddenStaff(prev => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  }
+
+  const visibleAbsences = hiddenStaff.size === 0
+    ? absences
+    : absences.filter(a => !hiddenStaff.has(a.staff_name))
 
   // Pre-compute holidays for visible years (current ± 1 for safety)
   const year = currentDate.getFullYear()
@@ -446,13 +478,28 @@ export default function AbsenceCalendar({ absences, loading, canton = 'ZH' }: Pr
         </div>
       </div>
 
+      {/* Staff filter */}
+      {!loading && allStaff.length > 0 && (
+        <div className="absence-cal-staff-filter">
+          {allStaff.map(name => (
+            <button
+              key={name}
+              className={`absence-cal-staff-chip${hiddenStaff.has(name) ? ' hidden' : ''}`}
+              onClick={() => toggleStaff(name)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
       ) : viewMode === 'month' ? (
-        <MonthView absences={absences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
+        <MonthView absences={visibleAbsences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
       ) : (
-        <WeekView absences={absences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
+        <WeekView absences={visibleAbsences} currentDate={currentDate} onSelect={setSelected} holidays={holidays} />
       )}
 
       {/* Legend */}
