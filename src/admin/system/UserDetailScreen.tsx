@@ -38,7 +38,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const [settingPassword, setSettingPassword] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmAnonymize, setConfirmAnonymize] = useState(false)
   const [acting, setActing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -62,7 +61,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       } else {
         await apiFetch(`/pwa/admin/users/${user!.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ display_name: displayName || null, role, is_active: isActive }),
+          body: JSON.stringify({ email: email || null, display_name: displayName || null, role, is_active: isActive }),
         })
       }
       onSaved()
@@ -71,21 +70,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
     } finally {
       setSaving(false)
     }
-  }
-
-  async function handleDelete() {
-    if (!user) return
-    setActing(true)
-    try {
-      await apiFetch(`/pwa/admin/users/${user.id}`, { method: 'DELETE' })
-      showToast('Benutzer gelöscht')
-      setTimeout(onSaved, 1000)
-    } catch (e: unknown) {
-      const status = (e as { status?: number })?.status
-      setError(status === 403 ? 'Keine Berechtigung – nur Management-Rolle kann Benutzer löschen' : 'Fehler beim Löschen')
-      setActing(false)
-    }
-    setConfirmDelete(false)
   }
 
   async function handleSetPassword(e: React.FormEvent) {
@@ -150,9 +134,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="user@firma.ch"
-                  disabled={!isNew}
                 />
-                {!isNew && <div className="admin-form-hint">E-Mail kann nach Erstellung nicht geändert werden.</div>}
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Rolle</label>
@@ -242,16 +224,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                 <div className="admin-form-hint" style={{ textAlign: 'center' }}>
                   Personendaten entfernen, Verlauf bleibt erhalten.
                 </div>
-                <button
-                  className="admin-btn admin-btn-danger"
-                  style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  Benutzer löschen
-                </button>
-                <div className="admin-form-hint" style={{ textAlign: 'center' }}>
-                  Vollständige Löschung inkl. aller Daten.
-                </div>
               </div>
             </div>
           </div>
@@ -270,23 +242,6 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
               <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmAnonymize(false)}>Abbrechen</button>
               <button className="admin-btn admin-btn-danger" onClick={handleAnonymize} disabled={acting}>
                 {acting ? '…' : 'Anonymisieren'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmDelete && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Benutzer unwiderruflich löschen?</div>
-            <div className="admin-confirm-text">
-              Alle Personendaten, Sitzungen und Absenzen werden gelöscht. Berichte bleiben aus Buchführungsgründen erhalten.
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmDelete(false)}>Abbrechen</button>
-              <button className="admin-btn admin-btn-danger" onClick={handleDelete} disabled={acting}>
-                {acting ? '…' : 'Endgültig löschen'}
               </button>
             </div>
           </div>
