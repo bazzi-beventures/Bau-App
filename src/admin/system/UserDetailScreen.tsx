@@ -23,6 +23,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
 
   const [newPassword, setNewPassword] = useState('')
   const [settingPassword, setSettingPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmAnonymize, setConfirmAnonymize] = useState(false)
@@ -186,14 +187,28 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                 Setzt ein neues Login-Passwort für diesen Benutzer (min. 8 Zeichen).
               </p>
               <form onSubmit={handleSetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <input
-                  className="admin-form-input"
-                  type="password"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Neues Passwort"
-                  minLength={8}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="admin-form-input"
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Neues Passwort"
+                    minLength={8}
+                    style={{ width: '100%', paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    style={{
+                      position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, padding: 0,
+                    }}
+                    title={showPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
                 <button
                   type="submit"
                   className="admin-btn admin-btn-secondary"
