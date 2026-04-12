@@ -10,6 +10,7 @@ export interface AuthUser {
   is_active: boolean
   created_at: string
   consent_version: string | null
+  username: string | null
 }
 
 export default function UsersScreen() {

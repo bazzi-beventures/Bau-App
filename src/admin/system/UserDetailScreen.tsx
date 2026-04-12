@@ -136,6 +136,18 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                   placeholder="user@firma.ch"
                 />
               </div>
+              {!isNew && user.username && (
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Benutzername</label>
+                  <input
+                    className="admin-form-input"
+                    value={user.username}
+                    readOnly
+                    style={{ opacity: 0.6, cursor: 'default' }}
+                  />
+                  <div className="admin-form-hint">Wird für den PWA-Login verwendet. Automatisch vergeben.</div>
+                </div>
+              )}
               <div className="admin-form-group">
                 <label className="admin-form-label">Rolle</label>
                 <select className="admin-form-select" value={role} onChange={e => setRole(e.target.value)}>
