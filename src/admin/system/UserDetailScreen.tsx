@@ -24,14 +24,12 @@ interface Props {
 }
 
 const ROLES = ['user_light', 'user', 'admin', 'management', 'superadmin']
-const PLATFORMS = ['pwa', 'all']
 
 export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const isNew = !user
   const [email, setEmail] = useState(user?.email ?? '')
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
   const [role, setRole] = useState(user?.role ?? 'user')
-  const [platform, setPlatform] = useState(user?.platform ?? 'pwa')
   const [isActive, setIsActive] = useState(user?.is_active ?? true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -59,12 +57,12 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       if (isNew) {
         await apiFetch('/pwa/admin/users', {
           method: 'POST',
-          body: JSON.stringify({ email: email || null, display_name: displayName || null, role, platform }),
+          body: JSON.stringify({ email: email || null, display_name: displayName || null, role }),
         })
       } else {
         await apiFetch(`/pwa/admin/users/${user!.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ display_name: displayName || null, role, platform, is_active: isActive }),
+          body: JSON.stringify({ display_name: displayName || null, role, is_active: isActive }),
         })
       }
       onSaved()
@@ -156,19 +154,11 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                 />
                 {!isNew && <div className="admin-form-hint">E-Mail kann nach Erstellung nicht geändert werden.</div>}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Rolle</label>
-                  <select className="admin-form-select" value={role} onChange={e => setRole(e.target.value)}>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Plattform</label>
-                  <select className="admin-form-select" value={platform} onChange={e => setPlatform(e.target.value)}>
-                    {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Rolle</label>
+                <select className="admin-form-select" value={role} onChange={e => setRole(e.target.value)}>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
               </div>
               {!isNew && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -7,7 +7,6 @@ export interface AuthUser {
   email: string | null
   display_name: string | null
   role: string
-  platform: string
   is_active: boolean
   created_at: string
   consent_version: string | null
@@ -84,14 +83,13 @@ export default function UsersScreen() {
                 <th>Name</th>
                 <th>E-Mail</th>
                 <th>Rolle</th>
-                <th>Plattform</th>
                 <th>Status</th>
                 <th>Consent</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} className="admin-table-empty">Keine Benutzer gefunden.</td></tr>
+                <tr><td colSpan={5} className="admin-table-empty">Keine Benutzer gefunden.</td></tr>
               ) : filtered.map(u => (
                 <tr key={u.id} onClick={() => setSelected(u)}>
                   <td><strong>{u.display_name || '—'}</strong></td>
@@ -101,7 +99,6 @@ export default function UsersScreen() {
                       {u.role}
                     </span>
                   </td>
-                  <td style={{ color: 'var(--muted)', fontSize: 12 }}>{u.platform}</td>
                   <td>
                     <span className={`admin-badge ${u.is_active ? 'admin-badge-active' : 'admin-badge-rejected'}`}>
                       {u.is_active ? 'Aktiv' : 'Inaktiv'}
