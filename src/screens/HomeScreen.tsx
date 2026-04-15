@@ -103,6 +103,8 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
         </div>
       </div>
 
+      {/* Scrollable content */}
+      <div className="home-scroll">
       {/* Tiles */}
       <div className="tiles">
         {!isLight && (
@@ -167,7 +169,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
       </div>
 
       {/* Status card */}
-      <div className="home-footer">
+      <div className="home-footer" style={{ paddingBottom: 16 }}>
         <div className="status-card">
           <div className="status-left">
             <div className="status-label">Status</div>
@@ -199,6 +201,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
           {(!sessionStatus || sessionStatus.status === 'inactive') && <div className="status-badge-inactive">Inaktiv</div>}
         </div>
       </div>
+      </div>{/* end home-scroll */}
 
       {/* Nav bar */}
       <div className="nav-bar">

@@ -241,12 +241,16 @@ input, textarea { font-family: var(--font); color: var(--text); }
 }
 .date-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }
 
+.home-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .tiles {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   padding: 8px 24px 0;
-  flex: 1;
 }
 .tile {
   background: var(--surface);
