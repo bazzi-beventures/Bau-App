@@ -169,6 +169,7 @@ export interface Correction {
   session_date: string
   requested_clock_in: string | null
   requested_clock_out: string | null
+  requested_break_minutes: number | null
   current_clock_in: string | null
   current_clock_out: string | null
   reason: string | null

@@ -106,6 +106,9 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
                       <div style={{ fontSize: 13 }}>
                         {c.requested_clock_in && <span>Ein: <strong>{c.requested_clock_in}</strong></span>}
                         {c.requested_clock_out && <span style={{ marginLeft: 10 }}>Aus: <strong>{c.requested_clock_out}</strong></span>}
+                        {c.requested_break_minutes != null && c.requested_break_minutes > 0 && (
+                          <span style={{ marginLeft: 10 }}>Pause: <strong>{c.requested_break_minutes} Min.</strong></span>
+                        )}
                       </div>
                     </td>
                     <td style={{ color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -138,6 +141,12 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
                           <div style={{ marginTop: 8 }}>
                             <TimeChange before={c.current_clock_in} after={c.requested_clock_in} label="Einstempeln" />
                             <TimeChange before={c.current_clock_out} after={c.requested_clock_out} label="Ausstempeln" />
+                            {c.requested_break_minutes != null && c.requested_break_minutes > 0 && (
+                              <div style={{ fontSize: 12.5, marginBottom: 4 }}>
+                                <span style={{ color: 'var(--muted)' }}>Pause: </span>
+                                <span>{c.requested_break_minutes} Min.</span>
+                              </div>
+                            )}
                           </div>
                           {c.reason && (
                             <div style={{ marginTop: 8, color: 'var(--muted)' }}>
