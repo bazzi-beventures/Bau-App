@@ -159,6 +159,11 @@ export default function App() {
     })
   }, [])
 
+  const handleLoggedOut = useCallback(() => {
+    setUser(null)
+    resetTo(hasStoredIdentity ? 'login' : 'pin')
+  }, [resetTo, hasStoredIdentity])
+
   const offlineBanner = isOffline ? (
     <div style={{
       position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
@@ -186,11 +191,6 @@ export default function App() {
   }
 
   let inner: React.ReactNode = null
-
-  const handleLoggedOut = useCallback(() => {
-    setUser(null)
-    resetTo(hasStoredIdentity ? 'login' : 'pin')
-  }, [resetTo, hasStoredIdentity])
 
   if (screen === 'pin') {
     inner = (
