@@ -71,42 +71,12 @@ function nextScreenAfterLogin(u: UserInfo): Screen {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading')
-  const [screenHistory, setScreenHistory] = useState<Screen[]>(['loading'])
   const [user, setUser] = useState<UserInfo | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
-
-  // Wrap setScreen to push browser history entries for back-button support in PWA
-  const navigateTo = useCallback((newScreen: Screen) => {
-    setScreen(newScreen)
-    setScreenHistory(prev => [...prev, newScreen])
-    window.history.pushState({ screen: newScreen }, '')
-  }, [])
-
-  // Handle Android/PWA back button via popstate
-  useEffect(() => {
-    const handlePopState = () => {
-      setScreenHistory(prev => {
-        if (prev.length <= 1) {
-          // No history left — push a dummy state so the app doesn't exit
-          window.history.pushState({ screen: prev[0] }, '')
-          return prev
-        }
-        const next = [...prev]
-        next.pop()
-        const previousScreen = next[next.length - 1]
-        setScreen(previousScreen)
-        return next
-      })
-    }
-    window.addEventListener('popstate', handlePopState)
-    // Push an initial state so the first back press triggers popstate instead of exiting
-    window.history.pushState({ screen: 'loading' }, '')
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
 
   useEffect(() => {
     const goOnline = () => setIsOffline(false)
@@ -137,32 +107,20 @@ export default function App() {
     }
   }, [])
 
-  // For logout/auth-reset: clears history and navigates
-  const resetTo = useCallback((s: Screen) => {
-    setScreen(s)
-    setScreenHistory([s])
-    window.history.replaceState({ screen: s }, '')
-  }, [])
-
   useEffect(() => {
     Promise.all([
       getMe().then(u => u).catch(err => ({ error: err })),
       loadBranding(),
     ]).then(([userResult]) => {
       if ('error' in (userResult as object)) {
-        resetTo(hasStoredIdentity ? 'login' : 'pin')
+        setScreen(hasStoredIdentity ? 'login' : 'pin')
       } else {
         const u = userResult as UserInfo
         setUser(u)
-        resetTo(nextScreenAfterLogin(u))
+        setScreen(nextScreenAfterLogin(u))
       }
     })
   }, [])
-
-  const handleLoggedOut = useCallback(() => {
-    setUser(null)
-    resetTo(hasStoredIdentity ? 'login' : 'pin')
-  }, [resetTo, hasStoredIdentity])
 
   const offlineBanner = isOffline ? (
     <div style={{
@@ -197,7 +155,7 @@ export default function App() {
       <PinScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
-          getMe().then(u => { setUser(u); loadBranding(); resetTo(nextScreenAfterLogin(u)) }).catch(() => resetTo('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
         }}
       />
     )
@@ -206,7 +164,7 @@ export default function App() {
       <LoginScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
-          getMe().then(u => { setUser(u); loadBranding(); resetTo(nextScreenAfterLogin(u)) }).catch(() => resetTo('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
         }}
       />
     )
@@ -216,7 +174,7 @@ export default function App() {
         logoUrl={logoUrl}
         displayName={user.display_name}
         onAccepted={() => {
-          getMe().then(u => { setUser(u); resetTo('home') }).catch(() => resetTo('home'))
+          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('home'))
         }}
       />
     )
@@ -226,12 +184,12 @@ export default function App() {
         displayName={user.display_name}
         logoUrl={logoUrl}
         role={user.role}
-        onNavRapport={() => navigateTo('rapport')}
-        onNavArbeitszeit={() => navigateTo('arbeitszeit')}
-        onNavProjekte={() => navigateTo('projekte')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
-        onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => navigateTo('admin') : undefined}
+        onNavRapport={() => setScreen('rapport')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProjekte={() => setScreen('projekte')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
     )
   } else if (screen === 'profile' && user) {
@@ -242,22 +200,22 @@ export default function App() {
         role={user.role}
         tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
         logoUrl={logoUrl}
-        onBack={() => navigateTo('home')}
-        onLoggedOut={handleLoggedOut}
+        onBack={() => setScreen('home')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   } else if (screen === 'rapport' && user) {
-    if (user.role === 'user_light') { resetTo('home'); return null }
+    if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ChatScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
         activeNav="rapport"
-        onNavHome={() => navigateTo('home')}
-        onNavArbeitszeit={() => navigateTo('arbeitszeit')}
-        onNavProjekte={() => navigateTo('projekte')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
+        onNavHome={() => setScreen('home')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProjekte={() => setScreen('projekte')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   } else if (screen === 'arbeitszeit' && user) {
@@ -265,36 +223,36 @@ export default function App() {
       <ArbeitsZeitScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
-        onNavHome={() => navigateTo('home')}
-        onNavRapport={() => navigateTo('rapport')}
-        onNavProjekte={() => navigateTo('projekte')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
-        onOpenBericht={(type) => { setBerichtType(type); navigateTo('bericht') }}
-        onNavAbsenzen={() => navigateTo('absenzen')}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProjekte={() => setScreen('projekte')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}
+        onNavAbsenzen={() => setScreen('absenzen')}
       />
     )
   } else if (screen === 'absenzen' && user) {
     inner = (
       <AbsenzenScreen
         logoUrl={logoUrl}
-        onBack={() => navigateTo('arbeitszeit')}
-        onNavHome={() => navigateTo('home')}
-        onNavRapport={() => navigateTo('rapport')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
+        onBack={() => setScreen('arbeitszeit')}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   } else if (screen === 'projekte' && user) {
-    if (user.role === 'user_light') { resetTo('home'); return null }
+    if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ProjekteScreen
         logoUrl={logoUrl}
-        onNavHome={() => navigateTo('home')}
-        onNavRapport={() => navigateTo('rapport')}
-        onNavArbeitszeit={() => navigateTo('arbeitszeit')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   } else if (screen === 'bericht' && user) {
@@ -302,11 +260,11 @@ export default function App() {
       <BerichtScreen
         berichtType={berichtType}
         logoUrl={logoUrl}
-        onBack={() => navigateTo('arbeitszeit')}
-        onNavHome={() => navigateTo('home')}
-        onNavRapport={() => navigateTo('rapport')}
-        onNavProfile={() => navigateTo('profile')}
-        onLoggedOut={handleLoggedOut}
+        onBack={() => setScreen('arbeitszeit')}
+        onNavHome={() => setScreen('home')}
+        onNavRapport={() => setScreen('rapport')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )
   } else if (screen === 'admin' && user) {
@@ -316,8 +274,8 @@ export default function App() {
         logoUrl={logoUrl}
         tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
         canton={canton}
-        onLoggedOut={handleLoggedOut}
-        onSwitchToUser={() => navigateTo('home')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onSwitchToUser={() => setScreen('home')}
       />
     )
   }
