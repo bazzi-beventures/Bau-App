@@ -4,14 +4,14 @@ import { Absence } from '../../api/admin'
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
   sick: 'Krankheit',
-  public_holiday: 'Feiertag',
+  military: 'Militärdienst',
   other: 'Sonstiges',
 }
 
 const TYPE_COLORS: Record<string, string> = {
   vacation: '#3b82f6',
   sick: '#ef4444',
-  public_holiday: '#8b5cf6',
+  military: '#059669',
   other: '#6b7280',
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchMyAbsences, createAbsenceRequest, UserAbsence, AbsenceCreatePayload } from '../api/chat'
+import { fetchMyAbsences, createAbsenceRequest, fetchVacationEntitlement, UserAbsence, AbsenceCreatePayload, VacationEntitlement } from '../api/chat'
 import { ApiError } from '../api/client'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
   sick: 'Krankheit',
-  public_holiday: 'Feiertag',
+  military: 'Militärdienst',
   other: 'Sonstiges',
 }
 
@@ -42,6 +42,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
   const [absences, setAbsences] = useState<UserAbsence[]>([])
+  const [entitlement, setEntitlement] = useState<VacationEntitlement | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,10 +60,14 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
     setLoading(true)
     setError(null)
     try {
-      setAbsences(await fetchMyAbsences())
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      setError('Fehler beim Laden der Absenzen.')
+      const [abs, ent] = await Promise.allSettled([fetchMyAbsences(), fetchVacationEntitlement()])
+      if (abs.status === 'fulfilled') setAbsences(abs.value)
+      else {
+        const err = abs.reason
+        if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+        setError('Fehler beim Laden der Absenzen.')
+      }
+      if (ent.status === 'fulfilled') setEntitlement(ent.value)
     } finally {
       setLoading(false)
     }
@@ -111,6 +116,28 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
         <div className="banner-text">Urlaub, Krankheit und andere Abwesenheiten verwalten.</div>
       </div>
 
+      {/* Ferienanspruch */}
+      {entitlement && (
+        <div className="menu-list" style={{ marginTop: 8 }}>
+          <div className="menu-item" style={{ pointerEvents: 'none' }}>
+            <div className="menu-icon menu-icon-green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div className="menu-text">
+              <div className="menu-label">Ferienanspruch {new Date().getFullYear()}</div>
+              <div className="menu-sub">
+                {entitlement.remaining} von {entitlement.entitlement} Tagen übrig ({entitlement.used} beantragt/genehmigt)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Feedback */}
       {msg && (
         <div className={`action-result${msg.isError ? ' action-result-error' : ''}`}>
@@ -133,7 +160,7 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
           </div>
           <div className="menu-text">
             <div className="menu-label">Abwesenheit beantragen</div>
-            <div className="menu-sub">Urlaub, Krankheit oder Sonstiges</div>
+            <div className="menu-sub">Urlaub, Krankheit oder Sonstiges beantragen</div>
           </div>
           <div className="menu-chevron">{showForm ? '∨' : '›'}</div>
         </div>
@@ -149,7 +176,7 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
               >
                 <option value="vacation">Urlaub</option>
                 <option value="sick">Krankheit</option>
-                <option value="public_holiday">Feiertag</option>
+                <option value="military">Militärdienst</option>
                 <option value="other">Sonstiges</option>
               </select>
             </div>

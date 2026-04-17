@@ -173,6 +173,7 @@ export interface Correction {
   requested_break_minutes: number | null
   current_clock_in: string | null
   current_clock_out: string | null
+  current_break_minutes: number | null
   reason: string | null
   status: string
 }

@@ -17,6 +17,11 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+function csrfHeader(): Record<string, string> {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)
+  return match ? { 'X-CSRF-Token': match[1] } : {}
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message)
@@ -35,6 +40,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders(),
+        ...csrfHeader(),
         ...(options.headers ?? {}),
       },
     })
@@ -59,7 +65,7 @@ export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       credentials: 'include',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), ...csrfHeader() },
     })
 
     if (!res.ok) {
@@ -88,7 +94,7 @@ export async function apiFormFetch(path: string, form: FormData): Promise<unknow
     const res = await fetch(`${BASE_URL}${path}`, {
       method: 'POST',
       credentials: 'include',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), ...csrfHeader() },
       body: form,
     })
 

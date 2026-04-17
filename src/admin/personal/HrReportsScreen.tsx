@@ -36,6 +36,26 @@ interface TimesheetData {
   soll_stunden_woche: number
 }
 
+interface DbViolation {
+  id: string
+  staff_name: string
+  violation_date: string
+  violation_type: string
+  description: string
+  severity: string
+  acknowledged: boolean
+  acknowledged_by: string | null
+  acknowledged_at: string | null
+}
+
+const VIOLATION_TYPE_LABELS: Record<string, string> = {
+  break_too_short: 'Pause zu kurz',
+  rest_time: 'Ruhezeit',
+  max_hours: 'Max. Stunden',
+  auto_clock_out: 'Auto-Ausgestempelt',
+  missing_report: 'Fehlender Rapport',
+}
+
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
@@ -73,6 +93,7 @@ export default function HrReportsScreen() {
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
   const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
 
+  const [tab, setTab] = useState<'timesheet' | 'violations'>('timesheet')
   const [dateFrom, setDateFrom] = useState(defaultFrom)
   const [dateTo, setDateTo] = useState(defaultTo)
   const [data, setData] = useState<TimesheetData | null>(null)
@@ -80,6 +101,11 @@ export default function HrReportsScreen() {
   const [expandedStaff, setExpandedStaff] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  const [violations, setViolations] = useState<DbViolation[]>([])
+  const [violationsLoading, setViolationsLoading] = useState(false)
+  const [unackedCount, setUnackedCount] = useState(0)
+  const [acknowledging, setAcknowledging] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -98,7 +124,36 @@ export default function HrReportsScreen() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  async function loadViolations() {
+    setViolationsLoading(true)
+    try {
+      const result = await apiFetch(
+        `/pwa/admin/hr/violations?date_from=${dateFrom}&date_to=${dateTo}`
+      ) as DbViolation[]
+      setViolations(result)
+      setUnackedCount(result.filter(v => !v.acknowledged).length)
+    } catch {
+      setViolations([])
+    } finally {
+      setViolationsLoading(false)
+    }
+  }
+
+  async function acknowledgeViolation(id: string) {
+    setAcknowledging(id)
+    try {
+      await apiFetch(`/pwa/admin/hr/violations/${id}/acknowledge`, { method: 'PATCH' })
+      setViolations(vs => vs.map(v => v.id === id ? { ...v, acknowledged: true } : v))
+      setUnackedCount(c => Math.max(0, c - 1))
+    } catch {
+      setToast({ msg: 'Fehler beim Bestätigen', type: 'error' })
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setAcknowledging(null)
+    }
+  }
+
+  useEffect(() => { load(); loadViolations() }, [])
 
   async function handleExport() {
     setExporting(true)
@@ -157,6 +212,11 @@ export default function HrReportsScreen() {
     }
   }
 
+  function handleLoad() {
+    load()
+    loadViolations()
+  }
+
   return (
     <div className="admin-page">
       <div className="admin-page-header">
@@ -164,6 +224,33 @@ export default function HrReportsScreen() {
           <div className="admin-page-title">HR-Berichte</div>
           <div className="admin-page-subtitle">Arbeitszeitübersicht pro Mitarbeiter</div>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, padding: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 16 }}>
+        <button
+          className={`admin-btn ${tab === 'timesheet' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+          onClick={() => setTab('timesheet')}
+        >
+          Zeiterfassung
+        </button>
+        <button
+          className={`admin-btn ${tab === 'violations' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+          onClick={() => setTab('violations')}
+          style={{ position: 'relative' }}
+        >
+          Verstösse
+          {unackedCount > 0 && (
+            <span style={{
+              position: 'absolute', top: -6, right: -6,
+              background: '#ef4444', color: '#fff',
+              fontSize: 11, fontWeight: 700,
+              borderRadius: 10, padding: '1px 6px', lineHeight: '16px',
+            }}>
+              {unackedCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Filter */}
@@ -177,18 +264,88 @@ export default function HrReportsScreen() {
             <label className="admin-form-label">Bis</label>
             <input type="date" className="admin-form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: 160 }} />
           </div>
-          <button className="admin-btn admin-btn-primary" onClick={load} disabled={loading}>
-            {loading ? 'Laden…' : 'Laden'}
+          <button className="admin-btn admin-btn-primary" onClick={handleLoad} disabled={loading || violationsLoading}>
+            {loading || violationsLoading ? 'Laden…' : 'Laden'}
           </button>
-          <button className="admin-btn admin-btn-secondary" onClick={handleExport} disabled={exporting || loading}>
-            {exporting ? 'Exportieren…' : 'XLSX Export'}
-          </button>
+          {tab === 'timesheet' && (
+            <button className="admin-btn admin-btn-secondary" onClick={handleExport} disabled={exporting || loading}>
+              {exporting ? 'Exportieren…' : 'XLSX Export'}
+            </button>
+          )}
         </div>
       </div>
 
-      {loading && <div className="admin-loading"><div className="admin-spinner" /> Zeiterfassungsdaten werden geladen…</div>}
+      {/* ─── Violations Tab ─── */}
+      {tab === 'violations' && (
+        <>
+          {violationsLoading && <div className="admin-loading"><div className="admin-spinner" /> Verstösse werden geladen…</div>}
+          {!violationsLoading && violations.length === 0 && (
+            <div className="admin-table-wrap">
+              <div className="admin-table-empty" style={{ padding: 48 }}>Keine Verstösse im gewählten Zeitraum.</div>
+            </div>
+          )}
+          {!violationsLoading && violations.length > 0 && (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Mitarbeiter</th>
+                    <th>Typ</th>
+                    <th>Beschreibung</th>
+                    <th>Schwere</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {violations.map(v => (
+                    <tr key={v.id} style={!v.acknowledged ? { background: 'rgba(239,68,68,0.05)' } : undefined}>
+                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(v.violation_date)}</td>
+                      <td style={{ fontWeight: 600 }}>{v.staff_name}</td>
+                      <td>
+                        <span style={{
+                          fontSize: 12, padding: '2px 8px', borderRadius: 6,
+                          background: 'rgba(255,255,255,0.07)',
+                        }}>
+                          {VIOLATION_TYPE_LABELS[v.violation_type] ?? v.violation_type}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 13, color: '#fca5a5' }}>{v.description}</td>
+                      <td>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600,
+                          color: v.severity === 'critical' ? '#ef4444' : '#f59e0b',
+                        }}>
+                          {v.severity === 'critical' ? 'Kritisch' : 'Warnung'}
+                        </span>
+                      </td>
+                      <td>
+                        {v.acknowledged ? (
+                          <span style={{ fontSize: 12, color: '#22c55e' }}>Bestätigt</span>
+                        ) : (
+                          <button
+                            className="admin-btn admin-btn-secondary"
+                            style={{ fontSize: 12, padding: '3px 10px' }}
+                            disabled={acknowledging === v.id}
+                            onClick={() => acknowledgeViolation(v.id)}
+                          >
+                            {acknowledging === v.id ? '…' : 'Bestätigen'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
 
-      {data && !loading && (
+      {/* ─── Timesheet Tab ─── */}
+      {tab === 'timesheet' && loading && <div className="admin-loading"><div className="admin-spinner" /> Zeiterfassungsdaten werden geladen…</div>}
+
+      {tab === 'timesheet' && data && !loading && (
         <>
           {/* Verstösse-Zusammenfassung */}
           {allViolations.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
 import { ApiError } from './api/client'
 import { SK } from './api/storageKeys'
@@ -78,6 +78,8 @@ export default function App() {
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  const [swUpdateReady, setSwUpdateReady] = useState(false)
+  const screenRef = useRef(screen)
 
   useEffect(() => {
     const goOnline = () => setIsOffline(false)
@@ -88,6 +90,33 @@ export default function App() {
       window.removeEventListener('online', goOnline)
       window.removeEventListener('offline', goOffline)
     }
+  }, [])
+
+  useEffect(() => {
+    const onUpdate = () => setSwUpdateReady(true)
+    window.addEventListener('sw-update-ready', onUpdate)
+    return () => window.removeEventListener('sw-update-ready', onUpdate)
+  }, [])
+
+  // Keep ref in sync so the popstate handler always sees the latest screen
+  useEffect(() => { screenRef.current = screen }, [screen])
+
+  // Push a history entry on every screen change so the back button has something to pop
+  useEffect(() => {
+    history.pushState(null, '', window.location.href)
+  }, [screen])
+
+  // Hardware/browser back button → navigate to home instead of closing the app
+  useEffect(() => {
+    const onPopState = () => {
+      history.pushState(null, '', window.location.href) // re-add entry so next back press still works
+      const s = screenRef.current
+      if (s !== 'home' && s !== 'admin' && s !== 'pin' && s !== 'login' && s !== 'loading') {
+        setScreen('home')
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   const hasStoredIdentity = Boolean(
@@ -132,6 +161,30 @@ export default function App() {
       fontSize: '0.85rem', fontWeight: 600,
     }}>
       Kein Internet – Offline-Modus
+    </div>
+  ) : null
+
+  const updateBanner = swUpdateReady ? (
+    <div style={{
+      position: 'fixed', bottom: 64, left: '50%', transform: 'translateX(-50%)',
+      width: 'calc(100% - 32px)', maxWidth: 448, zIndex: 9998,
+      background: '#1e3a5f', color: '#fff',
+      borderRadius: 10, padding: '10px 16px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+      fontSize: '0.875rem',
+    }}>
+      <span>Neue Version verfügbar</span>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          background: '#22c55e', color: '#fff', border: 'none',
+          borderRadius: 6, padding: '5px 12px', cursor: 'pointer',
+          fontWeight: 600, fontSize: '0.85rem',
+        }}
+      >
+        Aktualisieren
+      </button>
     </div>
   ) : null
 
@@ -284,6 +337,7 @@ export default function App() {
   return (
     <>
       {offlineBanner}
+      {updateBanner}
       {inner}
     </>
   )

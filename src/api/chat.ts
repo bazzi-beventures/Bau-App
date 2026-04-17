@@ -40,10 +40,16 @@ export type ZeitAction =
   | 'start_break' | 'end_break'
   | 'query_vacation' | 'query_overtime'
 
-export async function zeitAction(action: ZeitAction, date?: string): Promise<ChatResponse> {
+export interface ZeitActionOptions {
+  date?: string
+  recorded_at?: string
+  art_der_arbeit?: string
+}
+
+export async function zeitAction(action: ZeitAction, opts: ZeitActionOptions = {}): Promise<ChatResponse> {
   return apiFetch(`/pwa/zeit/${action}`, {
     method: 'POST',
-    body: JSON.stringify(date ? { date } : {}),
+    body: JSON.stringify(opts),
   }) as Promise<ChatResponse>
 }
 
@@ -149,7 +155,7 @@ export interface UserAbsence {
 }
 
 export interface AbsenceCreatePayload {
-  absence_type: 'vacation' | 'sick' | 'public_holiday' | 'other'
+  absence_type: 'vacation' | 'sick' | 'military' | 'other'
   date_start: string
   date_end: string
   comment?: string
@@ -164,4 +170,15 @@ export async function createAbsenceRequest(payload: AbsenceCreatePayload): Promi
     method: 'POST',
     body: JSON.stringify(payload),
   }) as Promise<UserAbsence>
+}
+
+export interface VacationEntitlement {
+  entitlement: number
+  used: number
+  remaining: number
+  source: string
+}
+
+export async function fetchVacationEntitlement(): Promise<VacationEntitlement> {
+  return apiFetch('/pwa/vacation-entitlement', { method: 'GET' }) as Promise<VacationEntitlement>
 }

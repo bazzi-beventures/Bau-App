@@ -141,10 +141,17 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
                           <div style={{ marginTop: 8 }}>
                             <TimeChange before={c.current_clock_in} after={c.requested_clock_in} label="Einstempeln" />
                             <TimeChange before={c.current_clock_out} after={c.requested_clock_out} label="Ausstempeln" />
-                            {c.requested_break_minutes != null && c.requested_break_minutes > 0 && (
+                            {c.requested_break_minutes != null && (
                               <div style={{ fontSize: 12.5, marginBottom: 4 }}>
                                 <span style={{ color: 'var(--muted)' }}>Pause: </span>
-                                <span>{c.requested_break_minutes} Min.</span>
+                                {c.current_break_minutes != null && c.current_break_minutes !== c.requested_break_minutes && (
+                                  <span style={{ textDecoration: 'line-through', color: 'var(--muted)', marginRight: 6 }}>
+                                    {c.current_break_minutes} Min.
+                                  </span>
+                                )}
+                                <span style={{ color: c.current_break_minutes !== c.requested_break_minutes ? '#22c55e' : 'inherit' }}>
+                                  {c.requested_break_minutes} Min.
+                                </span>
                               </div>
                             )}
                           </div>
