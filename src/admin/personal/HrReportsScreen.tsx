@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { SK } from '../../api/storageKeys'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
@@ -102,7 +103,7 @@ export default function HrReportsScreen() {
   async function handleExport() {
     setExporting(true)
     try {
-      const token = localStorage.getItem('pwa_token')
+      const token = localStorage.getItem(SK.TOKEN)
       const res = await fetch(`${BASE_URL}/pwa/admin/hr/export-timesheets`, {
         method: 'POST',
         credentials: 'include',

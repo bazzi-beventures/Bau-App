@@ -3,6 +3,7 @@ import { authenticatePasskey } from './webauthn'
 import { ApiError } from '../api/client'
 import { TenantLogo } from '../App'
 import { loginWithPassword } from '../api/admin'
+import { SK } from '../api/storageKeys'
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -39,9 +40,9 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
-  const tenantSlug = localStorage.getItem('tenantSlug') ?? ''
-  const authorizedUserId = localStorage.getItem('authorizedUserId') ?? ''
-  const displayName = localStorage.getItem('displayName') ?? ''
+  const tenantSlug = localStorage.getItem(SK.TENANT_SLUG) ?? ''
+  const authorizedUserId = localStorage.getItem(SK.AUTHORIZED_USER_ID) ?? ''
+  const displayName = localStorage.getItem(SK.DISPLAY_NAME) ?? ''
 
   async function handlePasskeyLogin() {
     setError('')
@@ -70,7 +71,7 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
     setLoading(true)
     try {
       const { tenant_slug } = await loginWithPassword(username, password)
-      localStorage.setItem('tenantSlug', tenant_slug)
+      localStorage.setItem(SK.TENANT_SLUG, tenant_slug)
       onLoggedIn()
     } catch (err) {
       if (err instanceof ApiError) {
@@ -86,8 +87,8 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   }
 
   function handleNewDevice() {
-    localStorage.removeItem('authorizedUserId')
-    localStorage.removeItem('displayName')
+    localStorage.removeItem(SK.AUTHORIZED_USER_ID)
+    localStorage.removeItem(SK.DISPLAY_NAME)
     window.location.reload()
   }
 

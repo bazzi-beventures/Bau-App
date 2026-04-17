@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { loginWithPassword } from '../api/admin'
 import { ApiError } from '../api/client'
 import { TenantLogo } from '../App'
+import { SK } from '../api/storageKeys'
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -45,7 +46,7 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
     setLoading(true)
     try {
       const { tenant_slug } = await loginWithPassword(username, password)
-      localStorage.setItem('tenantSlug', tenant_slug)
+      localStorage.setItem(SK.TENANT_SLUG, tenant_slug)
       onLoggedIn()
     } catch (err) {
       if (err instanceof ApiError) {

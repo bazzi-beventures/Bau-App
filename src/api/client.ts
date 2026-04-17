@@ -1,6 +1,8 @@
+import { SK } from './storageKeys'
+
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
-const TOKEN_KEY = 'pwa_token'
+const TOKEN_KEY = SK.TOKEN
 
 export function saveToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token)

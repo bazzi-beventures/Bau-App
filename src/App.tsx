@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
 import { ApiError } from './api/client'
+import { SK } from './api/storageKeys'
 import PinScreen from './auth/PinScreen'
 import LoginScreen from './auth/LoginScreen'
 import ConsentScreen from './auth/ConsentScreen'
@@ -90,11 +91,11 @@ export default function App() {
   }, [])
 
   const hasStoredIdentity = Boolean(
-    localStorage.getItem('authorizedUserId') && localStorage.getItem('tenantSlug')
+    localStorage.getItem(SK.AUTHORIZED_USER_ID) && localStorage.getItem(SK.TENANT_SLUG)
   )
 
   const loadBranding = useCallback(async () => {
-    const slug = localStorage.getItem('tenantSlug') ?? ''
+    const slug = localStorage.getItem(SK.TENANT_SLUG) ?? ''
     if (!slug) return
     try {
       const info = await getTenantInfo(slug)
@@ -198,7 +199,7 @@ export default function App() {
         displayName={user.display_name}
         email={user.email}
         role={user.role}
-        tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
+        tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
         logoUrl={logoUrl}
         onBack={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
@@ -272,7 +273,7 @@ export default function App() {
       <AdminApp
         user={user}
         logoUrl={logoUrl}
-        tenantName={tenantName || localStorage.getItem('tenantSlug') || ''}
+        tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
         canton={canton}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onSwitchToUser={() => setScreen('home')}

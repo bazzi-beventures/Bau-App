@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { SK } from './storageKeys'
 import { AdminScreen } from '../admin/useAdminNav'
 
 // ─── Dashboard ─────────────────────────────────────────────
@@ -151,9 +152,9 @@ export async function rejectAbsence(id: string, note?: string): Promise<void> {
 
 export interface AbsenceAnalytics {
   year: number
-  totals: { vacation: number; sick: number; public_holiday: number; other: number }
-  by_month: { month: string; vacation: number; sick: number; public_holiday: number; other: number }[]
-  by_staff: { name: string; vacation: number; sick: number; public_holiday: number; other: number; total: number }[]
+  totals: { vacation: number; sick: number; military: number; other: number }
+  by_month: { month: string; vacation: number; sick: number; military: number; other: number }[]
+  by_staff: { name: string; vacation: number; sick: number; military: number; other: number; total: number }[]
 }
 
 export async function getAbsenceAnalytics(year?: number): Promise<AbsenceAnalytics> {
@@ -239,7 +240,7 @@ export async function markInvoicePaid(id: string): Promise<void> {
 }
 
 export async function getInvoicePdf(id: string): Promise<Blob> {
-  const token = localStorage.getItem('pwa_token')
+  const token = localStorage.getItem(SK.TOKEN)
   const resp = await fetch(`/pwa/admin/invoices/${id}/pdf`, {
     credentials: 'include',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
