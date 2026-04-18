@@ -1,6 +1,6 @@
 {
-  "name": "KI Assistent",
-  "short_name": "KI Assistent",
+  "name": "Gehlhaar App Test",
+  "short_name": "Gehlhaar App Test",
   "description": "Zeiterfassung & Rapporte für Bauarbeiter",
   "start_url": "/Bau-App/",
   "scope": "/Bau-App/",
