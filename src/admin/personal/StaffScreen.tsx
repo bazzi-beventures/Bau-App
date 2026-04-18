@@ -98,10 +98,10 @@ export default function StaffScreen({ onNav }: Props) {
                 <tr><td colSpan={6} className="admin-table-empty">Keine Mitarbeiter gefunden.</td></tr>
               ) : filtered.map(s => (
                 <tr key={s.id} onClick={() => setSelected(s)}>
-                  <td><strong>{s.name}</strong></td>
-                  <td>{s.kuerzel || '—'}</td>
+                  <td className="primary">{s.name}</td>
+                  <td className="secondary">{s.kuerzel || '—'}</td>
                   <td>{s.funktion || '—'}</td>
-                  <td style={{ color: 'var(--muted)' }}>{s.email || '—'}</td>
+                  <td className="secondary">{s.email || '—'}</td>
                   <td>
                     {s.role
                       ? <span className={`admin-badge ${s.role === 'admin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>{s.role}</span>
@@ -110,7 +110,7 @@ export default function StaffScreen({ onNav }: Props) {
                   </td>
                   <td>
                     <button
-                      className="admin-btn admin-btn-danger admin-btn-sm"
+                      className="admin-btn-icon danger"
                       title="Mitarbeiter deaktivieren"
                       onClick={e => { e.stopPropagation(); setConfirmDelete(s) }}
                     >

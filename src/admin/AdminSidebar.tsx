@@ -63,6 +63,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
       <nav className="admin-nav">
         <NavItem label="Dashboard" target="dashboard" current={screen} onNav={onNav} icon={<IconDashboard />} />
+        <NavItem label="Meine Zeit" target="my-time" current={screen} onNav={onNav} icon={<IconClock />} />
 
         <div className="admin-nav-group-label">Personal</div>
         <NavItem label="Mitarbeiter" target="staff" current={screen} onNav={onNav} icon={<IconUsers />} />

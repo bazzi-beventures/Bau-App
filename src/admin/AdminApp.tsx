@@ -7,6 +7,7 @@ import { useAdminNav, AdminScreen } from './useAdminNav'
 import { useIsMobile } from './useIsMobile'
 import DashboardScreen from './dashboard/DashboardScreen'
 import StaffScreen from './personal/StaffScreen'
+import MyTimeScreen from './personal/MyTimeScreen'
 import AbsencesScreen from './personal/AbsencesScreen'
 import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
@@ -20,6 +21,8 @@ import ProjectOverviewScreen from './operative/ProjectOverviewScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
 import KpiScreen from './kpis/KpiScreen'
+import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
+import './tokens.css'
 import './admin.css'
 import './mobile.css'
 
@@ -53,6 +56,7 @@ interface Props {
 
 const SCREEN_TITLES: Record<AdminScreen, string> = {
   'dashboard': 'Dashboard',
+  'my-time': 'Meine Zeiterfassung',
   'staff': 'Mitarbeiter',
   'absences': 'Absenzen',
   'corrections': 'Zeitkorrekturen',
@@ -74,6 +78,13 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
+  const [theme, setTheme] = useState<Theme>(() => loadTheme())
+
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(flipTheme)
 
   async function loadDashboard() {
     try { setDashboard(await getAdminDashboard()) } catch { /* ignore */ }
@@ -96,6 +107,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
+      case 'my-time':      return <MyTimeScreen onLoggedOut={onLoggedOut} />
       case 'staff':        return <StaffScreen />
       case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
@@ -119,6 +131,26 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       <div className="admin-shell-mobile">
         <main className="admin-content admin-content-mobile">
           <div className="admin-content-inner">
+            <div className="admin-content-topbar">
+              <button
+                type="button"
+                className="admin-btn-icon admin-theme-toggle"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                aria-label="Theme wechseln"
+              >
+                {theme === 'dark' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4"/>
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+                  </svg>
+                )}
+              </button>
+            </div>
             {renderScreen()}
           </div>
         </main>
@@ -149,16 +181,34 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       />
       <main className="admin-content">
         <div className="admin-content-inner">
-          {logoUrl && !logoError && (
-            <div className="admin-content-topbar">
+          <div className="admin-content-topbar">
+            <button
+              type="button"
+              className="admin-btn-icon admin-theme-toggle"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              aria-label="Theme wechseln"
+            >
+              {theme === 'dark' ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+                </svg>
+              )}
+            </button>
+            {logoUrl && !logoError && (
               <img
                 className="admin-content-logo"
                 src={logoUrl}
                 alt={tenantName}
                 onError={() => setLogoError(true)}
               />
-            </div>
-          )}
+            )}
+          </div>
           {renderScreen()}
         </div>
       </main>

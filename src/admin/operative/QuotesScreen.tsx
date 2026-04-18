@@ -56,7 +56,7 @@ interface TravelRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
 interface InstallationTemplate { id: string; label: string; default_fee: number; notes: string | null }
 
-const STATUS_LABELS: Record<string, string> = {
+export const QUOTE_STATUS_LABELS: Record<string, string> = {
   entwurf: 'Entwurf',
   gesendet: 'Gesendet',
   akzeptiert: 'Akzeptiert',
@@ -65,7 +65,7 @@ const STATUS_LABELS: Record<string, string> = {
   archiviert: 'Archiviert',
 }
 
-const STATUS_BADGE: Record<string, string> = {
+export const QUOTE_STATUS_BADGE: Record<string, string> = {
   entwurf: 'admin-badge-draft',
   gesendet: 'admin-badge-sent',
   akzeptiert: 'admin-badge-approved',
@@ -73,6 +73,9 @@ const STATUS_BADGE: Record<string, string> = {
   absage: 'admin-badge-rejected',
   archiviert: 'admin-badge-closed',
 }
+
+const STATUS_LABELS = QUOTE_STATUS_LABELS
+const STATUS_BADGE = QUOTE_STATUS_BADGE
 
 function fmtCHF(amount: number) {
   return `CHF ${amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -88,11 +91,11 @@ function parseNum(v: string): number {
 
 // ─── Create Form ────────────────────────────────────────────
 
-function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
-  const [projectName, setProjectName] = useState('')
+  const [projectName, setProjectName] = useState(lockedProjectName ?? '')
   const [laborRows, setLaborRows] = useState<LaborRow[]>([{ description: '', quantity: '', unit_price: null }])
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
@@ -268,13 +271,15 @@ function QuoteCreateForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       {/* Project */}
-      <div style={{ marginBottom: 20 }}>
-        <label className="admin-form-label">Projekt *</label>
-        <select className="admin-form-select" value={projectName} onChange={e => setProjectName(e.target.value)}>
-          <option value="">-- Projekt wählen --</option>
-          {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-        </select>
-      </div>
+      {!lockedProjectName && (
+        <div style={{ marginBottom: 20 }}>
+          <label className="admin-form-label">Projekt *</label>
+          <select className="admin-form-select" value={projectName} onChange={e => setProjectName(e.target.value)}>
+            <option value="">-- Projekt wählen --</option>
+            {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Labor */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>

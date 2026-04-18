@@ -13,6 +13,7 @@ import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 import ProjekteScreen from './screens/ProjekteScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
+import { applyTheme, loadTheme } from './theme'
 
 type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin' | 'absenzen'
 
@@ -80,6 +81,10 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
   const screenRef = useRef(screen)
+
+  useEffect(() => {
+    applyTheme(loadTheme())
+  }, [])
 
   useEffect(() => {
     const goOnline = () => setIsOffline(false)
@@ -277,6 +282,7 @@ export default function App() {
       <ArbeitsZeitScreen
         displayName={user.display_name}
         logoUrl={logoUrl}
+        role={user.role}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onNavProjekte={() => setScreen('projekte')}

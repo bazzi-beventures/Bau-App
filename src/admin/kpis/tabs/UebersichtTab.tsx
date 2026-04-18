@@ -12,10 +12,10 @@ export default function UebersichtTab() {
 
   if (loading) return <div className="admin-loading"><div className="kpi-admin-spinner" />Laden…</div>
   if (error) return <div className="admin-error">{error}</div>
-  if (!row) return <div className="admin-loading" style={{ color: '#6b7280' }}>Keine Daten verfügbar</div>
+  if (!row) return <div className="admin-loading" style={{ color: 'var(--text-muted)' }}>Keine Daten verfügbar</div>
 
   const pct = row.stunden_veraenderung_pct
-  const pctColor = pct > 0 ? '#22c55e' : pct < 0 ? '#f87171' : '#6b7280'
+  const pctColor = pct > 0 ? 'var(--success)' : pct < 0 ? 'var(--danger)' : 'var(--text-muted)'
   const pctSign = pct > 0 ? '+' : ''
 
   const cards = [

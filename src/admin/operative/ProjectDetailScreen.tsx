@@ -1,12 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
+import { getMe } from '../../api/auth'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
+import { QuoteCreateForm, QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from './QuotesScreen'
 
 interface StaffMember {
   id: string
   name: string
+  projektleiter: boolean
+  authorized_user_id: string | null
+}
+
+interface ProjectApproval {
+  id: string
+  title: string
+  filename: string
+  file_url: string | null
+  mime_type: string | null
+  requested_by_user_id: string | null
+  requested_by_name: string | null
+  approver_user_id: string | null
+  approver_name: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  decided_at: string | null
+  decision_note: string | null
+  created_at: string
+}
+
+const APPROVAL_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendent',
+  approved: 'Freigegeben',
+  rejected: 'Abgelehnt',
+}
+
+const APPROVAL_STATUS_BADGE: Record<string, string> = {
+  pending: 'admin-badge-open',
+  approved: 'admin-badge-paid',
+  rejected: 'admin-badge-closed',
 }
 
 interface ProjectFile {
@@ -24,6 +56,74 @@ interface ProjectComment {
   created_at: string
 }
 
+interface ProjectQuote {
+  id: number
+  parent_id: number | null
+  version: number
+  quote_number: string
+  total_amount: number
+  status: string
+  created_at: string
+  pdf_url: string | null
+  customer_email: string | null
+}
+
+interface ProjectInvoice {
+  id: number
+  parent_id: number | null
+  version: number
+  invoice_number: string
+  total_amount: number
+  status: string
+  created_at: string
+  paid_at: string | null
+  pdf_url: string | null
+}
+
+function fmtCHF(amount: number) {
+  return `CHF ${amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  ausstehend: 'Ausstehend',
+  offen: 'Offen',
+  gesendet: 'Gesendet',
+  bezahlt: 'Bezahlt',
+  archiviert: 'Archiviert',
+  inaktiv: 'Inaktiv',
+}
+
+const INVOICE_STATUS_BADGE: Record<string, string> = {
+  ausstehend: 'admin-badge-open',
+  offen: 'admin-badge-open',
+  gesendet: 'admin-badge-sent',
+  bezahlt: 'admin-badge-paid',
+  archiviert: 'admin-badge-closed',
+  inaktiv: 'admin-badge-draft',
+}
+
+function groupByParent<T extends { id: number; parent_id: number | null; version: number }>(items: T[]): T[][] {
+  const groups = new Map<number, T[]>()
+  for (const item of items) {
+    const key = item.parent_id ?? item.id
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(item)
+  }
+  const result = Array.from(groups.values())
+  for (const g of result) g.sort((a, b) => b.version - a.version)
+  result.sort((a, b) => {
+    const aDate = (a[0] as unknown as { created_at: string }).created_at
+    const bDate = (b[0] as unknown as { created_at: string }).created_at
+    return new Date(bDate).getTime() - new Date(aDate).getTime()
+  })
+  return result
+}
+
 interface Props {
   project: Project | null
   onClose: () => void
@@ -31,6 +131,13 @@ interface Props {
 }
 
 const STATUS_SEQUENCE: ProjectStatus[] = ['offen', 'bestellung_ausgeloest', 'demontage', 'abgeschlossen']
+
+const STATUS_ACCENT: Record<ProjectStatus, string> = {
+  offen: 'var(--success)',
+  bestellung_ausgeloest: 'var(--warning)',
+  demontage: 'var(--primary)',
+  abgeschlossen: 'var(--text-muted)',
+}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
@@ -49,7 +156,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [eigentuemer, setEigentuemer] = useState(project?.eigentuemer ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
   const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
-  const [sachbearbeiterId, setSachbearbeiterId] = useState(project?.sachbearbeiter_id ?? '')
+  const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
   const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
   const [termine, setTermine] = useState<Termin[]>(project?.termine ?? [])
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
@@ -77,24 +184,184 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
 
+  // Offerten & Rechnungen
+  const [quotes, setQuotes] = useState<ProjectQuote[]>([])
+  const [invoices, setInvoices] = useState<ProjectInvoice[]>([])
+  const [showQuoteForm, setShowQuoteForm] = useState(false)
+  const [generatingInvoice, setGeneratingInvoice] = useState(false)
+  const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
+  const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
+
+  // Bestellfreigaben
+  const [approvals, setApprovals] = useState<ProjectApproval[]>([])
+  const [showApprovalForm, setShowApprovalForm] = useState(false)
+  const [approvalTitle, setApprovalTitle] = useState('')
+  const [approvalApproverUserId, setApprovalApproverUserId] = useState('')
+  const [approvalFile, setApprovalFile] = useState<File | null>(null)
+  const [creatingApproval, setCreatingApproval] = useState(false)
+  const [decidingApprovalId, setDecidingApprovalId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const approvalFileInputRef = useRef<HTMLInputElement>(null)
+
   const effectiveStatus: ProjectStatus = project?.status ?? (project?.is_closed ? 'abgeschlossen' : 'offen')
   const isClosed = effectiveStatus === 'abgeschlossen'
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff').then((data: unknown) => {
-      const arr = data as { id: string; name: string }[]
-      setStaff(arr.map(s => ({ id: s.id, name: s.name })))
+      const arr = data as { id: string; name: string; projektleiter?: boolean; authorized_user_id?: string | null }[]
+      setStaff(arr.map(s => ({
+        id: s.id,
+        name: s.name,
+        projektleiter: s.projektleiter ?? false,
+        authorized_user_id: s.authorized_user_id ?? null,
+      })))
     }).catch(() => {})
     apiFetch('/pwa/admin/customers').then((data: unknown) => {
       setCustomers(data as Customer[])
     }).catch(() => {})
+    getMe().then(me => setCurrentUserId(me.authorized_user_id)).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (!project) return
     apiFetch(`/pwa/admin/projects/${project.id}/files`).then(d => setFiles(d as ProjectFile[])).catch(() => {})
     apiFetch(`/pwa/admin/projects/${project.id}/comments`).then(d => setComments(d as ProjectComment[])).catch(() => {})
+    reloadQuotes()
+    reloadInvoices()
+    reloadApprovals()
   }, [project?.id])
+
+  async function reloadApprovals() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/approvals`) as ProjectApproval[]
+      setApprovals(d)
+    } catch { /* ignore */ }
+  }
+
+  async function handleCreateApproval(e: React.FormEvent) {
+    e.preventDefault()
+    if (!project || !approvalTitle.trim() || !approvalApproverUserId || !approvalFile) return
+    setCreatingApproval(true)
+    try {
+      const form = new FormData()
+      form.append('title', approvalTitle.trim())
+      form.append('approver_user_id', approvalApproverUserId)
+      form.append('file', approvalFile)
+      await apiFormFetch(`/pwa/admin/projects/${project.id}/approvals`, form)
+      setShowApprovalForm(false)
+      setApprovalTitle('')
+      setApprovalApproverUserId('')
+      setApprovalFile(null)
+      if (approvalFileInputRef.current) approvalFileInputRef.current.value = ''
+      showToast('Freigabe-Anfrage gesendet')
+      await reloadApprovals()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Anlegen')
+    } finally {
+      setCreatingApproval(false)
+    }
+  }
+
+  async function handleDecideApproval(approvalId: string, decision: 'approve' | 'reject') {
+    let note: string | undefined
+    if (decision === 'reject') {
+      const input = window.prompt('Grund für Ablehnung (optional):')
+      if (input === null) return
+      note = input || undefined
+    }
+    setDecidingApprovalId(approvalId)
+    try {
+      await apiFetch(`/pwa/admin/approvals/${approvalId}/${decision}`, {
+        method: 'POST',
+        body: JSON.stringify({ note: note ?? null }),
+      })
+      showToast(decision === 'approve' ? 'Freigabe erteilt' : 'Freigabe abgelehnt')
+      await reloadApprovals()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setDecidingApprovalId(null)
+    }
+  }
+
+  async function handleDeleteApproval(approvalId: string) {
+    if (!window.confirm('Pendente Freigabe wirklich löschen?')) return
+    try {
+      await apiFetch(`/pwa/admin/approvals/${approvalId}`, { method: 'DELETE' })
+      showToast('Freigabe gelöscht')
+      await reloadApprovals()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Löschen')
+    }
+  }
+
+  async function reloadQuotes() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/quotes`) as ProjectQuote[]
+      setQuotes(d)
+    } catch { /* ignore */ }
+  }
+
+  async function reloadInvoices() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/invoices`) as ProjectInvoice[]
+      setInvoices(d)
+    } catch { /* ignore */ }
+  }
+
+  async function handleRegenerateQuote(quoteId: number) {
+    setRegeneratingQuoteId(quoteId)
+    try {
+      await apiFetch(`/pwa/admin/quotes/${quoteId}/regenerate`, { method: 'POST' })
+      showToast('Neue Version erstellt')
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Regenerieren')
+    } finally {
+      setRegeneratingQuoteId(null)
+    }
+  }
+
+  async function handleGenerateInvoice() {
+    if (!project) return
+    setGeneratingInvoice(true)
+    try {
+      await apiFetch('/pwa/admin/invoices/generate', {
+        method: 'POST',
+        body: JSON.stringify({ project_name: project.name, use_quote: useAcceptedQuote }),
+      })
+      showToast('Rechnung erstellt')
+      await reloadInvoices()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Erstellen')
+    } finally {
+      setGeneratingInvoice(false)
+    }
+  }
+
+  async function handleUpdateQuoteStatus(quoteId: number, status: string) {
+    try {
+      await apiFetch(`/pwa/admin/quotes/${quoteId}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      })
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
+
+  async function handleMarkInvoicePaid(invoiceId: number) {
+    try {
+      await apiFetch(`/pwa/admin/invoices/${invoiceId}/mark-paid`, { method: 'POST' })
+      await reloadInvoices()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
 
   function showToast(msg: string) {
     setToast(msg)
@@ -157,7 +424,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           eigentuemer: eigentuemer || null,
           art_der_arbeit: artDerArbeit || null,
           bemerkung: bemerkung || null,
-          sachbearbeiter_id: sachbearbeiterId || null,
+          projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
           termine,
           kontakte,
@@ -280,14 +547,32 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   return (
     <div className="admin-page">
-      <div className="admin-page-header">
+      <div
+        className="admin-page-header"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          background: 'var(--bg, #0c2840)',
+          margin: '-28px -32px 24px',
+          padding: '20px 32px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
         <div>
           <div className="admin-page-title">{isNew ? 'Neues Projekt' : project.name}</div>
-          <div className="admin-page-subtitle">
+          <div className="admin-page-subtitle" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {isNew ? 'Projekt anlegen' : (
-              <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`} style={{ fontSize: 12 }}>
-                {PROJECT_STATUS_LABELS[effectiveStatus]}
-              </span>
+              <>
+                <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`} style={{ fontSize: 12 }}>
+                  {PROJECT_STATUS_LABELS[effectiveStatus]}
+                </span>
+                {project?.created_at && (
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    Eröffnet am {fmtDate(project.created_at)}
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -458,10 +743,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div className="admin-section-title">Zuständigkeiten</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
-                <label className="admin-form-label">Sachbearbeiter</label>
-                <select className="admin-form-select" value={sachbearbeiterId} onChange={e => setSachbearbeiterId(e.target.value)}>
+                <label className="admin-form-label">Projektleiter</label>
+                <select className="admin-form-select" value={projektleiterId} onChange={e => setProjektleiterId(e.target.value)}>
                   <option value="">— auswählen —</option>
-                  {staff.map(s => (
+                  {staff.filter(s => s.projektleiter || s.id === projektleiterId).map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
@@ -504,13 +789,22 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
                 {STATUS_SEQUENCE.filter(s => s !== 'abgeschlossen').map(s => {
                   const isCurrent = effectiveStatus === s
+                  const accent = STATUS_ACCENT[s]
                   return (
                     <button
                       key={s}
                       type="button"
                       disabled={isCurrent || settingStatus || isClosed}
                       className="admin-btn admin-btn-secondary"
-                      style={{ width: '100%', justifyContent: 'center', fontWeight: isCurrent ? 700 : undefined, outline: isCurrent ? '2px solid var(--primary)' : undefined, outlineOffset: isCurrent ? '2px' : undefined }}
+                      style={{
+                        width: '100%',
+                        justifyContent: 'center',
+                        fontWeight: isCurrent ? 700 : undefined,
+                        color: isCurrent ? accent : undefined,
+                        borderColor: isCurrent ? accent : undefined,
+                        outline: isCurrent ? `2px solid ${accent}` : undefined,
+                        outlineOffset: isCurrent ? '2px' : undefined,
+                      }}
                       onClick={() => handleSetStatus(s)}
                     >
                       {isCurrent && '● '}{PROJECT_STATUS_LABELS[s]}
@@ -594,6 +888,272 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Offerten ─────────────────────────────────────────── */}
+      {!isNew && (
+        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div className="admin-section-title" style={{ margin: 0 }}>Offerten</div>
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-primary"
+              onClick={() => setShowQuoteForm(true)}
+            >
+              + Neue Offerte
+            </button>
+          </div>
+          {quotes.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Offerten.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {groupByParent(quotes).map(group => {
+                const latest = group[0]
+                return (
+                  <div key={latest.parent_id ?? latest.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
+                    {group.map((q, idx) => (
+                      <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{q.version}</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, minWidth: 130 }}>{q.quote_number}</span>
+                        <span className={`admin-badge ${QUOTE_STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>{QUOTE_STATUS_LABELS[q.status] || q.status}</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(q.created_at)}</span>
+                        <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
+                        {q.pdf_url && (
+                          <a href={q.pdf_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                        )}
+                        {idx === 0 && (
+                          <>
+                            {q.status === 'entwurf' && (
+                              <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleUpdateQuoteStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
+                            )}
+                            <button
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              disabled={regeneratingQuoteId === q.id}
+                              onClick={() => handleRegenerateQuote(q.id)}
+                            >
+                              {regeneratingQuoteId === q.id ? '…' : 'Neue Version'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Rechnungen ───────────────────────────────────────── */}
+      {!isNew && (
+        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div className="admin-section-title" style={{ margin: 0 }}>Rechnungen</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+                <input type="checkbox" checked={useAcceptedQuote} onChange={e => setUseAcceptedQuote(e.target.checked)} />
+                Aus akzeptierter Offerte
+              </label>
+              <button
+                type="button"
+                className="admin-btn admin-btn-sm admin-btn-primary"
+                disabled={generatingInvoice}
+                onClick={handleGenerateInvoice}
+              >
+                {generatingInvoice ? 'Wird erstellt…' : '+ Rechnung generieren'}
+              </button>
+            </div>
+          </div>
+          {invoices.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Rechnungen.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {groupByParent(invoices).map(group => {
+                const latest = group[0]
+                return (
+                  <div key={latest.parent_id ?? latest.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
+                    {group.map((inv, idx) => (
+                      <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{inv.version}</span>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, minWidth: 150 }}>{inv.invoice_number}</span>
+                        <span className={`admin-badge ${INVOICE_STATUS_BADGE[inv.status] || 'admin-badge-draft'}`}>{INVOICE_STATUS_LABELS[inv.status] || inv.status}</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(inv.created_at)}</span>
+                        <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(inv.total_amount)}</span>
+                        {inv.pdf_url && (
+                          <a href={inv.pdf_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                        )}
+                        {idx === 0 && (inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
+                          <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => handleMarkInvoicePaid(inv.id)}>Bezahlt</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Bestellfreigabe / Visierung ──────────────────────── */}
+      {!isNew && (
+        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div className="admin-section-title" style={{ margin: 0 }}>Bestellfreigabe / Visierung</div>
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-primary"
+              onClick={() => setShowApprovalForm(true)}
+            >
+              + Neue Bestellfreigabe
+            </button>
+          </div>
+          {approvals.length === 0 ? (
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Freigaben angefragt.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {approvals.map(a => {
+                const isApprover = !!currentUserId && a.approver_user_id === currentUserId
+                const isCreator = !!currentUserId && a.requested_by_user_id === currentUserId
+                return (
+                  <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</span>
+                      <span className={`admin-badge ${APPROVAL_STATUS_BADGE[a.status]}`}>{APPROVAL_STATUS_LABELS[a.status]}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(a.created_at)}</span>
+                      {a.file_url && (
+                        <a href={a.file_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm" style={{ marginLeft: 'auto' }}>
+                          📎 {a.filename}
+                        </a>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      <span>Eingereicht von <strong>{a.requested_by_name ?? '—'}</strong></span>
+                      <span>Freigeber: <strong>{a.approver_name ?? '—'}</strong></span>
+                      {a.decided_at && (
+                        <span>Entschieden am {fmtDate(a.decided_at)}</span>
+                      )}
+                    </div>
+                    {a.decision_note && (
+                      <div style={{ marginTop: 6, fontSize: 12, fontStyle: 'italic', color: 'var(--muted)' }}>
+                        Notiz: {a.decision_note}
+                      </div>
+                    )}
+                    {a.status === 'pending' && (isApprover || isCreator) && (
+                      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                        {isApprover && (
+                          <>
+                            <button
+                              className="admin-btn admin-btn-success admin-btn-sm"
+                              disabled={decidingApprovalId === a.id}
+                              onClick={() => handleDecideApproval(a.id, 'approve')}
+                            >
+                              {decidingApprovalId === a.id ? '…' : 'Freigeben'}
+                            </button>
+                            <button
+                              className="admin-btn admin-btn-danger admin-btn-sm"
+                              disabled={decidingApprovalId === a.id}
+                              onClick={() => handleDecideApproval(a.id, 'reject')}
+                            >
+                              Ablehnen
+                            </button>
+                          </>
+                        )}
+                        {isCreator && !isApprover && (
+                          <button
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            onClick={() => handleDeleteApproval(a.id)}
+                          >
+                            Löschen
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Dialog: Neue Bestellfreigabe ─────────────────────── */}
+      {showApprovalForm && project && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 520 }}>
+            <form onSubmit={handleCreateApproval}>
+              <div className="admin-confirm-title">Neue Bestellfreigabe</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Titel *</label>
+                  <input
+                    className="admin-form-input"
+                    value={approvalTitle}
+                    onChange={e => setApprovalTitle(e.target.value)}
+                    placeholder="z.B. Materialbestellung Kabel"
+                    required
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Freigeber *</label>
+                  <select
+                    className="admin-form-select"
+                    value={approvalApproverUserId}
+                    onChange={e => setApprovalApproverUserId(e.target.value)}
+                    required
+                  >
+                    <option value="">— auswählen —</option>
+                    {staff
+                      .filter(s => !!s.authorized_user_id)
+                      .map(s => (
+                        <option key={s.id} value={s.authorized_user_id!}>{s.name}</option>
+                      ))}
+                  </select>
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Dokument (PDF oder Bild) *</label>
+                  <input
+                    ref={approvalFileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={e => setApprovalFile(e.target.files?.[0] ?? null)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="admin-confirm-actions">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => { setShowApprovalForm(false); setApprovalTitle(''); setApprovalApproverUserId(''); setApprovalFile(null) }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  className="admin-btn admin-btn-primary"
+                  disabled={creatingApproval || !approvalTitle.trim() || !approvalApproverUserId || !approvalFile}
+                >
+                  {creatingApproval ? 'Sende…' : 'Freigabe anfragen'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dialog: Neue Offerte ─────────────────────────────── */}
+      {showQuoteForm && project && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
+            <QuoteCreateForm
+              lockedProjectName={project.name}
+              onDone={() => { setShowQuoteForm(false); reloadQuotes() }}
+              onCancel={() => setShowQuoteForm(false)}
+            />
           </div>
         </div>
       )}

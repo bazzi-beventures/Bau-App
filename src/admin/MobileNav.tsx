@@ -129,6 +129,9 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
               <div className="admin-mobile-drawer-group">
                 <div className="admin-mobile-drawer-group-label">Häufig genutzt</div>
 
+                <button className={`admin-mobile-drawer-item${screen === 'my-time' ? ' active' : ''}`} onClick={() => navigate('my-time')}>
+                  <IconClock /><span>Meine Zeit</span>
+                </button>
                 <button className={`admin-mobile-drawer-item${screen === 'staff' ? ' active' : ''}`} onClick={() => navigate('staff')}>
                   <IconUsers /><span>Mitarbeiter</span>
                 </button>

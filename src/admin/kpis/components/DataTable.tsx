@@ -69,7 +69,7 @@ export default function DataTable<T extends object>({
         </thead>
         <tbody>
           {paged.length === 0 && (
-            <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>Keine Daten</td></tr>
+            <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Keine Daten</td></tr>
           )}
           {paged.map((row, ri) => (
             <tr key={ri}>

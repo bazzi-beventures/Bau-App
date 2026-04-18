@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 export type AdminScreen =
   | 'dashboard'
+  | 'my-time'
   | 'staff'
   | 'absences'
   | 'corrections'

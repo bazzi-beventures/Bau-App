@@ -2,6 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import { useChartTheme } from './useChartTheme'
 
 interface BarDef {
   dataKey: string
@@ -17,17 +18,18 @@ interface Props {
 }
 
 export default function BiBarChart({ data, xKey, bars, height = 260 }: Props) {
+  const t = useChartTheme()
   if (!data.length) return null
 
   return (
     <div className="kpi-bi-chart-wrap">
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e2332" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
           <XAxis
             dataKey={xKey}
-            tick={{ fill: '#6b7280', fontSize: 11 }}
-            axisLine={{ stroke: '#1e2332' }}
+            tick={{ fill: t.tickMuted, fontSize: 11 }}
+            axisLine={{ stroke: t.axis }}
             tickLine={false}
             interval={0}
             angle={-30}
@@ -35,23 +37,23 @@ export default function BiBarChart({ data, xKey, bars, height = 260 }: Props) {
             height={60}
           />
           <YAxis
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: t.tickMuted, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)}
           />
           <Tooltip
             contentStyle={{
-              background: '#161a24',
-              border: '1px solid #1e2332',
+              background: t.tooltipBg,
+              border: `1px solid ${t.tooltipBorder}`,
               borderRadius: 8,
-              color: '#e8eaf0',
+              color: t.tooltipText,
               fontSize: 12,
             }}
             formatter={(value: unknown) => typeof value === 'number' ? value.toLocaleString('de-CH') : String(value ?? '')}
           />
           <Legend
-            wrapperStyle={{ fontSize: 11, color: '#6b7280', paddingTop: 8 }}
+            wrapperStyle={{ fontSize: 11, color: t.tickMuted, paddingTop: 8 }}
           />
           {bars.map((b) => (
             <Bar key={b.dataKey} dataKey={b.dataKey} name={b.label} fill={b.color} radius={[3, 3, 0, 0]} />

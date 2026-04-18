@@ -14,6 +14,8 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
   const [funktion, setFunktion] = useState(member?.funktion ?? '')
   const [hourlyRate, setHourlyRate] = useState(member?.hourly_rate?.toString() ?? '')
   const [monthlySalary, setMonthlySalary] = useState(member?.monthly_salary?.toString() ?? '')
+  const [rapportpflicht, setRapportpflicht] = useState<boolean>(member?.rapportpflicht ?? true)
+  const [projektleiter, setProjektleiter] = useState<boolean>(member?.projektleiter ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [roles, setRoles] = useState<StaffRole[]>([])
@@ -35,6 +37,8 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
         funktion: funktion || undefined,
         hourly_rate: hourlyRate ? parseFloat(hourlyRate) : undefined,
         monthly_salary: monthlySalary ? parseFloat(monthlySalary) : undefined,
+        rapportpflicht: rapportpflicht,
+        projektleiter: projektleiter,
       })
       onSaved()
     } catch (err: unknown) {
@@ -89,6 +93,32 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                 <div className="admin-form-group">
                   <label className="admin-form-label">Monatslohn (CHF)</label>
                   <input className="admin-form-input" inputMode="decimal" value={monthlySalary} onChange={e => setMonthlySalary(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="5500.00" />
+                </div>
+              </div>
+              <div className="admin-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={rapportpflicht}
+                    onChange={e => setRapportpflicht(e.target.checked)}
+                  />
+                  <span className="admin-form-label" style={{ margin: 0 }}>Rapportpflicht</span>
+                </label>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Wenn deaktiviert, erscheinen keine «Fehlender Rapport»-Verstösse für diesen Mitarbeiter (z.&nbsp;B. Admin, Projektleitung).
+                </div>
+              </div>
+              <div className="admin-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={projektleiter}
+                    onChange={e => setProjektleiter(e.target.checked)}
+                  />
+                  <span className="admin-form-label" style={{ margin: 0 }}>Projektleiter</span>
+                </label>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Wenn aktiviert, kann dieser Mitarbeiter in Projekten als Projektleiter ausgewählt werden.
                 </div>
               </div>
             </div>

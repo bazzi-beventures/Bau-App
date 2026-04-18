@@ -5,7 +5,7 @@ import AbsenceCalendar from './AbsenceCalendar'
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
   sick: 'Krankheit',
-  public_holiday: 'Feiertag',
+  military: 'Militärdienst',
   other: 'Sonstiges',
 }
 

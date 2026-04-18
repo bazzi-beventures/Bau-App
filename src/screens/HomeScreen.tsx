@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, ApiError, isOfflineError } from '../api/client'
+import { Theme, loadTheme, applyTheme, toggleTheme } from '../theme'
 
 interface Props {
   displayName: string
@@ -41,6 +42,13 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
+  const [theme, setTheme] = useState<Theme>(() => loadTheme())
+
+  function handleToggleTheme() {
+    const next = toggleTheme(theme)
+    setTheme(next)
+    applyTheme(next)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -70,22 +78,27 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
             <div className="home-name">{firstName}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={handleToggleTheme}
+              className="home-theme-btn"
+              title={theme === 'dark' ? 'Zu Hell wechseln' : 'Zu Dunkel wechseln'}
+              aria-label="Darstellung umschalten"
+            >
+              {theme === 'dark' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                  <circle cx="12" cy="12" r="4"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              )}
+            </button>
             {onSwitchToAdmin && (
               <button
                 onClick={onSwitchToAdmin}
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: 8,
-                  color: 'inherit',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  padding: '5px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                }}
+                className="home-admin-btn"
                 title="Zur Admin-Ansicht"
               >
                 <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">

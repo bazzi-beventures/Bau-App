@@ -2,6 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import { useChartTheme } from './useChartTheme'
 
 interface Props {
   data: Record<string, unknown>[]
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function HorizontalBarChart({ data, yKey, dataKey, color, height }: Props) {
+  const t = useChartTheme()
   if (!data.length) return null
 
   const rowHeight = 36
@@ -25,32 +27,32 @@ export default function HorizontalBarChart({ data, yKey, dataKey, color, height 
           layout="vertical"
           margin={{ top: 4, right: 40, left: 8, bottom: 4 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e2332" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke={t.grid} horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: t.tickMuted, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey={yKey}
-            tick={{ fill: '#e8eaf0', fontSize: 12 }}
+            tick={{ fill: t.tickStrong, fontSize: 12 }}
             axisLine={false}
             tickLine={false}
             width={120}
           />
           <Tooltip
             contentStyle={{
-              background: '#161a24',
-              border: '1px solid #1e2332',
+              background: t.tooltipBg,
+              border: `1px solid ${t.tooltipBorder}`,
               borderRadius: 8,
-              color: '#e8eaf0',
+              color: t.tooltipText,
               fontSize: 12,
             }}
             formatter={(value: unknown) => [`${value} Tage`, 'Total']}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[0, 3, 3, 0]} label={{ position: 'right', fill: '#6b7280', fontSize: 11 }} />
+          <Bar dataKey={dataKey} fill={color} radius={[0, 3, 3, 0]} label={{ position: 'right', fill: t.tickMuted, fontSize: 11 }} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -21,6 +21,7 @@ function saveQueue(q: QueuedAction[]) {
 interface Props {
   displayName: string
   logoUrl?: string
+  role?: string
   onNavHome: () => void
   onNavRapport: () => void
   onNavProjekte: () => void
@@ -100,7 +101,8 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
+  const isAdmin = role === 'admin' || role === 'management' || role === 'superadmin'
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading] = useState(false)
@@ -218,7 +220,7 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
   }
 
   function handleAction(action: Action, idx: number) {
-    if (action.action === 'clock_in') {
+    if (action.action === 'clock_in' && !isAdmin) {
       setShowArtSelector(v => !v)
       setResult(null)
     } else {
@@ -287,10 +289,10 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
                 </div>
                 <div className="menu-sub">{action.sub}</div>
               </div>
-              <div className="menu-chevron">{action.action === 'clock_in' ? (showArtSelector ? '∨' : '›') : '›'}</div>
+              <div className="menu-chevron">{action.action === 'clock_in' && !isAdmin ? (showArtSelector ? '∨' : '›') : '›'}</div>
             </div>
             {/* Arbeitsart-Auswahl bei Einstempeln */}
-            {action.action === 'clock_in' && showArtSelector && (
+            {action.action === 'clock_in' && !isAdmin && showArtSelector && (
               <div className="correction-form" style={{ paddingTop: 12, paddingBottom: 12 }}>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Art der Arbeit wählen:</div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -299,8 +301,9 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
                       key={opt}
                       onClick={() => setSelectedArt(opt)}
                       style={{
-                        flex: 1, padding: '7px 4px', borderRadius: 8, border: 'none',
-                        background: selectedArt === opt ? '#22c55e' : '#1f2937',
+                        flex: 1, padding: '7px 4px', borderRadius: 8,
+                        border: selectedArt === opt ? 'none' : '1px solid var(--border)',
+                        background: selectedArt === opt ? 'var(--accent-green)' : 'var(--surface2)',
                         color: selectedArt === opt ? '#fff' : 'var(--text)',
                         fontWeight: selectedArt === opt ? 600 : 400,
                         fontSize: 13, cursor: 'pointer',

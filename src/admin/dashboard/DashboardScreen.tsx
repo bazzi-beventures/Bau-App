@@ -3,6 +3,7 @@ import {
   AdminDashboard,
   PendingReminderQuote, getPendingReminderQuotes, sendQuoteReminder,
   PendingActionInvoice, getPendingActionInvoices, sendZahlungserinnerung, sendMahnung,
+  PendingApproval, getPendingApprovals, approveApproval, rejectApproval,
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 
@@ -23,7 +24,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, colorClass, onClick, icon, badge }: KpiCardProps) {
   return (
-    <div className="admin-kpi-card" onClick={onClick} style={{ position: 'relative' }}>
+    <div className="admin-kpi-card" onClick={onClick}>
       {badge && value ? <span className="admin-kpi-badge">{value}</span> : null}
       <div className={`admin-kpi-icon ${colorClass}`}>{icon}</div>
       <div className="admin-kpi-value">{value ?? '—'}</div>
@@ -52,6 +53,9 @@ function IconBell() {
 }
 function IconExclamation() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1-8a1 1 0 0 0-1 1v3a1 1 0 0 0 2 0V6a1 1 0 0 0-1-1z" clipRule="evenodd"/></svg>
+}
+function IconApproval() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0 0 10 1.944 11.954 11.954 0 0 0 17.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 0 0-1.414-1.414L9 10.586 7.707 9.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4z" clipRule="evenodd"/></svg>
 }
 
 function fmtDate(iso: string | null) {
@@ -266,11 +270,125 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
   )
 }
 
+// ─── Modal: Bestellfreigaben ─────────────────────────────────
+
+interface ApprovalModalProps {
+  onClose: () => void
+  onSent: () => void
+}
+
+function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
+  const [approvals, setApprovals] = useState<PendingApproval[] | null>(null)
+  const [busy, setBusy] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    getPendingApprovals().then(setApprovals).catch(() => setApprovals([]))
+  }, [])
+
+  function showToast(msg: string, type: 'success' | 'error') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  async function handleApprove(id: string) {
+    setBusy({ id, type: 'approve' })
+    try {
+      await approveApproval(id)
+      showToast('Freigabe erteilt', 'success')
+      setApprovals(list => list ? list.filter(a => a.id !== id) : list)
+      onSent()
+    } catch {
+      showToast('Fehler beim Freigeben', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleReject(id: string) {
+    const note = window.prompt('Grund für Ablehnung (optional):') ?? undefined
+    if (note === null) return
+    setBusy({ id, type: 'reject' })
+    try {
+      await rejectApproval(id, note)
+      showToast('Freigabe abgelehnt', 'success')
+      setApprovals(list => list ? list.filter(a => a.id !== id) : list)
+      onSent()
+    } catch {
+      showToast('Fehler beim Ablehnen', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const isBusy = (id: string, type: 'approve' | 'reject') =>
+    busy?.id === id && busy?.type === type
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+        <div className="admin-modal-header">
+          <div className="admin-modal-title">Bestellfreigaben für mich</div>
+          <button className="admin-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="admin-modal-body">
+          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          {approvals === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
+          {approvals !== null && approvals.length === 0 && <div className="admin-empty">Keine offenen Freigaben für dich</div>}
+          {approvals !== null && approvals.length > 0 && (
+            <div className="admin-list">
+              {approvals.map(a => (
+                <div key={a.id} className="admin-list-item" style={{ flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600 }}>{a.title}</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                        Projekt: {a.project_name ?? '—'}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                        Eingereicht von {a.requested_by_name ?? '—'} · {fmtDate(a.created_at)}
+                      </div>
+                      {a.file_url && (
+                        <a href={a.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--color-primary, #2563eb)' }}>
+                          📎 {a.filename}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                    <button
+                      className="admin-btn admin-btn-success"
+                      style={{ flex: 1 }}
+                      disabled={busy !== null}
+                      onClick={() => handleApprove(a.id)}
+                    >
+                      {isBusy(a.id, 'approve') ? '…' : 'Freigeben'}
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-danger"
+                      style={{ flex: 1 }}
+                      disabled={busy !== null}
+                      onClick={() => handleReject(a.id)}
+                    >
+                      {isBusy(a.id, 'reject') ? '…' : 'Ablehnen'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Dashboard ───────────────────────────────────────────────
 
 export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Props) {
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showMahnungModal, setShowMahnungModal] = useState(false)
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
 
   return (
     <div className="admin-page">
@@ -297,7 +415,7 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
           icon={<IconCash />}
         />
         <KpiCard
-          label="Aktive Sessions"
+          label="Eingestempelt"
           value={dashboard?.open_sessions ?? null}
           colorClass="green"
           onClick={() => onNav('hr-reports')}
@@ -333,6 +451,14 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
           icon={<IconExclamation />}
           badge
         />
+        <KpiCard
+          label="Bestellfreigaben für mich"
+          value={dashboard?.pending_approvals ?? null}
+          colorClass="blue"
+          onClick={() => setShowApprovalModal(true)}
+          icon={<IconApproval />}
+          badge
+        />
       </div>
 
       {dashboard === null && (
@@ -352,6 +478,13 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
       {showMahnungModal && (
         <MahnungModal
           onClose={() => setShowMahnungModal(false)}
+          onSent={() => onBadgeChange?.()}
+        />
+      )}
+
+      {showApprovalModal && (
+        <ApprovalModal
+          onClose={() => setShowApprovalModal(false)}
           onSent={() => onBadgeChange?.()}
         />
       )}

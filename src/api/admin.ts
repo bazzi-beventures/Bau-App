@@ -12,6 +12,37 @@ export interface AdminDashboard {
   draft_quotes: number
   quotes_pending_reminder: number
   invoices_pending_action: number
+  pending_approvals: number
+}
+
+export interface PendingApproval {
+  id: string
+  title: string
+  filename: string
+  file_url: string | null
+  mime_type: string | null
+  requested_by_name: string | null
+  created_at: string
+  project_id: string
+  project_name: string | null
+}
+
+export async function getPendingApprovals(): Promise<PendingApproval[]> {
+  return apiFetch('/pwa/admin/approvals/pending') as Promise<PendingApproval[]>
+}
+
+export async function approveApproval(id: string, note?: string): Promise<void> {
+  await apiFetch(`/pwa/admin/approvals/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ note: note ?? null }),
+  })
+}
+
+export async function rejectApproval(id: string, note?: string): Promise<void> {
+  await apiFetch(`/pwa/admin/approvals/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ note: note ?? null }),
+  })
 }
 
 export interface PendingActionInvoice {
@@ -68,6 +99,8 @@ export interface StaffMember {
   funktion: string | null
   hourly_rate: number | null
   monthly_salary: number | null
+  rapportpflicht: boolean
+  projektleiter: boolean
   authorized_user_id: string | null
   email: string | null
   role: string | null
