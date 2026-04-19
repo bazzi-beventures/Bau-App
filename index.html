@@ -11,9 +11,31 @@
     <link rel="apple-touch-icon" href="/Bau-App/icons/icon-192.png" />
     <link rel="manifest" href="/Bau-App/manifest.json" />
     <title>Gehlhaar App Test</title>
+    <meta name="app-build-id" content="__BUILD_ID__" />
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Nuclear-Kill-Switch: Wenn die zuletzt beobachtete Build-ID sich
+      // geändert hat, alte Service-Worker + Caches einmalig löschen.
+      // Nur bei tatsächlichem Versionswechsel — kein Effekt im Steady-State.
+      (function () {
+        try {
+          var meta = document.querySelector('meta[name="app-build-id"]');
+          var current = meta && meta.getAttribute('content');
+          if (!current || current === '__BUILD_ID__') return;
+          var KEY = 'app_build_id';
+          var last = localStorage.getItem(KEY);
+          if (last === current) return;
+          localStorage.setItem(KEY, current);
+          if (last !== null && 'caches' in window) {
+            caches.keys().then(function (names) {
+              names.forEach(function (n) { caches.delete(n); });
+            });
+          }
+        } catch (e) { /* niemals Boot blockieren */ }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

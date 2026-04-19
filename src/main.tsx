@@ -2,6 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { runStorageMigrations } from './api/storageMigrations'
+
+// Vor dem ersten Render: Client-State auf aktuelles Schema migrieren,
+// damit User nach Breaking-Changes nicht manuell den Cache löschen müssen.
+runStorageMigrations()
 
 // When a new service worker takes control, notify the app so it can show
 // a user-visible update banner instead of reloading silently.

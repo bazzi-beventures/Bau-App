@@ -336,37 +336,47 @@ function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
           {approvals === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
           {approvals !== null && approvals.length === 0 && <div className="admin-empty">Keine offenen Freigaben für dich</div>}
           {approvals !== null && approvals.length > 0 && (
-            <div className="admin-list">
+            <div>
               {approvals.map(a => (
-                <div key={a.id} className="admin-list-item" style={{ flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600 }}>{a.title}</div>
-                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                        Projekt: {a.project_name ?? '—'}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                        Eingereicht von {a.requested_by_name ?? '—'} · {fmtDate(a.created_at)}
-                      </div>
-                      {a.file_url && (
-                        <a href={a.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--color-primary, #2563eb)' }}>
-                          📎 {a.filename}
-                        </a>
-                      )}
+                <div key={a.id} className="approval-card">
+                  <div className="approval-head">
+                    <div className="approval-title">{a.title}</div>
+                    <div className="approval-project">{a.project_name ?? '—'}</div>
+                    <div className="approval-meta">
+                      <span className="approval-meta-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        {a.requested_by_name ?? '—'}
+                      </span>
+                      <span className="approval-meta-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        {fmtDate(a.created_at)}
+                      </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                  {a.file_url && (
+                    <a className="approval-file" href={a.file_url} target="_blank" rel="noreferrer">
+                      <span className="approval-file-icon">PDF</span>
+                      <span className="approval-file-name">{a.filename}</span>
+                    </a>
+                  )}
+                  <div className="approval-actions">
                     <button
-                      className="admin-btn admin-btn-success"
-                      style={{ flex: 1 }}
+                      className="approval-btn approval-btn-approve"
                       disabled={busy !== null}
                       onClick={() => handleApprove(a.id)}
                     >
                       {isBusy(a.id, 'approve') ? '…' : 'Freigeben'}
                     </button>
                     <button
-                      className="admin-btn admin-btn-danger"
-                      style={{ flex: 1 }}
+                      className="approval-btn approval-btn-reject"
                       disabled={busy !== null}
                       onClick={() => handleReject(a.id)}
                     >

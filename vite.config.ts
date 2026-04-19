@@ -6,9 +6,20 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Update BASE_PATH if the repo name is different.
 const BASE_PATH = '/Bau-App/'
 
+// Build-ID wird beim Build injiziert (index.html Platzhalter __BUILD_ID__).
+// Dient als Nuclear-Kill-Switch: Wenn localStorage eine andere ID hält als
+// das frisch geladene HTML, wird SW + Cache hart zurückgesetzt.
+const BUILD_ID = new Date().toISOString()
+
 export default defineConfig({
   base: BASE_PATH,
   plugins: [
+    {
+      name: 'inject-build-id',
+      transformIndexHtml(html) {
+        return html.replace(/__BUILD_ID__/g, BUILD_ID)
+      },
+    },
     react(),
     VitePWA({
       registerType: 'autoUpdate',

@@ -23,7 +23,8 @@ interface Props {
   onSaved: () => void
 }
 
-const ROLES = ['user_light', 'user', 'admin', 'management', 'superadmin']
+const CREATABLE_ROLES = ['user_light', 'user', 'admin']
+const ALL_ROLES = ['user_light', 'user', 'admin', 'management', 'superadmin']
 
 export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const isNew = !user
@@ -151,7 +152,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Rolle</label>
                 <select className="admin-form-select" value={role} onChange={e => setRole(e.target.value)}>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  {(isNew ? CREATABLE_ROLES : ALL_ROLES).map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               {!isNew && (
