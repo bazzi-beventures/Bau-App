@@ -78,6 +78,7 @@ export default function App() {
   const [tenantName, setTenantName] = useState('')
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
+  const [rapportInitialMessage, setRapportInitialMessage] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
   const screenRef = useRef(screen)
@@ -270,6 +271,8 @@ export default function App() {
         displayName={user.display_name}
         logoUrl={logoUrl}
         activeNav="rapport"
+        initialMessage={rapportInitialMessage}
+        onInitialMessageConsumed={() => setRapportInitialMessage(null)}
         onNavHome={() => setScreen('home')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
@@ -310,6 +313,10 @@ export default function App() {
         logoUrl={logoUrl}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
+        onStartRapport={(projectName) => {
+          setRapportInitialMessage(`Neuer Rapport für Projekt "${projectName}"`)
+          setScreen('rapport')
+        }}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}

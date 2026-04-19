@@ -162,13 +162,13 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
             </thead>
             <tbody>
               {d.days.map((day, i) => (
-                <tr key={i} className={day.absence ? 'bericht-row-absence' : ''}>
+                <tr key={i} className={day.absence && day.net_hours === 0 ? 'bericht-row-absence' : ''}>
                   <td><span className="bericht-weekday">{day.weekday}</span> {day.date.slice(0, 5)}</td>
                   <td className="bericht-mono">{day.clock_in}</td>
                   <td className="bericht-mono">{day.clock_out}</td>
                   <td className="bericht-muted">{day.break_min > 0 ? `${day.break_min}'` : '—'}</td>
                   <td className="bericht-mono bericht-bold">{fmt_hours(day.net_hours)}</td>
-                  <td className="bericht-proj">{day.absence || day.projects}</td>
+                  <td className="bericht-proj">{day.net_hours > 0 ? (day.projects || day.absence) : (day.absence || day.projects)}</td>
                 </tr>
               ))}
             </tbody>

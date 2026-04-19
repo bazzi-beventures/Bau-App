@@ -87,7 +87,7 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', zIndex: open ? 1000 : 'auto' }}>
       <input
         className={className}
         value={value}
@@ -105,10 +105,10 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
           margin: 0,
           padding: 0,
           listStyle: 'none',
-          background: 'var(--card-bg, #1e2a3a)',
-          border: '1px solid var(--border, rgba(255,255,255,0.1))',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
           borderRadius: 6,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
           maxHeight: 240,
           overflowY: 'auto',
         }}>
@@ -120,9 +120,9 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
                 padding: '8px 12px',
                 cursor: 'pointer',
                 fontSize: 13,
-                color: 'var(--text, #e2e8f0)',
-                background: i === highlighted ? 'var(--hover-bg, rgba(255,255,255,0.07))' : 'transparent',
-                borderBottom: i < suggestions.length - 1 ? '1px solid var(--border, rgba(255,255,255,0.06))' : 'none',
+                color: 'var(--text)',
+                background: i === highlighted ? 'var(--surface2)' : 'transparent',
+                borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none',
               }}
               onMouseEnter={() => setHighlighted(i)}
             >

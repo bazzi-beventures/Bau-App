@@ -106,6 +106,9 @@ export interface StaffMember {
   role: string | null
   username: string | null
   is_active: boolean
+  vacation_days_per_year: number | null
+  date_of_birth: string | null
+  pensum: number | null
 }
 
 export interface StaffRole {

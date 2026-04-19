@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
-import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin } from './ProjectsScreen'
+import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin, DisposalDetails } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { QuoteCreateForm, QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from './QuotesScreen'
+import { WORK_TYPES } from '../../api/workTypes'
 
 interface StaffMember {
   id: string
@@ -160,6 +161,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
   const [termine, setTermine] = useState<Termin[]>(project?.termine ?? [])
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
+  const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
+  const [disposal, setDisposal] = useState<DisposalDetails>(project?.disposal_details ?? EMPTY_DISPOSAL)
+  const updateDisposal = (field: keyof DisposalDetails, value: string) => setDisposal(prev => ({ ...prev, [field]: value }))
+  const disposalEmpty = (d: DisposalDetails) => !d.material && !d.menge && !d.entsorger && !d.nachweis_url && !d.bemerkung
+  const [wartungInterval, setWartungInterval] = useState<string>(project?.wartung_interval_months?.toString() ?? '')
+  const [wartungLastAt, setWartungLastAt] = useState<string>(project?.wartung_last_at ?? '')
+  const [wartungNextDueAt, setWartungNextDueAt] = useState<string>(project?.wartung_next_due_at ?? '')
+  function recomputeNextDue(lastAt: string, intervalMonths: string) {
+    const n = parseInt(intervalMonths, 10)
+    if (!lastAt || !Number.isFinite(n) || n <= 0) return ''
+    const d = new Date(lastAt); d.setMonth(d.getMonth() + n)
+    return d.toISOString().slice(0, 10)
+  }
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [staff, setStaff] = useState<StaffMember[]>([])
@@ -428,6 +442,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           monteur_ids: monteurIds,
           termine,
           kontakte,
+          disposal_details: artDerArbeit === 'Demontage' && !disposalEmpty(disposal) ? disposal : null,
+          wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
+          wartung_last_at: wartungLastAt || null,
+          wartung_next_due_at: wartungNextDueAt || null,
         }),
       })
       onSaved()
@@ -485,7 +503,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       if (reopenReason === 'garantiefall') {
         await apiFetch(`/pwa/admin/projects/${project.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: project.name, art_der_arbeit: 'Garantiefall' }),
+          body: JSON.stringify({ name: project.name, art_der_arbeit: 'Reparatur', is_warranty: true }),
         })
       }
       showToast('Projekt wiedereröffnet')
@@ -596,9 +614,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 <label className="admin-form-label">Art der Arbeit</label>
                 <select className="admin-form-select" value={artDerArbeit} onChange={e => setArtDerArbeit(e.target.value)}>
                   <option value="">— auswählen —</option>
-                  <option value="Reparatur">Reparatur</option>
-                  <option value="Neumontage">Neumontage</option>
-                  <option value="Garantiefall">Garantiefall</option>
+                  {WORK_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
                 </select>
               </div>
               <div className="admin-form-group">
@@ -636,7 +654,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
 
           {/* ── Kundenkontakt ─────────────────────────────────── */}
-          <div className="admin-table-wrap" style={{ padding: 24 }}>
+          <div className="admin-table-wrap" style={{ padding: 24, overflow: 'visible' }}>
             <div className="admin-section-title">Kundenkontakt</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
@@ -736,6 +754,80 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </button>
               </div>
             ))}
+          </div>
+
+          {/* ── Entsorgung (nur bei Demontage) ────────────────── */}
+          {artDerArbeit === 'Demontage' && (
+            <div className="admin-table-wrap" style={{ padding: 24 }}>
+              <div className="admin-section-title">Entsorgung</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Material</label>
+                  <input className="admin-form-input" value={disposal.material} onChange={e => updateDisposal('material', e.target.value)} placeholder="z.B. Aluminium-Storen, Rollladen-Lamellen" />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Menge</label>
+                    <input className="admin-form-input" value={disposal.menge} onChange={e => updateDisposal('menge', e.target.value)} placeholder="z.B. 12 Stk · 45 kg" />
+                  </div>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Entsorger</label>
+                    <input className="admin-form-input" value={disposal.entsorger} onChange={e => updateDisposal('entsorger', e.target.value)} placeholder="Firma / Sammelstelle" />
+                  </div>
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Nachweis (URL)</label>
+                  <input className="admin-form-input" type="url" value={disposal.nachweis_url} onChange={e => updateDisposal('nachweis_url', e.target.value)} placeholder="Link zu Entsorgungsbeleg / Foto" />
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Bemerkung</label>
+                  <textarea className="admin-form-input" value={disposal.bemerkung} onChange={e => updateDisposal('bemerkung', e.target.value)} rows={2} style={{ resize: 'vertical' }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Wartungs-Intervall ────────────────────────────── */}
+          <div className="admin-table-wrap" style={{ padding: 24 }}>
+            <div className="admin-section-title">Wartung</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+              Optional: Wartungs-Intervall (in Monaten) + letzter Service → nächste Fälligkeit wird automatisch berechnet.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Intervall (Monate)</label>
+                <input
+                  className="admin-form-input" type="number" min="1" step="1"
+                  value={wartungInterval}
+                  onChange={e => {
+                    const v = e.target.value
+                    setWartungInterval(v)
+                    setWartungNextDueAt(recomputeNextDue(wartungLastAt, v))
+                  }}
+                  placeholder="z.B. 12"
+                />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Letzter Service</label>
+                <input
+                  className="admin-form-input" type="date"
+                  value={wartungLastAt}
+                  onChange={e => {
+                    const v = e.target.value
+                    setWartungLastAt(v)
+                    setWartungNextDueAt(recomputeNextDue(v, wartungInterval))
+                  }}
+                />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Nächste Fälligkeit</label>
+                <input
+                  className="admin-form-input" type="date"
+                  value={wartungNextDueAt}
+                  onChange={e => setWartungNextDueAt(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
           {/* ── Zuständigkeiten ───────────────────────────────── */}
@@ -1241,7 +1333,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   checked={reopenReason === 'garantiefall'}
                   onChange={() => setReopenReason('garantiefall')}
                 />
-                Garantiefall <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>(setzt Art der Arbeit auf «Garantiefall»)</span>
+                Garantiefall <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>(Reparatur, als Garantie markiert)</span>
               </label>
             </div>
             <div className="admin-confirm-actions">

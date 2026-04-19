@@ -5,9 +5,11 @@ import FinanzenTab from './tabs/FinanzenTab'
 import ArbeitszeitTab from './tabs/ArbeitszeitTab'
 import MaterialTab from './tabs/MaterialTab'
 import PricingTab from './tabs/PricingTab'
+import WartungTab from './tabs/WartungTab'
+import LeistungsartTab from './tabs/LeistungsartTab'
 import './kpi-dashboard.css'
 
-type Tab = 'uebersicht' | 'projekte' | 'finanzen' | 'arbeitszeit' | 'material' | 'pricing'
+type Tab = 'uebersicht' | 'projekte' | 'finanzen' | 'arbeitszeit' | 'material' | 'pricing' | 'wartung' | 'leistungsart'
 
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: 'uebersicht',  label: 'Übersicht',          color: '#0d9488' },
@@ -16,6 +18,8 @@ const TABS: { id: Tab; label: string; color: string }[] = [
   { id: 'arbeitszeit', label: 'Arbeitszeit & HR',   color: '#15803d' },
   { id: 'material',    label: 'Material & Lager',   color: '#4338ca' },
   { id: 'pricing',     label: 'Pricing & Supplier', color: '#7c3aed' },
+  { id: 'wartung',     label: 'Wartungen',          color: '#0ea5e9' },
+  { id: 'leistungsart',label: 'Leistungsart',       color: '#0891b2' },
 ]
 
 export default function KpiScreen() {
@@ -29,6 +33,8 @@ export default function KpiScreen() {
       case 'arbeitszeit': return <ArbeitszeitTab />
       case 'material':    return <MaterialTab />
       case 'pricing':     return <PricingTab />
+      case 'wartung':     return <WartungTab />
+      case 'leistungsart': return <LeistungsartTab />
     }
   }
 

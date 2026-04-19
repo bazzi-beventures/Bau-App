@@ -3,7 +3,7 @@ import { logout } from '../api/auth'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
   IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
-  IconLogout, IconAddressBook,
+  IconLogout, IconAddressBook, IconSettings,
 } from './AdminIcons'
 
 interface Props {
@@ -96,6 +96,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           <>
             <div className="admin-nav-group-label">System</div>
             <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
+            <NavItem label="Konfiguration" target="configuration" current={screen} onNav={onNav} icon={<IconSettings />} />
           </>
         )}
       </nav>

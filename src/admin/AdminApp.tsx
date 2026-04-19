@@ -21,6 +21,7 @@ import ProjectOverviewScreen from './operative/ProjectOverviewScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
 import KpiScreen from './kpis/KpiScreen'
+import ConfigurationScreen from './configuration/ConfigurationScreen'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
 import './tokens.css'
 import './admin.css'
@@ -71,6 +72,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'pricing-rules': 'Preisregeln',
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
+  'configuration': 'Konfiguration',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
@@ -102,7 +104,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const isManagement = user.role === 'management' || user.role === 'superadmin'
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users') && !isManagement) {
+    if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
@@ -122,6 +124,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
       case 'kpis':         return <KpiScreen />
+      case 'configuration': return <ConfigurationScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }

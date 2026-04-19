@@ -17,6 +17,7 @@ export type AdminScreen =
   | 'pricing-rules'
   | 'users'
   | 'kpis'
+  | 'configuration'
 
 export interface AdminNavState {
   screen: AdminScreen

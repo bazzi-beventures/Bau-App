@@ -46,6 +46,7 @@ interface Props {
   logoUrl?: string
   onNavHome: () => void
   onNavRapport: () => void
+  onStartRapport: (projectName: string) => void
   onNavArbeitszeit: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
@@ -158,7 +159,7 @@ function buildTimeline(projects: Project[]): { info: TimelineInfo; spans: Projec
   return { info: { start: startISO, days, todayIndex }, spans }
 }
 
-export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onStartRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
@@ -270,6 +271,37 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onNav
               </div>
             </div>
           )}
+
+          {/* Rapport erstellen */}
+          <button
+            type="button"
+            onClick={() => onStartRapport(selected.name)}
+            style={{
+              width: '100%',
+              padding: '14px 16px',
+              marginBottom: 12,
+              borderRadius: 12,
+              border: 'none',
+              background: 'var(--accent-blue)',
+              color: '#fff',
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <line x1="9" y1="14" x2="15" y2="14"/>
+            </svg>
+            Rapport erstellen
+          </button>
 
           {/* Projektinfos */}
           <div className="projekte-detail-card">

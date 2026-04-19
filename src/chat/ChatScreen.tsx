@@ -19,6 +19,8 @@ interface Props {
   displayName: string
   logoUrl?: string
   activeNav: 'rapport' | 'arbeitszeit'
+  initialMessage?: string | null
+  onInitialMessageConsumed?: () => void
   onNavHome: () => void
   onNavArbeitszeit: () => void
   onNavProjekte: () => void
@@ -33,7 +35,7 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+export default function ChatScreen({ displayName, logoUrl, activeNav, initialMessage, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -54,6 +56,14 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, onNavHome,
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const initialSentRef = useRef(false)
+  useEffect(() => {
+    if (!initialMessage || initialSentRef.current) return
+    initialSentRef.current = true
+    handleResponse(initialMessage, sendMessage(initialMessage))
+    onInitialMessageConsumed?.()
+  }, [initialMessage])
 
   function addMessage(msg: Omit<Message, 'id'>) {
     setMessages(prev => [...prev, { ...msg, id: nextId() }])

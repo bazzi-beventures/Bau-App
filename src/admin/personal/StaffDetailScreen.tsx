@@ -16,6 +16,9 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
   const [monthlySalary, setMonthlySalary] = useState(member?.monthly_salary?.toString() ?? '')
   const [rapportpflicht, setRapportpflicht] = useState<boolean>(member?.rapportpflicht ?? true)
   const [projektleiter, setProjektleiter] = useState<boolean>(member?.projektleiter ?? false)
+  const [vacationDays, setVacationDays] = useState(member?.vacation_days_per_year?.toString() ?? '')
+  const [dateOfBirth, setDateOfBirth] = useState(member?.date_of_birth ?? '')
+  const [pensum, setPensum] = useState(member?.pensum?.toString() ?? '100')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [roles, setRoles] = useState<StaffRole[]>([])
@@ -39,6 +42,9 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
         monthly_salary: monthlySalary ? parseFloat(monthlySalary) : undefined,
         rapportpflicht: rapportpflicht,
         projektleiter: projektleiter,
+        vacation_days_per_year: vacationDays ? parseInt(vacationDays) : undefined,
+        date_of_birth: dateOfBirth || undefined,
+        pensum: pensum ? Math.max(0, Math.min(100, parseInt(pensum))) : 100,
       })
       onSaved()
     } catch (err: unknown) {
@@ -83,6 +89,50 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                       <option key={r.name} value={r.name}>{r.name}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Geburtsdatum</label>
+                  <input
+                    className="admin-form-input"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={e => setDateOfBirth(e.target.value)}
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                    Für automatische Altersgrenze bei Ferienanspruch.
+                  </div>
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Ferientage / Jahr (Override)</label>
+                  <input
+                    className="admin-form-input"
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={vacationDays}
+                    onChange={e => setVacationDays(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="Tenant-Default"
+                  />
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                    Leer = Standard aus Konfiguration (ggf. alters-basiert).
+                  </div>
+                </div>
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Pensum (%)</label>
+                <input
+                  className="admin-form-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={pensum}
+                  onChange={e => setPensum(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="100"
+                />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Beschäftigungsgrad. 100% = Vollzeit (Tenant-Soll). Bei 80% und 40h-Woche = 32h Soll (6.4h/Tag).
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

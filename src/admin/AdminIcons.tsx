@@ -40,6 +40,9 @@ export function IconChart() {
 export function IconLogout() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 0 0-1 1v12a1 1 0 1 0 2 0V5h10v11a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H3zm7 9a1 1 0 0 0 1-1V7.414l1.293 1.293a1 1 0 1 0 1.414-1.414l-3-3a1 1 0 0 0-1.414 0l-3 3a1 1 0 1 0 1.414 1.414L9 7.414V11a1 1 0 0 0 1 1z" clipRule="evenodd"/></svg>
 }
+export function IconSettings() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.53 1.53 0 0 1-2.29.95c-1.37-.84-2.94.73-2.1 2.1a1.53 1.53 0 0 1-.95 2.29c-1.56.38-1.56 2.6 0 2.98.92.22 1.44 1.23.95 2.29-.84 1.37.73 2.94 2.1 2.1a1.53 1.53 0 0 1 2.29.95c.38 1.56 2.6 1.56 2.98 0a1.53 1.53 0 0 1 2.29-.95c1.37.84 2.94-.73 2.1-2.1a1.53 1.53 0 0 1 .95-2.29c1.56-.38 1.56-2.6 0-2.98a1.53 1.53 0 0 1-.95-2.29c.84-1.37-.73-2.94-2.1-2.1a1.53 1.53 0 0 1-2.29-.95zM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" clipRule="evenodd"/></svg>
+}
 export function IconAddressBook() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 0 0-1 1v1H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V3a1 1 0 0 0-1-1H9zm0 2h2v1a1 1 0 0 0 1 1h1v8H7V6h1a1 1 0 0 0 1-1V4zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5a3 3 0 0 1 6 0H7z"/></svg>
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { BerichtType } from './BerichtScreen'
+import { WORK_TYPES, workTypeLabel } from '../api/workTypes'
 
 const OFFLINE_QUEUE_KEY = 'zeit_offline_queue'
 
@@ -109,9 +110,7 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
   const [queueSize, setQueueSize] = useState(() => loadQueue().length)
   const [draining, setDraining] = useState(false)
   const [showArtSelector, setShowArtSelector] = useState(false)
-  const [selectedArt, setSelectedArt] = useState<string>('Montage')
-
-  const ART_OPTIONS = ['Montage', 'Reparatur', 'Werkstatt']
+  const [selectedArt, setSelectedArt] = useState<string>('Neumontage')
 
   const drainQueue = useCallback(async () => {
     const q = loadQueue()
@@ -187,7 +186,12 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
       setCorrForm({ date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '' })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      setResult({ text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Einreichen. Bitte erneut versuchen.', isError: true })
+      let text = 'Fehler beim Einreichen. Bitte erneut versuchen.'
+      if (isOfflineError(err)) text = 'Keine Internetverbindung'
+      else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
+        text = 'Für diesen Tag ist bereits eine Absenz genehmigt — keine Zeitkorrektur möglich.'
+      }
+      setResult({ text, isError: true })
     } finally {
       setCorrLoading(false)
     }
@@ -295,20 +299,20 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
             {action.action === 'clock_in' && !isAdmin && showArtSelector && (
               <div className="correction-form" style={{ paddingTop: 12, paddingBottom: 12 }}>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Art der Arbeit wählen:</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  {ART_OPTIONS.map(opt => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  {WORK_TYPES.map(opt => (
                     <button
-                      key={opt}
-                      onClick={() => setSelectedArt(opt)}
+                      key={opt.value}
+                      onClick={() => setSelectedArt(opt.value)}
                       style={{
-                        flex: 1, padding: '7px 4px', borderRadius: 8,
-                        border: selectedArt === opt ? 'none' : '1px solid var(--border)',
-                        background: selectedArt === opt ? 'var(--accent-green)' : 'var(--surface2)',
-                        color: selectedArt === opt ? '#fff' : 'var(--text)',
-                        fontWeight: selectedArt === opt ? 600 : 400,
+                        padding: '7px 4px', borderRadius: 8,
+                        border: selectedArt === opt.value ? 'none' : '1px solid var(--border)',
+                        background: selectedArt === opt.value ? 'var(--accent-green)' : 'var(--surface2)',
+                        color: selectedArt === opt.value ? '#fff' : 'var(--text)',
+                        fontWeight: selectedArt === opt.value ? 600 : 400,
                         fontSize: 13, cursor: 'pointer',
                       }}
-                    >{opt}</button>
+                    >{opt.label}</button>
                   ))}
                 </div>
                 <div className="corr-actions">
@@ -320,7 +324,7 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
                     disabled={loadingIdx === idx}
                     onClick={() => { setShowArtSelector(false); sendAction('clock_in', idx, { art_der_arbeit: selectedArt }) }}
                   >
-                    {loadingIdx === idx ? '…' : `Einstempeln (${selectedArt})`}
+                    {loadingIdx === idx ? '…' : `Einstempeln (${workTypeLabel(selectedArt)})`}
                   </button>
                 </div>
               </div>

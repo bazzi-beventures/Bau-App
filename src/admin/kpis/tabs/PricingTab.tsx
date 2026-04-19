@@ -1,9 +1,13 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useKpiData } from '../useKpiData'
 import type { CategoryPricingRow, SupplierPricingRow, InstallationTemplateRow, ColumnDef } from '../types'
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
+import { apiFetch } from '../../../api/client'
+
+interface SupplierLite { id: string; name: string }
+type SupplierPricingRowWithName = SupplierPricingRow & { supplier_name: string }
 
 const num = (v: unknown) => typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 2 }) : '—'
 const chf = (v: unknown) => typeof v === 'number' ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0 })}` : '—'
@@ -20,8 +24,8 @@ const INSTALL_COLUMNS: ColumnDef<InstallationTemplateRow>[] = [
   { key: 'notes', label: 'Hinweis' },
 ]
 
-const SUP_COLUMNS: ColumnDef<SupplierPricingRow>[] = [
-  { key: 'supplier_id', label: 'Lieferant' },
+const SUP_COLUMNS: ColumnDef<SupplierPricingRowWithName>[] = [
+  { key: 'supplier_name', label: 'Lieferant' },
   { key: 'category', label: 'Kategorie' },
   { key: 'markup_pct', label: 'Aufschlag %', align: 'right', format: (v) => typeof v === 'number' ? `${v}%` : '—' },
 ]
@@ -31,7 +35,21 @@ export default function PricingTab() {
   const { data: supData, loading: supLoad, error: supErr } = useKpiData<SupplierPricingRow>('supplier_pricing_rules')
   const { data: installData, loading: installLoad, error: installErr } = useKpiData<InstallationTemplateRow>('installation_templates')
 
-  const loading = catLoad || supLoad || installLoad
+  const [suppliers, setSuppliers] = useState<SupplierLite[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    apiFetch('/pwa/admin/suppliers')
+      .then((rows) => { if (!cancelled) setSuppliers(rows as SupplierLite[]) })
+      .catch(() => { if (!cancelled) setSuppliers([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  const supRowsWithName = useMemo<SupplierPricingRowWithName[]>(() => {
+    const map = new Map((suppliers ?? []).map((s) => [s.id, s.name]))
+    return (supData ?? []).map((r) => ({ ...r, supplier_name: map.get(r.supplier_id) ?? r.supplier_id }))
+  }, [supData, suppliers])
+
+  const loading = catLoad || supLoad || installLoad || suppliers === null
   const error = catErr || supErr || installErr
 
   const cards = useMemo(() => {
@@ -74,7 +92,7 @@ export default function PricingTab() {
       <DataTable data={catData ?? []} columns={CAT_COLUMNS} defaultSort={{ key: 'margin_factor', dir: 'desc' }} />
 
       <h3 className="kpi-bi-section-title" style={{ marginTop: 8 }}>Lieferanten-Aufschläge</h3>
-      <DataTable data={supData ?? []} columns={SUP_COLUMNS} defaultSort={{ key: 'markup_pct', dir: 'desc' }} />
+      <DataTable data={supRowsWithName} columns={SUP_COLUMNS} defaultSort={{ key: 'markup_pct', dir: 'desc' }} />
 
       <h3 className="kpi-bi-section-title" style={{ marginTop: 8 }}>Montage-Vorlagen</h3>
       <DataTable data={installData ?? []} columns={INSTALL_COLUMNS} defaultSort={{ key: 'default_fee', dir: 'asc' }} />

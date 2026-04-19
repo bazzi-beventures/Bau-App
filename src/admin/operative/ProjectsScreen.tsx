@@ -15,6 +15,14 @@ export interface Kontakt {
   email: string
 }
 
+export interface DisposalDetails {
+  material: string
+  menge: string
+  entsorger: string
+  nachweis_url: string
+  bemerkung: string
+}
+
 export type ProjectStatus = 'offen' | 'bestellung_ausgeloest' | 'demontage' | 'abgeschlossen'
 
 export interface Project {
@@ -32,6 +40,11 @@ export interface Project {
   monteur_ids: string[]
   termine: Termin[]
   kontakte: Kontakt[]
+  disposal_details: DisposalDetails | null
+  is_warranty?: boolean
+  wartung_interval_months?: number | null
+  wartung_last_at?: string | null
+  wartung_next_due_at?: string | null
   status: ProjectStatus
   is_closed: boolean
   created_at: string

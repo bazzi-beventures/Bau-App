@@ -235,10 +235,12 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
         onLoggedOut()
         return
       }
-      showToast(
-        isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Einreichen',
-        'error',
-      )
+      let msg = 'Fehler beim Einreichen'
+      if (isOfflineError(err)) msg = 'Keine Internetverbindung'
+      else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
+        msg = 'Für diesen Tag ist bereits eine Absenz genehmigt — keine Zeitkorrektur möglich.'
+      }
+      showToast(msg, 'error')
     } finally {
       setCorrLoading(false)
     }

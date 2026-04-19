@@ -125,6 +125,36 @@ export interface KpiMaterialRow {
   letzter_verbrauch: string | null
 }
 
+export interface KpiWartungRow {
+  tenant_id: string
+  project_id: string
+  project_name: string
+  customer_name: string | null
+  wartung_interval_months: number | null
+  wartung_last_at: string | null
+  wartung_next_due_at: string | null
+  days_remaining: number | null
+  status: 'kein_plan' | 'ueberfaellig' | 'faellig' | 'anstehend' | 'ok'
+}
+
+export interface KpiLeistungsartMonatRow {
+  tenant_id: string
+  monat: string
+  art_der_arbeit: string | null
+  total_stunden: number
+  anzahl_sessions: number
+  anzahl_mitarbeiter: number
+}
+
+export interface KpiMaterialLeistungsartRow {
+  tenant_id: string
+  art_der_arbeit: string
+  anzahl_artikel: number
+  anzahl_buchungen: number
+  total_materialkosten: number
+  total_materialkosten_intern: number
+}
+
 export interface CategoryPricingRow {
   id: string
   tenant_id: string
