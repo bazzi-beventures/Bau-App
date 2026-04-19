@@ -11,10 +11,32 @@
     <link rel="apple-touch-icon" href="/Bau-App/icons/icon-192.png" />
     <link rel="manifest" href="/Bau-App/manifest.json" />
     <title>Gehlhaar App Test</title>
-    <script type="module" crossorigin src="/Bau-App/assets/index-CkuKvQZJ.js"></script>
-    <link rel="stylesheet" crossorigin href="/Bau-App/assets/index-t1jE6Cf3.css">
+    <meta name="app-build-id" content="2026-04-19T13:35:27.889Z" />
+    <script type="module" crossorigin src="/Bau-App/assets/index-Cztcyp7G.js"></script>
+    <link rel="stylesheet" crossorigin href="/Bau-App/assets/index-By3bmmcs.css">
   <script id="vite-plugin-pwa:register-sw" src="/Bau-App/registerSW.js"></script></head>
   <body>
     <div id="root"></div>
+    <script>
+      // Nuclear-Kill-Switch: Wenn die zuletzt beobachtete Build-ID sich
+      // geändert hat, alte Service-Worker + Caches einmalig löschen.
+      // Nur bei tatsächlichem Versionswechsel — kein Effekt im Steady-State.
+      (function () {
+        try {
+          var meta = document.querySelector('meta[name="app-build-id"]');
+          var current = meta && meta.getAttribute('content');
+          if (!current || current === '2026-04-19T13:35:27.889Z') return;
+          var KEY = 'app_build_id';
+          var last = localStorage.getItem(KEY);
+          if (last === current) return;
+          localStorage.setItem(KEY, current);
+          if (last !== null && 'caches' in window) {
+            caches.keys().then(function (names) {
+              names.forEach(function (n) { caches.delete(n); });
+            });
+          }
+        } catch (e) { /* niemals Boot blockieren */ }
+      })();
+    </script>
   </body>
 </html>
