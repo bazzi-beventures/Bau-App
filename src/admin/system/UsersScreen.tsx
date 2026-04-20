@@ -35,6 +35,7 @@ export default function UsersScreen() {
     const q = search.toLowerCase()
     return (
       (u.display_name || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
       u.role.toLowerCase().includes(q)
     )
@@ -69,7 +70,7 @@ export default function UsersScreen() {
         <div className="admin-filter-bar">
           <input
             className="admin-search"
-            placeholder="Name, E-Mail oder Rolle suchen…"
+            placeholder="Name, Benutzername, E-Mail oder Rolle suchen…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -82,6 +83,7 @@ export default function UsersScreen() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Benutzername</th>
                 <th>E-Mail</th>
                 <th>Rolle</th>
                 <th>Status</th>
@@ -90,10 +92,11 @@ export default function UsersScreen() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="admin-table-empty">Keine Benutzer gefunden.</td></tr>
+                <tr><td colSpan={6} className="admin-table-empty">Keine Benutzer gefunden.</td></tr>
               ) : filtered.map(u => (
                 <tr key={u.id} onClick={() => setSelected(u)}>
                   <td><strong>{u.display_name || '—'}</strong></td>
+                  <td style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono, monospace)' }}>{u.username || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{u.email || '—'}</td>
                   <td>
                     <span className={`admin-badge ${u.role === 'admin' || u.role === 'management' || u.role === 'superadmin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>

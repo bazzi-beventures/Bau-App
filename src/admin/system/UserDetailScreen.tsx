@@ -50,7 +50,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!displayName.trim() && !email.trim()) return
+    if (!displayName.trim()) return
     setError('')
     setSaving(true)
     try {
@@ -128,14 +128,15 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                 <input className="admin-form-input" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Max Muster" />
               </div>
               <div className="admin-form-group">
-                <label className="admin-form-label">E-Mail{isNew ? ' *' : ''}</label>
+                <label className="admin-form-label">E-Mail</label>
                 <input
                   className="admin-form-input"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="user@firma.ch"
+                  placeholder="user@firma.ch (optional)"
                 />
+                <div className="admin-form-hint">Optional. Nur für Benachrichtigungen — Login läuft über den Benutzernamen.</div>
               </div>
               {!isNew && user.username && (
                 <div className="admin-form-group">
@@ -171,7 +172,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
 
             <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose}>Abbrechen</button>
-              <button type="submit" className="admin-btn admin-btn-primary" disabled={saving || (!displayName.trim() && !email.trim())}>
+              <button type="submit" className="admin-btn admin-btn-primary" disabled={saving || !displayName.trim()}>
                 {saving ? 'Speichern…' : 'Speichern'}
               </button>
             </div>

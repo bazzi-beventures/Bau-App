@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 1
+export const APP_DATA_VERSION = 3
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -56,7 +56,28 @@ const migration_0_to_1: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1]
+// v1 → v2: UserInfo-Shape bekommt `username`. Storage-Keys bleiben unverändert —
+// der Username kommt aus /pwa/me beim nächsten App-Load. Kein Wipe nötig.
+const migration_1_to_2: Migration = {
+  from: 1,
+  to: 2,
+  run: () => {
+    // no-op
+  },
+}
+
+// v2 → v3: Project-Shape ändert sich (customer via FK-Embed statt denormalisiert;
+// Kontakt-Feld `rolle` → `kommentar`). Gecachte Listen sind nicht in localStorage —
+// no-op reicht, damit versionsbasierte Fallback-Wipes bei unbekannten Clients greifen.
+const migration_2_to_3: Migration = {
+  from: 2,
+  to: 3,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

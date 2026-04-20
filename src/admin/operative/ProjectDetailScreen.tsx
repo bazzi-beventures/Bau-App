@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
-import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin, DisposalDetails } from './ProjectsScreen'
+import { Kontakt, Project, ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE, Termin, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { QuoteCreateForm, QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from './QuotesScreen'
 import { WORK_TYPES } from '../../api/workTypes'
@@ -150,9 +150,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   const [name, setName] = useState(project?.name ?? '')
   const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
-  const [customerName, setCustomerName] = useState(project?.customer_name ?? '')
-  const [customerEmail, setCustomerEmail] = useState(project?.customer_email ?? '')
-  const [customerAddress, setCustomerAddress] = useState(project?.customer_address ?? '')
+  const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
+  const [localContactName, setLocalContactName] = useState(project?.local_contact_name ?? '')
+  const [localContactPhone, setLocalContactPhone] = useState(project?.local_contact_phone ?? '')
   const [auftraggeber, setAuftraggeber] = useState(project?.auftraggeber ?? '')
   const [eigentuemer, setEigentuemer] = useState(project?.eigentuemer ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
@@ -387,10 +387,18 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (!id) return
     const c = customers.find(x => x.id === id)
     if (!c) return
-    setCustomerName(c.name)
-    setCustomerEmail(c.email ?? '')
-    setCustomerAddress(c.address ?? '')
+    if (!objectAddress) setObjectAddress(c.object_address ?? '')
+    if (!localContactName) setLocalContactName(c.local_contact_name ?? '')
+    if (!localContactPhone) setLocalContactPhone(c.local_contact_phone ?? '')
   }
+
+  const selectedCustomer = customers.find(c => c.id === customerId) ?? null
+  const billingRecipient = selectedCustomer
+    ? (selectedCustomer.billing_name || selectedCustomer.name)
+    : (project ? projectCustomerName(project) : '')
+  const billingAddress = selectedCustomer
+    ? (selectedCustomer.billing_address || selectedCustomer.address || '')
+    : (project ? projectBillingAddress(project) : '')
 
   // ── Termine helpers ──────────────────────────────────────────
   function addTermin() {
@@ -405,7 +413,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   // ── Kontakte helpers ─────────────────────────────────────────
   function addKontakt() {
-    setKontakte(prev => [...prev, { name: '', rolle: 'Objekt', telefon: '', email: '' }])
+    setKontakte(prev => [...prev, { name: '', kommentar: '', telefon: '', email: '' }])
   }
   function updateKontakt(i: number, field: keyof Kontakt, value: string) {
     setKontakte(prev => prev.map((k, idx) => idx === i ? { ...k, [field]: value } : k))
@@ -431,9 +439,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         body: JSON.stringify({
           name: name.trim(),
           customer_id: customerId || null,
-          customer_name: customerName || null,
-          customer_email: customerEmail || null,
-          customer_address: customerAddress || null,
+          object_address: objectAddress || null,
+          local_contact_name: localContactName || null,
+          local_contact_phone: localContactPhone || null,
           auftraggeber: auftraggeber || null,
           eigentuemer: eigentuemer || null,
           art_der_arbeit: artDerArbeit || null,
@@ -653,34 +661,46 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </div>
           </div>
 
-          {/* ── Kundenkontakt ─────────────────────────────────── */}
+          {/* ── Kunde & Adressen ──────────────────────────────── */}
           <div className="admin-table-wrap" style={{ padding: 24, overflow: 'visible' }}>
-            <div className="admin-section-title">Kundenkontakt</div>
+            <div className="admin-section-title">Kunde & Adressen</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
-                <label className="admin-form-label">Kunde aus Kundenstamm</label>
+                <label className="admin-form-label">Kunde (Rechnungsempfänger)</label>
                 <select
                   className="admin-form-select"
                   value={customerId}
                   onChange={e => handleSelectCustomer(e.target.value)}
                 >
-                  <option value="">— manuell eintragen —</option>
+                  <option value="">— kein Kunde zugeordnet —</option>
                   {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}{c.address ? ` · ${c.address}` : ''}</option>
+                    <option key={c.id} value={c.id}>{c.name}{c.billing_address ? ` · ${c.billing_address}` : c.address ? ` · ${c.address}` : ''}</option>
                   ))}
                 </select>
+                {customerId && (
+                  <div style={{ marginTop: 6, padding: '8px 12px', background: 'var(--bg-subtle, #f5f5f5)', borderRadius: 6, fontSize: 13, color: 'var(--muted)' }}>
+                    <strong>Rechnung an:</strong> {billingRecipient || '—'}{billingAddress ? `, ${billingAddress}` : ''}
+                  </div>
+                )}
               </div>
+
               <div className="admin-form-group">
-                <label className="admin-form-label">Kundenname</label>
-                <input className="admin-form-input" value={customerName} onChange={e => { setCustomerName(e.target.value); setCustomerId('') }} />
+                <label className="admin-form-label">Objektadresse (Baustelle)</label>
+                <AddressAutocomplete className="admin-form-input" value={objectAddress} onChange={setObjectAddress} />
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Wird beim Auswählen des Kunden als Vorschlag übernommen und kann pro Projekt überschrieben werden.
+                </div>
               </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Kunden-E-Mail</label>
-                <input className="admin-form-input" type="email" value={customerEmail} onChange={e => { setCustomerEmail(e.target.value); setCustomerId('') }} />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Kundenadresse</label>
-                <AddressAutocomplete className="admin-form-input" value={customerAddress} onChange={v => { setCustomerAddress(v); setCustomerId('') }} />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Lokaler Kontakt — Name</label>
+                  <input className="admin-form-input" value={localContactName} onChange={e => setLocalContactName(e.target.value)} placeholder="z.B. Hauswart" />
+                </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Lokaler Kontakt — Telefon</label>
+                  <input className="admin-form-input" value={localContactPhone} onChange={e => setLocalContactPhone(e.target.value)} />
+                </div>
               </div>
             </div>
           </div>
@@ -735,11 +755,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   <input className="admin-form-input" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
-                  <label className="admin-form-label">Rolle</label>
-                  <select className="admin-form-select" value={k.rolle} onChange={e => updateKontakt(i, 'rolle', e.target.value)}>
-                    <option value="Objekt">Objekt</option>
-                    <option value="Auftraggeber">Auftraggeber</option>
-                  </select>
+                  <label className="admin-form-label">Kommentar</label>
+                  <input className="admin-form-input" value={k.kommentar} onChange={e => updateKontakt(i, 'kommentar', e.target.value)} placeholder="z.B. Hausabwart" />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Telefon</label>

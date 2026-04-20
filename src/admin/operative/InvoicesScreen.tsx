@@ -16,7 +16,7 @@ interface Invoice {
 interface Project {
   id: string
   name: string
-  customer_email?: string | null
+  customer?: { email?: string | null } | null
   is_closed?: boolean
 }
 
@@ -124,7 +124,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     const proj = projects.length > 0
       ? projects.find(p => p.name === inv.project_name)
       : null
-    setSendEmail(proj?.customer_email || '')
+    setSendEmail(proj?.customer?.email || '')
     setSendInvoice(inv)
   }
 

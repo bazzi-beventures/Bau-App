@@ -232,9 +232,19 @@ export async function rejectCorrection(id: string): Promise<void> {
 export interface Project {
   id: string
   name: string
-  customer_name: string | null
-  customer_email: string | null
-  customer_address: string | null
+  customer_id: string | null
+  customer: {
+    id: string
+    name: string | null
+    billing_name: string | null
+    address: string | null
+    billing_address: string | null
+    object_address: string | null
+    email: string | null
+  } | null
+  object_address: string | null
+  local_contact_name: string | null
+  local_contact_phone: string | null
   is_closed: boolean
   created_at: string
 }

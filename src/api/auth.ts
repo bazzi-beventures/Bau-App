@@ -2,6 +2,7 @@ import { apiFetch, clearToken } from './client'
 
 export interface UserInfo {
   authorized_user_id: string
+  username: string | null
   display_name: string
   email: string | null
   staff_id: string | null

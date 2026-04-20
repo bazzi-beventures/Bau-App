@@ -9,9 +9,20 @@ interface Termin {
 
 interface Kontakt {
   name: string
-  rolle: string
+  kommentar: string
   telefon: string
   email: string
+}
+
+interface EmbeddedCustomer {
+  id: string
+  name: string | null
+  billing_name: string | null
+  address: string | null
+  billing_address: string | null
+  object_address: string | null
+  email: string | null
+  phone: string | null
 }
 
 interface Project {
@@ -20,8 +31,11 @@ interface Project {
   art_der_arbeit: string | null
   auftraggeber: string | null
   eigentuemer: string | null
-  customer_name: string | null
-  customer_address: string | null
+  customer_id: string | null
+  customer: EmbeddedCustomer | null
+  object_address: string | null
+  local_contact_name: string | null
+  local_contact_phone: string | null
   termine: Termin[]
   kontakte: Kontakt[]
   bemerkung: string | null
@@ -318,19 +332,28 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <span className="projekte-detail-value">{selected.eigentuemer}</span>
               </div>
             )}
-            {selected.customer_name && (
+            {(selected.customer?.billing_name || selected.customer?.name) && (
               <div className="projekte-detail-row">
                 <span className="projekte-detail-label">Kunde</span>
-                <span className="projekte-detail-value">{selected.customer_name}</span>
+                <span className="projekte-detail-value">{selected.customer?.billing_name || selected.customer?.name}</span>
               </div>
             )}
-            {selected.customer_address && (
+            {selected.object_address && (
               <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Adresse</span>
-                <span className="projekte-detail-value">{selected.customer_address}</span>
+                <span className="projekte-detail-label">Objektadresse</span>
+                <span className="projekte-detail-value">{selected.object_address}</span>
               </div>
             )}
-            {!selected.auftraggeber && !selected.eigentuemer && !selected.customer_name && !selected.customer_address && (
+            {selected.local_contact_name && (
+              <div className="projekte-detail-row">
+                <span className="projekte-detail-label">Vor Ort</span>
+                <span className="projekte-detail-value">
+                  {selected.local_contact_name}
+                  {selected.local_contact_phone ? ` · ${selected.local_contact_phone}` : ''}
+                </span>
+              </div>
+            )}
+            {!selected.auftraggeber && !selected.eigentuemer && !selected.customer && !selected.object_address && !selected.local_contact_name && (
               <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
             )}
           </div>
@@ -367,7 +390,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <div key={i} className="projekte-kontakt-item">
                   <div className="projekte-kontakt-item-header">
                     <span className="projekte-kontakt-item-name">{k.name}</span>
-                    <span className="projekte-kontakt-item-rolle">{k.rolle}</span>
+                    {k.kommentar && <span className="projekte-kontakt-item-rolle">{k.kommentar}</span>}
                   </div>
                   <div className="projekte-kontakt-item-links">
                     {k.telefon && (
@@ -599,7 +622,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                           </div>
                           <div className="projekte-tile-name">{p.name}</div>
                           <div className="projekte-tile-sub">
-                            {p.art_der_arbeit || p.auftraggeber || p.customer_name || '—'}
+                            {p.art_der_arbeit || p.auftraggeber || p.customer?.billing_name || p.customer?.name || '—'}
                           </div>
                           {p.bemerkung && (
                             <div style={{ fontSize: 11, color: '#c53030', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

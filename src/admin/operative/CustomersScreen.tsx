@@ -10,6 +10,11 @@ export interface Customer {
   email: string | null
   phone: string | null
   address: string | null
+  billing_name: string | null
+  billing_address: string | null
+  object_address: string | null
+  local_contact_name: string | null
+  local_contact_phone: string | null
   notes: string | null
   created_at: string
 }
@@ -29,6 +34,13 @@ function CustomerForm({
   const [email, setEmail] = useState(initial?.email ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
+  const initialBillingDiffers = !!(initial?.billing_name || initial?.billing_address)
+  const [billingDiffers, setBillingDiffers] = useState(initialBillingDiffers)
+  const [billingName, setBillingName] = useState(initial?.billing_name ?? '')
+  const [billingAddress, setBillingAddress] = useState(initial?.billing_address ?? '')
+  const [objectAddress, setObjectAddress] = useState(initial?.object_address ?? '')
+  const [localContactName, setLocalContactName] = useState(initial?.local_contact_name ?? '')
+  const [localContactPhone, setLocalContactPhone] = useState(initial?.local_contact_phone ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -49,6 +61,11 @@ function CustomerForm({
           email: email || null,
           phone: phone || null,
           address: address || null,
+          billing_name: billingDiffers ? (billingName.trim() || null) : null,
+          billing_address: billingDiffers ? (billingAddress || null) : null,
+          object_address: objectAddress || null,
+          local_contact_name: localContactName.trim() || null,
+          local_contact_phone: localContactPhone.trim() || null,
           notes: notes || null,
         }),
       })
@@ -97,9 +114,52 @@ function CustomerForm({
           </div>
         </div>
         <div className="admin-form-group">
-          <label className="admin-form-label">Adresse</label>
+          <label className="admin-form-label">Adresse (Kontakt / Standard)</label>
           <AddressAutocomplete className="admin-form-input" value={address} onChange={setAddress} />
         </div>
+
+        <div className="admin-form-group">
+          <label className="admin-form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={billingDiffers}
+              onChange={e => setBillingDiffers(e.target.checked)}
+            />
+            Abweichende Rechnungsadresse
+          </label>
+          {billingDiffers && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 10 }}>
+              <div>
+                <label className="admin-form-label">Empfänger (Rechnung)</label>
+                <input className="admin-form-input" value={billingName} onChange={e => setBillingName(e.target.value)} placeholder={name || 'z.B. Verwaltung AG'} />
+              </div>
+              <div>
+                <label className="admin-form-label">Rechnungsadresse</label>
+                <AddressAutocomplete className="admin-form-input" value={billingAddress} onChange={setBillingAddress} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="admin-form-group">
+          <label className="admin-form-label">Standard-Objektadresse (optional)</label>
+          <AddressAutocomplete className="admin-form-input" value={objectAddress} onChange={setObjectAddress} />
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+            Wird beim Anlegen neuer Projekte als Vorschlag übernommen und kann pro Projekt überschrieben werden.
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Lokaler Kontakt — Name (Default)</label>
+            <input className="admin-form-input" value={localContactName} onChange={e => setLocalContactName(e.target.value)} placeholder="z.B. Hauswart" />
+          </div>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Lokaler Kontakt — Telefon</label>
+            <input className="admin-form-input" value={localContactPhone} onChange={e => setLocalContactPhone(e.target.value)} />
+          </div>
+        </div>
+
         <div className="admin-form-group">
           <label className="admin-form-label">Notizen</label>
           <textarea
@@ -164,12 +224,17 @@ export default function CustomersScreen() {
     }
   }
 
-  const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.company ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.address ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = customers.filter(c => {
+    const q = search.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.company ?? '').toLowerCase().includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q) ||
+      (c.address ?? '').toLowerCase().includes(q) ||
+      (c.billing_address ?? '').toLowerCase().includes(q) ||
+      (c.object_address ?? '').toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className="admin-page">
@@ -224,7 +289,8 @@ export default function CustomersScreen() {
                 <th>Firma</th>
                 <th>E-Mail</th>
                 <th>Telefon</th>
-                <th>Adresse</th>
+                <th>Rechnungsadresse</th>
+                <th>Objektadresse (Default)</th>
                 <th></th>
               </tr>
             </thead>
@@ -235,7 +301,8 @@ export default function CustomersScreen() {
                   <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.address ?? '—'}</td>
+                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>
+                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.object_address ?? '—'}</td>
                   <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button
                       className="admin-btn admin-btn-sm admin-btn-secondary"

@@ -10,7 +10,7 @@ export interface Termin {
 
 export interface Kontakt {
   name: string
-  rolle: string
+  kommentar: string
   telefon: string
   email: string
 }
@@ -25,13 +25,25 @@ export interface DisposalDetails {
 
 export type ProjectStatus = 'offen' | 'bestellung_ausgeloest' | 'demontage' | 'abgeschlossen'
 
+export interface EmbeddedCustomer {
+  id: string
+  name: string | null
+  billing_name: string | null
+  address: string | null
+  billing_address: string | null
+  object_address: string | null
+  email: string | null
+  phone: string | null
+}
+
 export interface Project {
   id: string
   name: string
   customer_id: string | null
-  customer_name: string | null
-  customer_email: string | null
-  customer_address: string | null
+  customer: EmbeddedCustomer | null
+  object_address: string | null
+  local_contact_name: string | null
+  local_contact_phone: string | null
   auftraggeber: string | null
   rechnungszahler: string | null
   eigentuemer: string | null
@@ -68,6 +80,20 @@ export const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
 }
 
 type ProjectSortKey = 'name' | 'customer_name' | 'customer_email' | 'status' | 'created_at'
+
+export function projectCustomerName(p: { customer?: EmbeddedCustomer | null }): string {
+  const c = p.customer
+  return c?.billing_name || c?.name || ''
+}
+
+export function projectCustomerEmail(p: { customer?: EmbeddedCustomer | null }): string {
+  return p.customer?.email || ''
+}
+
+export function projectBillingAddress(p: { customer?: EmbeddedCustomer | null }): string {
+  const c = p.customer
+  return c?.billing_address || c?.address || ''
+}
 type SortDir = 'asc' | 'desc'
 
 const STATUS_ORDER: Record<ProjectStatus, number> = {
@@ -116,7 +142,7 @@ export default function ProjectsScreen() {
     const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
     if (!showClosed && effectiveStatus === 'abgeschlossen') return false
     const q = search.toLowerCase()
-    const matchSearch = p.name.toLowerCase().includes(q) || (p.customer_name || '').toLowerCase().includes(q)
+    const matchSearch = p.name.toLowerCase().includes(q) || projectCustomerName(p).toLowerCase().includes(q)
     const matchStatus = !statusFilter || effectiveStatus === statusFilter
     return matchSearch && matchStatus
   }).sort((a, b) => {
@@ -126,8 +152,8 @@ export default function ProjectsScreen() {
     let bVal: string | number
     switch (sortKey) {
       case 'name':          aVal = a.name; bVal = b.name; break
-      case 'customer_name': aVal = a.customer_name ?? ''; bVal = b.customer_name ?? ''; break
-      case 'customer_email': aVal = a.customer_email ?? ''; bVal = b.customer_email ?? ''; break
+      case 'customer_name': aVal = projectCustomerName(a); bVal = projectCustomerName(b); break
+      case 'customer_email': aVal = projectCustomerEmail(a); bVal = projectCustomerEmail(b); break
       case 'status':        aVal = STATUS_ORDER[sA]; bVal = STATUS_ORDER[sB]; break
       case 'created_at':    aVal = a.created_at; bVal = b.created_at; break
     }
@@ -221,8 +247,8 @@ export default function ProjectsScreen() {
                 return (
                   <tr key={p.id} onClick={() => setSelected(p)}>
                     <td><strong>{p.name}</strong></td>
-                    <td>{p.customer_name || '—'}</td>
-                    <td style={{ color: 'var(--muted)' }}>{p.customer_email || '—'}</td>
+                    <td>{projectCustomerName(p) || '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{projectCustomerEmail(p) || '—'}</td>
                     <td>
                       <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`}>
                         {PROJECT_STATUS_LABELS[effectiveStatus]}

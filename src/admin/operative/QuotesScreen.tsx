@@ -15,7 +15,6 @@ interface Quote {
 interface Project {
   id: string
   name: string
-  customer_name?: string
   is_closed?: boolean
 }
 
