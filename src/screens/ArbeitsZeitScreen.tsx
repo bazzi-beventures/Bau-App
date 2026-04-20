@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { BerichtType } from './BerichtScreen'
-import { WORK_TYPES, workTypeLabel } from '../api/workTypes'
 
 const OFFLINE_QUEUE_KEY = 'zeit_offline_queue'
 
@@ -102,15 +101,12 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
-  const isAdmin = role === 'admin' || role === 'management' || role === 'superadmin'
+export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [loadingIdx, setLoadingIdx] = useState<number | null>(null)
   const [reportLoading] = useState(false)
   const [queueSize, setQueueSize] = useState(() => loadQueue().length)
   const [draining, setDraining] = useState(false)
-  const [showArtSelector, setShowArtSelector] = useState(false)
-  const [selectedArt, setSelectedArt] = useState<string>('Neumontage')
 
   const drainQueue = useCallback(async () => {
     const q = loadQueue()
@@ -197,12 +193,12 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
     }
   }
 
-  async function sendAction(action: ZeitAction, idx: number, opts: { art_der_arbeit?: string } = {}) {
+  async function sendAction(action: ZeitAction, idx: number) {
     setResult(null)
     setLoadingIdx(idx)
     const recorded_at = new Date().toISOString()
     try {
-      const res = await zeitAction(action, { recorded_at, ...opts })
+      const res = await zeitAction(action, { recorded_at })
       setResult({ text: res.reply, isError: false })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -220,15 +216,6 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
       }
     } finally {
       setLoadingIdx(null)
-    }
-  }
-
-  function handleAction(action: Action, idx: number) {
-    if (action.action === 'clock_in' && !isAdmin) {
-      setShowArtSelector(v => !v)
-      setResult(null)
-    } else {
-      sendAction(action.action, idx)
     }
   }
 
@@ -278,57 +265,22 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
       {/* Actions */}
       <div className="menu-list">
         {ACTIONS.map((action, idx) => (
-          <div key={action.label}>
-            <div
-              className="menu-item"
-              onClick={() => loadingIdx === null && !reportLoading && handleAction(action, idx)}
-              style={{ opacity: (loadingIdx !== null && loadingIdx !== idx) || reportLoading ? 0.5 : 1 }}
-            >
-              <div className={`menu-icon ${action.iconClass}`}>
-                {action.icon}
-              </div>
-              <div className="menu-text">
-                <div className="menu-label">
-                  {loadingIdx === idx ? '…' : action.label}
-                </div>
-                <div className="menu-sub">{action.sub}</div>
-              </div>
-              <div className="menu-chevron">{action.action === 'clock_in' && !isAdmin ? (showArtSelector ? '∨' : '›') : '›'}</div>
+          <div
+            key={action.label}
+            className="menu-item"
+            onClick={() => loadingIdx === null && !reportLoading && sendAction(action.action, idx)}
+            style={{ opacity: (loadingIdx !== null && loadingIdx !== idx) || reportLoading ? 0.5 : 1 }}
+          >
+            <div className={`menu-icon ${action.iconClass}`}>
+              {action.icon}
             </div>
-            {/* Arbeitsart-Auswahl bei Einstempeln */}
-            {action.action === 'clock_in' && !isAdmin && showArtSelector && (
-              <div className="correction-form" style={{ paddingTop: 12, paddingBottom: 12 }}>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Art der Arbeit wählen:</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                  {WORK_TYPES.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setSelectedArt(opt.value)}
-                      style={{
-                        padding: '7px 4px', borderRadius: 8,
-                        border: selectedArt === opt.value ? 'none' : '1px solid var(--border)',
-                        background: selectedArt === opt.value ? 'var(--accent-green)' : 'var(--surface2)',
-                        color: selectedArt === opt.value ? '#fff' : 'var(--text)',
-                        fontWeight: selectedArt === opt.value ? 600 : 400,
-                        fontSize: 13, cursor: 'pointer',
-                      }}
-                    >{opt.label}</button>
-                  ))}
-                </div>
-                <div className="corr-actions">
-                  <button className="corr-btn corr-btn-cancel" onClick={() => setShowArtSelector(false)}>
-                    Abbrechen
-                  </button>
-                  <button
-                    className="corr-btn corr-btn-submit"
-                    disabled={loadingIdx === idx}
-                    onClick={() => { setShowArtSelector(false); sendAction('clock_in', idx, { art_der_arbeit: selectedArt }) }}
-                  >
-                    {loadingIdx === idx ? '…' : `Einstempeln (${workTypeLabel(selectedArt)})`}
-                  </button>
-                </div>
+            <div className="menu-text">
+              <div className="menu-label">
+                {loadingIdx === idx ? '…' : action.label}
               </div>
-            )}
+              <div className="menu-sub">{action.sub}</div>
+            </div>
+            <div className="menu-chevron">›</div>
           </div>
         ))}
 

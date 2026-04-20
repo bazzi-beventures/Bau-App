@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchMonthlyData, fetchWeeklyData, MonthlyReportData, WeeklyReportData, ReportData } from '../api/chat'
+import { fetchMonthlyData, fetchWeeklyData, fetchVacationEntitlement, MonthlyReportData, WeeklyReportData, ReportData, VacationEntitlement } from '../api/chat'
 import { ApiError, apiBlobFetch, isOfflineError } from '../api/client'
 
 export type BerichtType = 'monthly' | 'weekly-this' | 'weekly-last'
@@ -28,6 +28,7 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
   const [error, setError] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfMsg, setPdfMsg] = useState<{ text: string; isError: boolean } | null>(null)
+  const [vacation, setVacation] = useState<VacationEntitlement | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -55,6 +56,14 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
     }
     load()
   }, [berichtType])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchVacationEntitlement()
+      .then(v => { if (!cancelled) setVacation(v) })
+      .catch(() => { /* Fehler hier blockieren den Bericht nicht */ })
+    return () => { cancelled = true }
+  }, [])
 
   async function handlePdfExport() {
     setPdfLoading(true)
@@ -139,6 +148,14 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
               {d.ueberstunden_str} Std.
             </span>
           </div>
+          {vacation && (
+            <div className="bericht-summary-row">
+              <span className="bericht-summary-label">Ferien übrig</span>
+              <span className="bericht-summary-value bericht-mono">
+                {vacation.remaining} / {vacation.entitlement} Tage
+              </span>
+            </div>
+          )}
         </div>
       </>
     )
@@ -190,6 +207,14 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
               {saldoPos ? '+' : ''}{fmt_hours(d.saldo)} Std.
             </span>
           </div>
+          {vacation && (
+            <div className="bericht-summary-row">
+              <span className="bericht-summary-label">Ferien übrig</span>
+              <span className="bericht-summary-value bericht-mono">
+                {vacation.remaining} / {vacation.entitlement} Tage
+              </span>
+            </div>
+          )}
         </div>
       </>
     )
