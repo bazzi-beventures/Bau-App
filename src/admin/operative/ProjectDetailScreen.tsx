@@ -153,8 +153,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
   const [localContactName, setLocalContactName] = useState(project?.local_contact_name ?? '')
   const [localContactPhone, setLocalContactPhone] = useState(project?.local_contact_phone ?? '')
-  const [auftraggeber, setAuftraggeber] = useState(project?.auftraggeber ?? '')
-  const [eigentuemer, setEigentuemer] = useState(project?.eigentuemer ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
   const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
   const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
@@ -442,8 +440,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           object_address: objectAddress || null,
           local_contact_name: localContactName || null,
           local_contact_phone: localContactPhone || null,
-          auftraggeber: auftraggeber || null,
-          eigentuemer: eigentuemer || null,
           art_der_arbeit: artDerArbeit || null,
           bemerkung: bemerkung || null,
           projektleiter_id: projektleiterId || null,
@@ -642,21 +638,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   rows={3}
                   style={{ resize: 'vertical' }}
                 />
-              </div>
-            </div>
-          </div>
-
-          {/* ── Auftraggeber & Eigentümer ─────────────────────── */}
-          <div className="admin-table-wrap" style={{ padding: 24 }}>
-            <div className="admin-section-title">Auftraggeber & Eigentümer</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Auftraggeber</label>
-                <input className="admin-form-input" value={auftraggeber} onChange={e => setAuftraggeber(e.target.value)} />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Eigentümer</label>
-                <input className="admin-form-input" value={eigentuemer} onChange={e => setEigentuemer(e.target.value)} />
               </div>
             </div>
           </div>

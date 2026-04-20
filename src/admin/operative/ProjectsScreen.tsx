@@ -44,9 +44,6 @@ export interface Project {
   object_address: string | null
   local_contact_name: string | null
   local_contact_phone: string | null
-  auftraggeber: string | null
-  rechnungszahler: string | null
-  eigentuemer: string | null
   art_der_arbeit: string | null
   projektleiter_id: string | null
   monteur_ids: string[]

@@ -29,8 +29,6 @@ interface Project {
   id: string
   name: string
   art_der_arbeit: string | null
-  auftraggeber: string | null
-  eigentuemer: string | null
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
@@ -320,18 +318,6 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
           {/* Projektinfos */}
           <div className="projekte-detail-card">
             <div className="projekte-detail-title">Projektinfos</div>
-            {selected.auftraggeber && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Auftraggeber</span>
-                <span className="projekte-detail-value">{selected.auftraggeber}</span>
-              </div>
-            )}
-            {selected.eigentuemer && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Eigentümer</span>
-                <span className="projekte-detail-value">{selected.eigentuemer}</span>
-              </div>
-            )}
             {(selected.customer?.billing_name || selected.customer?.name) && (
               <div className="projekte-detail-row">
                 <span className="projekte-detail-label">Kunde</span>
@@ -353,7 +339,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 </span>
               </div>
             )}
-            {!selected.auftraggeber && !selected.eigentuemer && !selected.customer && !selected.object_address && !selected.local_contact_name && (
+            {!selected.customer && !selected.object_address && !selected.local_contact_name && (
               <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
             )}
           </div>
@@ -622,7 +608,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                           </div>
                           <div className="projekte-tile-name">{p.name}</div>
                           <div className="projekte-tile-sub">
-                            {p.art_der_arbeit || p.auftraggeber || p.customer?.billing_name || p.customer?.name || '—'}
+                            {p.art_der_arbeit || p.customer?.billing_name || p.customer?.name || '—'}
                           </div>
                           {p.bemerkung && (
                             <div style={{ fontSize: 11, color: '#c53030', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
