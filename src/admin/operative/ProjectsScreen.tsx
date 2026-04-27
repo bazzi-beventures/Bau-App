@@ -23,7 +23,7 @@ export interface DisposalDetails {
   bemerkung: string
 }
 
-export type ProjectStatus = 'offen' | 'bestellung_ausgeloest' | 'demontage' | 'abgeschlossen'
+export type ProjectStatus = 'offen' | 'abgeschlossen'
 
 export interface EmbeddedCustomer {
   id: string
@@ -36,8 +36,25 @@ export interface EmbeddedCustomer {
   phone: string | null
 }
 
+export interface ProjectInvoiceSummary {
+  invoice_number: string
+  total_amount: number
+  status: string
+  created_at: string
+  pdf_url: string | null
+}
+
+export interface ProjectQuoteSummary {
+  quote_number: string
+  total_amount: number
+  status: string
+  created_at: string
+  pdf_url: string | null
+}
+
 export interface Project {
   id: string
+  project_id_text: string | null
   name: string
   customer_id: string | null
   customer: EmbeddedCustomer | null
@@ -60,23 +77,32 @@ export interface Project {
   created_by: string | null
   created_by_id: string | null
   bemerkung: string | null
+  invoice?: ProjectInvoiceSummary | null
+  quote?: ProjectQuoteSummary | null
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   offen: 'Offen',
-  bestellung_ausgeloest: 'Bestellung ausgelöst',
-  demontage: 'Demontage',
   abgeschlossen: 'Abgeschlossen',
 }
 
 export const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
   offen: 'admin-badge-active',
-  bestellung_ausgeloest: 'admin-badge-warning',
-  demontage: 'admin-badge-info',
   abgeschlossen: 'admin-badge-closed',
 }
 
-type ProjectSortKey = 'name' | 'customer_name' | 'customer_email' | 'status' | 'created_at'
+const DOC_STATUS_BADGE: Record<string, string> = {
+  ausstehend: 'admin-badge-open',
+  offen: 'admin-badge-open',
+  gesendet: 'admin-badge-sent',
+  bezahlt: 'admin-badge-paid',
+  entwurf: 'admin-badge-draft',
+  akzeptiert: 'admin-badge-approved',
+  abgelehnt: 'admin-badge-rejected',
+  archiviert: 'admin-badge-closed',
+}
+
+type ProjectSortKey = 'project_id_text' | 'name' | 'customer_name' | 'status' | 'created_at'
 
 export function projectCustomerName(p: { customer?: EmbeddedCustomer | null }): string {
   const c = p.customer
@@ -95,9 +121,7 @@ type SortDir = 'asc' | 'desc'
 
 const STATUS_ORDER: Record<ProjectStatus, number> = {
   offen: 0,
-  bestellung_ausgeloest: 1,
-  demontage: 2,
-  abgeschlossen: 3,
+  abgeschlossen: 1,
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -113,7 +137,6 @@ export default function ProjectsScreen() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('')
   const [sortKey, setSortKey] = useState<ProjectSortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selected, setSelected] = useState<Project | null>(null)
@@ -139,18 +162,18 @@ export default function ProjectsScreen() {
     const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
     if (!showClosed && effectiveStatus === 'abgeschlossen') return false
     const q = search.toLowerCase()
-    const matchSearch = p.name.toLowerCase().includes(q) || projectCustomerName(p).toLowerCase().includes(q)
-    const matchStatus = !statusFilter || effectiveStatus === statusFilter
-    return matchSearch && matchStatus
+    return p.name.toLowerCase().includes(q)
+      || projectCustomerName(p).toLowerCase().includes(q)
+      || (p.project_id_text || '').toLowerCase().includes(q)
   }).sort((a, b) => {
     const sA: ProjectStatus = a.status ?? (a.is_closed ? 'abgeschlossen' : 'offen')
     const sB: ProjectStatus = b.status ?? (b.is_closed ? 'abgeschlossen' : 'offen')
     let aVal: string | number
     let bVal: string | number
     switch (sortKey) {
+      case 'project_id_text': aVal = a.project_id_text || ''; bVal = b.project_id_text || ''; break
       case 'name':          aVal = a.name; bVal = b.name; break
       case 'customer_name': aVal = projectCustomerName(a); bVal = projectCustomerName(b); break
-      case 'customer_email': aVal = projectCustomerEmail(a); bVal = projectCustomerEmail(b); break
       case 'status':        aVal = STATUS_ORDER[sA]; bVal = STATUS_ORDER[sB]; break
       case 'created_at':    aVal = a.created_at; bVal = b.created_at; break
     }
@@ -200,17 +223,10 @@ export default function ProjectsScreen() {
         <div className="admin-filter-bar">
           <input
             className="admin-search"
-            placeholder="Name oder Kunde suchen…"
+            placeholder="Projekt-ID, Name oder Kunde suchen…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="">Alle Status</option>
-            <option value="offen">Offen</option>
-            <option value="bestellung_ausgeloest">Bestellung ausgelöst</option>
-            <option value="demontage">Demontage</option>
-            <option value="abgeschlossen">Abgeschlossen</option>
-          </select>
         </div>
 
         {loading ? (
@@ -219,15 +235,17 @@ export default function ProjectsScreen() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th style={thStyle} onClick={() => toggleSort('project_id_text')}>
+                  Projekt-ID <SortIcon active={sortKey === 'project_id_text'} dir={sortDir} />
+                </th>
                 <th style={thStyle} onClick={() => toggleSort('name')}>
                   Projektname <SortIcon active={sortKey === 'name'} dir={sortDir} />
                 </th>
                 <th style={thStyle} onClick={() => toggleSort('customer_name')}>
                   Kunde <SortIcon active={sortKey === 'customer_name'} dir={sortDir} />
                 </th>
-                <th style={thStyle} onClick={() => toggleSort('customer_email')}>
-                  E-Mail <SortIcon active={sortKey === 'customer_email'} dir={sortDir} />
-                </th>
+                <th>Offerte</th>
+                <th>Rechnung</th>
                 <th style={thStyle} onClick={() => toggleSort('status')}>
                   Status <SortIcon active={sortKey === 'status'} dir={sortDir} />
                 </th>
@@ -238,14 +256,34 @@ export default function ProjectsScreen() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
+                <tr><td colSpan={7} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
               ) : filtered.map(p => {
                 const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
                 return (
                   <tr key={p.id} onClick={() => setSelected(p)}>
+                    <td style={{ color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                      {p.project_id_text || '—'}
+                    </td>
                     <td><strong>{p.name}</strong></td>
                     <td>{projectCustomerName(p) || '—'}</td>
-                    <td style={{ color: 'var(--muted)' }}>{projectCustomerEmail(p) || '—'}</td>
+                    <td>
+                      {p.quote ? (
+                        <span className={`admin-badge ${DOC_STATUS_BADGE[p.quote.status] || 'admin-badge-draft'}`}>
+                          {p.quote.status}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {p.invoice ? (
+                        <span className={`admin-badge ${DOC_STATUS_BADGE[p.invoice.status] || 'admin-badge-draft'}`}>
+                          {p.invoice.status}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`}>
                         {PROJECT_STATUS_LABELS[effectiveStatus]}

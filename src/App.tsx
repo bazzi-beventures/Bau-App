@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
-import { ApiError } from './api/client'
+import { ApiError, resetSessionExpiredFlag } from './api/client'
 import { SK } from './api/storageKeys'
 import PinScreen from './auth/PinScreen'
 import LoginScreen from './auth/LoginScreen'
@@ -81,6 +81,7 @@ export default function App() {
   const [rapportInitialMessage, setRapportInitialMessage] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
+  const [authExpiredAt, setAuthExpiredAt] = useState<number | null>(null)
   const screenRef = useRef(screen)
 
   useEffect(() => {
@@ -103,6 +104,25 @@ export default function App() {
     window.addEventListener('sw-update-ready', onUpdate)
     return () => window.removeEventListener('sw-update-ready', onUpdate)
   }, [])
+
+  useEffect(() => {
+    const onAuthExpired = () => {
+      const storedIdentity = Boolean(
+        localStorage.getItem(SK.AUTHORIZED_USER_ID) && localStorage.getItem(SK.TENANT_SLUG)
+      )
+      setUser(null)
+      setScreen(storedIdentity ? 'login' : 'pin')
+      setAuthExpiredAt(Date.now())
+    }
+    window.addEventListener('auth:expired', onAuthExpired)
+    return () => window.removeEventListener('auth:expired', onAuthExpired)
+  }, [])
+
+  useEffect(() => {
+    if (authExpiredAt === null) return
+    const t = window.setTimeout(() => setAuthExpiredAt(null), 8000)
+    return () => window.clearTimeout(t)
+  }, [authExpiredAt])
 
   // Keep ref in sync so the popstate handler always sees the latest screen
   useEffect(() => { screenRef.current = screen }, [screen])
@@ -170,6 +190,19 @@ export default function App() {
     </div>
   ) : null
 
+  const authExpiredBanner = authExpiredAt !== null ? (
+    <div style={{
+      position: 'fixed', top: isOffline ? 32 : 0, left: '50%', transform: 'translateX(-50%)',
+      width: '100%', maxWidth: 480, zIndex: 9999,
+      background: 'var(--accent-blue, #1e3a5f)', color: '#fff',
+      textAlign: 'center', padding: '8px 12px',
+      fontSize: '0.85rem', fontWeight: 600,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+    }}>
+      Sitzung abgelaufen – bitte erneut anmelden.
+    </div>
+  ) : null
+
   const updateBanner = swUpdateReady ? (
     <div style={{
       position: 'fixed', bottom: 64, left: '50%', transform: 'translateX(-50%)',
@@ -198,6 +231,7 @@ export default function App() {
     return (
       <>
         {offlineBanner}
+        {authExpiredBanner}
         <div className="loading-screen">
           <div className="loading-logo">
             <LogoSvg />
@@ -215,6 +249,8 @@ export default function App() {
       <PinScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
+          resetSessionExpiredFlag()
+          setAuthExpiredAt(null)
           getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
         }}
       />
@@ -224,6 +260,8 @@ export default function App() {
       <LoginScreen
         logoUrl={logoUrl}
         onLoggedIn={() => {
+          resetSessionExpiredFlag()
+          setAuthExpiredAt(null)
           getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
         }}
       />
@@ -350,6 +388,7 @@ export default function App() {
   return (
     <>
       {offlineBanner}
+      {authExpiredBanner}
       {updateBanner}
       {inner}
     </>

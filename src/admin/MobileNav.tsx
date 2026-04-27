@@ -164,9 +164,6 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                     <IconTag /><span>Lieferantenpreise</span>
                   </button>
                 )}
-                <button className={`admin-mobile-drawer-item${screen === 'project-overview' ? ' active' : ''}`} onClick={() => navigate('project-overview')}>
-                  <IconChart /><span>Projektfortschritte</span>
-                </button>
                 {isManagement && (
                   <button className={`admin-mobile-drawer-item${screen === 'kpis' ? ' active' : ''}`} onClick={() => navigate('kpis')}>
                     <IconChart /><span>Kennzahlen</span>

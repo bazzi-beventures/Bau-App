@@ -76,7 +76,6 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         <NavItem label="Kundenstamm" target="customers" current={screen} onNav={onNav} icon={<IconAddressBook />} />
         <NavItem label="Offerten" target="quotes" current={screen} onNav={onNav} icon={<IconReceipt />} />
         <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} badge={badges?.invoices} />
-        <NavItem label="Projektfortschritte" target="project-overview" current={screen} onNav={onNav} icon={<IconChart />} />
 
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />

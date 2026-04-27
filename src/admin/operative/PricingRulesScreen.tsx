@@ -68,8 +68,12 @@ export default function PricingRulesScreen() {
     setSaving(true)
     setError('')
     try {
-      await apiFetch('/pwa/admin/pricing-rules', {
-        method: 'POST',
+      const isEdit = editing !== 'new' && editing !== null
+      const url = isEdit
+        ? `/pwa/admin/pricing-rules/${(editing as PricingRule).id}`
+        : '/pwa/admin/pricing-rules'
+      await apiFetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
         body: JSON.stringify({
           supplier_name: form.supplier_name.trim(),
           category: form.category.trim() || null,
@@ -78,6 +82,28 @@ export default function PricingRulesScreen() {
       })
       setEditing(null)
       setToast('Preisregel gespeichert')
+      setTimeout(() => setToast(null), 3000)
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (editing === 'new' || editing === null) return
+    const rule = editing
+    const label = rule.suppliers?.name
+      ? `${rule.suppliers.name}${rule.category ? ` · ${rule.category}` : ''}`
+      : 'diese Preisregel'
+    if (!window.confirm(`Preisregel für ${label} wirklich löschen?`)) return
+    setSaving(true)
+    setError('')
+    try {
+      await apiFetch(`/pwa/admin/pricing-rules/${rule.id}`, { method: 'DELETE' })
+      setEditing(null)
+      setToast('Preisregel gelöscht')
       setTimeout(() => setToast(null), 3000)
       load()
     } catch (err: unknown) {
@@ -195,6 +221,16 @@ export default function PricingRulesScreen() {
               </div>
             </form>
             <div className="admin-modal-footer">
+              {editing !== 'new' && (
+                <button
+                  className="admin-btn admin-btn-danger"
+                  onClick={handleDelete}
+                  disabled={saving}
+                  style={{ marginRight: 'auto' }}
+                >
+                  Löschen
+                </button>
+              )}
               <button className="admin-btn admin-btn-secondary" onClick={() => setEditing(null)}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={e => { (e.currentTarget.closest('div.admin-modal')?.querySelector('form') as HTMLFormElement)?.requestSubmit() }} disabled={saving}>
                 {saving ? 'Speichern…' : 'Speichern'}

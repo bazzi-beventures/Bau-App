@@ -32,6 +32,33 @@ export class ApiError extends Error {
 export const isOfflineError = (e: unknown): boolean =>
   e instanceof ApiError && e.status === 0
 
+let sessionExpiredHandled = false
+
+// Wird von App.tsx aufgerufen sobald der User sich wieder einloggt,
+// damit eine spaetere, zweite abgelaufene Session erneut ein Event ausloesen kann.
+export function resetSessionExpiredFlag() { sessionExpiredHandled = false }
+
+function handleExpiredSession(status: number, detail: string, path: string): boolean {
+  // Auth-Endpoints sind der Wiedereinstiegspunkt — dort nicht feuern (sonst Loop bei Falsch-Passwort)
+  if (path.startsWith('/pwa/auth/')) return false
+  const expired = status === 401 || (status === 403 && detail === 'csrf_invalid')
+  if (!expired) return false
+  if (sessionExpiredHandled) return true
+  sessionExpiredHandled = true
+  clearToken()
+  window.dispatchEvent(new CustomEvent('auth:expired'))
+  return true
+}
+
+async function parseErrorDetail(res: Response): Promise<string> {
+  let detail = res.statusText
+  try {
+    const body = await res.json()
+    detail = body.detail ?? detail
+  } catch {}
+  return detail
+}
+
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<unknown> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
@@ -46,11 +73,10 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     })
 
     if (!res.ok) {
-      let detail = res.statusText
-      try {
-        const body = await res.json()
-        detail = body.detail ?? detail
-      } catch {}
+      const detail = await parseErrorDetail(res)
+      if (handleExpiredSession(res.status, detail, path)) {
+        throw new ApiError(res.status, 'Sitzung abgelaufen')
+      }
       throw new ApiError(res.status, detail)
     }
 
@@ -69,11 +95,10 @@ export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename
     })
 
     if (!res.ok) {
-      let detail = res.statusText
-      try {
-        const body = await res.json()
-        detail = body.detail ?? detail
-      } catch {}
+      const detail = await parseErrorDetail(res)
+      if (handleExpiredSession(res.status, detail, path)) {
+        throw new ApiError(res.status, 'Sitzung abgelaufen')
+      }
       throw new ApiError(res.status, detail)
     }
 
@@ -99,11 +124,10 @@ export async function apiFormFetch(path: string, form: FormData): Promise<unknow
     })
 
     if (!res.ok) {
-      let detail = res.statusText
-      try {
-        const body = await res.json()
-        detail = body.detail ?? detail
-      } catch {}
+      const detail = await parseErrorDetail(res)
+      if (handleExpiredSession(res.status, detail, path)) {
+        throw new ApiError(res.status, 'Sitzung abgelaufen')
+      }
       throw new ApiError(res.status, detail)
     }
 

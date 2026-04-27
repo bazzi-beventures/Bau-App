@@ -131,15 +131,6 @@ interface Props {
   onSaved: () => void
 }
 
-const STATUS_SEQUENCE: ProjectStatus[] = ['offen', 'bestellung_ausgeloest', 'demontage', 'abgeschlossen']
-
-const STATUS_ACCENT: Record<ProjectStatus, string> = {
-  offen: 'var(--success)',
-  bestellung_ausgeloest: 'var(--warning)',
-  demontage: 'var(--primary)',
-  abgeschlossen: 'var(--text-muted)',
-}
-
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -203,6 +194,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
+
+  // Tab-Auswahl
+  type ProjectTab = 'details' | 'documents' | 'quotes' | 'invoices' | 'approvals'
+  const [activeTab, setActiveTab] = useState<ProjectTab>('details')
 
   // Bestellfreigaben
   const [approvals, setApprovals] = useState<ProjectApproval[]>([])
@@ -385,7 +380,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (!id) return
     const c = customers.find(x => x.id === id)
     if (!c) return
-    if (!objectAddress) setObjectAddress(c.object_address ?? '')
+    if (!objectAddress) setObjectAddress(c.object_address || c.billing_address || c.address || '')
     if (!localContactName) setLocalContactName(c.local_contact_name ?? '')
     if (!localContactPhone) setLocalContactPhone(c.local_contact_phone ?? '')
   }
@@ -457,27 +452,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleSetStatus(newStatus: ProjectStatus) {
-    if (!project) return
-    if (newStatus === 'abgeschlossen') {
-      setConfirmClose(true)
-      return
-    }
-    setSettingStatus(true)
-    try {
-      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      })
-      showToast(`Status: ${PROJECT_STATUS_LABELS[newStatus]}`)
-      setTimeout(onSaved, 1000)
-    } catch {
-      setError('Fehler beim Setzen des Status')
-    } finally {
-      setSettingStatus(false)
     }
   }
 
@@ -601,6 +575,18 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <button className="admin-btn admin-btn-secondary" onClick={onClose}>← Zurück</button>
       </div>
 
+      {/* ── Tab-Leiste ──────────────────────────────────────── */}
+      {!isNew && (
+        <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Projekt Details</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Dokumente</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => setActiveTab('quotes')}>Offerten</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>Rechnungen</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'approvals' ? 'active' : ''}`} onClick={() => setActiveTab('approvals')}>Visierung</button>
+        </div>
+      )}
+
+      {(isNew || activeTab === 'details') && (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -877,30 +863,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div className="admin-table-wrap" style={{ padding: 20 }}>
               <div className="admin-section-title">Status</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {STATUS_SEQUENCE.filter(s => s !== 'abgeschlossen').map(s => {
-                  const isCurrent = effectiveStatus === s
-                  const accent = STATUS_ACCENT[s]
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={isCurrent || settingStatus || isClosed}
-                      className="admin-btn admin-btn-secondary"
-                      style={{
-                        width: '100%',
-                        justifyContent: 'center',
-                        fontWeight: isCurrent ? 700 : undefined,
-                        color: isCurrent ? accent : undefined,
-                        borderColor: isCurrent ? accent : undefined,
-                        outline: isCurrent ? `2px solid ${accent}` : undefined,
-                        outlineOffset: isCurrent ? '2px' : undefined,
-                      }}
-                      onClick={() => handleSetStatus(s)}
-                    >
-                      {isCurrent && '● '}{PROJECT_STATUS_LABELS[s]}
-                    </button>
-                  )
-                })}
                 {!isClosed && (
                   <button
                     type="button"
@@ -931,10 +893,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
         )}
       </div>
+      )}
 
       {/* ── Dateien ──────────────────────────────────────────── */}
-      {!isNew && (
-        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+      {!isNew && activeTab === 'documents' && (
+        <div className="admin-table-wrap" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="admin-section-title" style={{ margin: 0 }}>Dokumente & Fotos</div>
             <div>
@@ -983,8 +946,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {/* ── Offerten ─────────────────────────────────────────── */}
-      {!isNew && (
-        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+      {!isNew && activeTab === 'quotes' && (
+        <div className="admin-table-wrap" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="admin-section-title" style={{ margin: 0 }}>Offerten</div>
             <button
@@ -1038,8 +1001,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {/* ── Rechnungen ───────────────────────────────────────── */}
-      {!isNew && (
-        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+      {!isNew && activeTab === 'invoices' && (
+        <div className="admin-table-wrap" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="admin-section-title" style={{ margin: 0 }}>Rechnungen</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1089,8 +1052,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {/* ── Bestellfreigabe / Visierung ──────────────────────── */}
-      {!isNew && (
-        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+      {!isNew && activeTab === 'approvals' && (
+        <div className="admin-table-wrap" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div className="admin-section-title" style={{ margin: 0 }}>Bestellfreigabe / Visierung</div>
             <button
@@ -1249,7 +1212,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {/* ── Kommentare ───────────────────────────────────────── */}
-      {!isNew && (
+      {!isNew && activeTab === 'details' && (
         <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
           <div className="admin-section-title" style={{ marginBottom: 14 }}>Kommentare</div>
           {comments.length === 0 && (

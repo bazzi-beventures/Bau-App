@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
+import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct } from './PdfExtractionReviewModal'
 
 interface Quote {
   id: number
@@ -49,7 +50,17 @@ interface Material {
 
 interface LaborRow { description: string; quantity: string; unit_price: number | null }
 interface MaterialRow { art_nr: string; quantity: string; description?: string; unit_price?: number; unit?: string }
-interface ExtraProductRow { description: string; quantity: string; unit: string; unit_price: string }
+interface ExtraProductRow {
+  description: string
+  quantity: string
+  unit: string
+  unit_price: string
+  // Optional: gesetzt, wenn Zeile aus einer Lieferanten-PDF-Extraktion stammt.
+  ek_price?: number
+  margin_factor?: number
+  supplier_id?: string | null
+  category?: string | null
+}
 interface ExtraChargeRow { description: string; total_price: string }
 interface TravelRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
@@ -108,6 +119,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -177,26 +189,33 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     try {
       const form = new FormData()
       form.append('file', file)
-      const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as {
-        supplier: string
-        product_type: string
-        material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
-        net_total: number
+      const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
+      if (!result.products || result.products.length === 0) {
+        setError('Keine Produkte in der PDF erkannt.')
+        return
       }
-      // Fill material rows from extracted data (as free-form extra products)
-      const extracted: ExtraProductRow[] = result.material_items.map(item => ({
-        description: `${item.description}${result.supplier ? ` (${result.supplier})` : ''}`,
-        quantity: String(item.quantity),
-        unit: item.unit || 'Stk',
-        unit_price: String(item.unit_price),
-      }))
-      setExtraProducts(prev => [...prev, ...extracted])
+      setPdfReview(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  function handlePdfReviewConfirm(confirmed: ConfirmedExtraProduct[]) {
+    const rows: ExtraProductRow[] = confirmed.map(c => ({
+      description: c.description,
+      quantity: c.quantity,
+      unit: c.unit,
+      unit_price: c.unit_price,
+      ek_price: c.ek_price,
+      margin_factor: c.margin_factor,
+      supplier_id: c.supplier_id,
+      category: c.category,
+    }))
+    setExtraProducts(prev => [...prev, ...rows])
+    setPdfReview(null)
   }
 
   // ── Submit ──
@@ -232,13 +251,22 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           unit_price: parseNum(r.total_price),
           total_price: parseNum(r.total_price),
         })),
-        extra_product_items: extraProducts.filter(r => r.description).map(r => ({
-          description: r.description,
-          quantity: parseNum(r.quantity),
-          unit: r.unit,
-          unit_price: parseNum(r.unit_price),
-          total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)),
-        })),
+        extra_product_items: extraProducts.filter(r => r.description).map(r => {
+          const qty = parseNum(r.quantity)
+          const price = parseNum(r.unit_price)
+          const item: Record<string, unknown> = {
+            description: r.description,
+            quantity: qty,
+            unit: r.unit,
+            unit_price: price,
+            total_price: round2(qty * price),
+          }
+          if (r.ek_price !== undefined) item.ek_price = r.ek_price
+          if (r.margin_factor !== undefined) item.margin_factor = r.margin_factor
+          if (r.supplier_id) item.supplier_id = r.supplier_id
+          if (r.category) item.category = r.category
+          return item
+        }),
         extra_charge_items: extraCharges.filter(r => r.description && parseNum(r.total_price) > 0).map(r => ({
           description: r.description,
           total_price: parseNum(r.total_price),
@@ -266,6 +294,14 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <h3 style={{ margin: '0 0 20px' }}>Neue Offerte erstellen</h3>
+
+      {pdfReview && (
+        <PdfExtractionReviewModal
+          data={pdfReview}
+          onCancel={() => setPdfReview(null)}
+          onConfirm={handlePdfReviewConfirm}
+        />
+      )}
 
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 

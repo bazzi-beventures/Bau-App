@@ -96,9 +96,9 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   )
 }
 
-function MaterialModal({ material, onClose, onSaved, existingCategories, suppliers }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; suppliers: Supplier[] }) {
+function MaterialModal({ material, onClose, onSaved, existingCategories, suppliers, suggestedArtNr }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; suppliers: Supplier[]; suggestedArtNr: string }) {
   const isNew = !material
-  const [artNr, setArtNr] = useState(material?.art_nr ?? '')
+  const [artNr, setArtNr] = useState(material?.art_nr ?? suggestedArtNr)
   const [name, setName] = useState(material?.name ?? '')
   const [category, setCategory] = useState(material?.category ?? '')
   const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
@@ -146,7 +146,8 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
           {error && <div className="admin-form-error">{error}</div>}
           <div className="admin-form-group">
             <label className="admin-form-label">Art.-Nr. *</label>
-            <input className="admin-form-input" value={artNr} onChange={e => setArtNr(e.target.value)} required disabled={!isNew} />
+            <input className="admin-form-input" value={artNr} onChange={e => setArtNr(e.target.value)} required disabled />
+            {isNew && <div className="admin-form-hint">Automatisch vergeben</div>}
           </div>
           <div className="admin-form-group">
             <label className="admin-form-label">Bezeichnung *</label>
@@ -247,6 +248,12 @@ export default function MaterialsScreen() {
 
   const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]))
   const categories = Array.from(new Set(materials.map(m => m.category).filter(Boolean))).sort() as string[]
+  const nextArtNr = String(
+    materials.reduce((max, m) => {
+      const n = parseInt(m.art_nr, 10)
+      return Number.isFinite(n) && n > max ? n : max
+    }, 0) + 1
+  )
 
   const filtered = materials.filter(m => {
     const q = search.toLowerCase()
@@ -371,6 +378,7 @@ export default function MaterialsScreen() {
           onSaved={() => { setEditMaterial(undefined); load() }}
           existingCategories={categories}
           suppliers={suppliers}
+          suggestedArtNr={nextArtNr}
         />
       )}
 
