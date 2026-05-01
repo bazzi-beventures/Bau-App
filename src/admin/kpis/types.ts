@@ -63,10 +63,17 @@ export interface KpiFinanzenMonatRow {
   anzahl_rapporte: number
   arbeitsstunden: number
   lohnkosten: number
+  lohnkosten_intern: number
+  mitarbeiter_ohne_lohn_count: number
   mitarbeiter_aktiv: number
   projekte_aktiv: number
   materialkosten: number
+  materialkosten_intern: number
+  material_ohne_ek_count: number
   total_kosten: number
+  total_kosten_intern: number
+  marge_arbeit: number
+  marge_material: number
   rechnungen_erstellt: number
   rechnungen_betrag: number
   rechnungen_bezahlt_anzahl: number

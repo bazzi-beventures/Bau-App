@@ -59,9 +59,9 @@ const COLUMNS: ColumnDef<KpiProjektRow>[] = [
   },
   { key: 'anzahl_rapporte', label: 'Rapporte', align: 'right' },
   { key: 'total_arbeitsstunden', label: 'Stunden', align: 'right', format: num },
-  { key: 'total_lohnkosten', label: 'Lohnkosten', align: 'right', format: chf },
-  { key: 'total_materialkosten', label: 'Materialkosten', align: 'right', format: chf },
-  { key: 'total_kosten', label: 'Total Kosten', align: 'right', format: chf },
+  { key: 'total_lohnkosten', label: 'Lohn (Verr.)', align: 'right', format: chf },
+  { key: 'total_materialkosten', label: 'Material (Verr.)', align: 'right', format: chf },
+  { key: 'total_kosten', label: 'Total (Verr.)', align: 'right', format: chf },
 ]
 
 /* ── Component ────────────────────────────────────────── */
@@ -215,8 +215,8 @@ export default function ProjekteTab() {
         data={chartData}
         xKey="name"
         bars={[
-          { dataKey: 'Lohnkosten', color: '#f59e0b', label: 'Lohnkosten' },
-          { dataKey: 'Materialkosten', color: '#3b82f6', label: 'Materialkosten' },
+          { dataKey: 'Lohnkosten', color: '#f59e0b', label: 'Lohn (Verr.)' },
+          { dataKey: 'Materialkosten', color: '#3b82f6', label: 'Material (Verr.)' },
         ]}
         height={300}
       />

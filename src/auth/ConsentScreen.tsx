@@ -29,7 +29,7 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
       <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Datenschutzerklärung</div>
       <div className="auth-sub">Hallo {displayName.split(' ')[0]}, bitte lies und bestätige Folgendes:</div>
-      <div className="consent-version">Version 2 · April 2026</div>
+      <div className="consent-version">Version 3 · April 2026</div>
 
       <div className="consent-box">
         <p><strong>Gespeicherte Daten:</strong></p>
@@ -43,7 +43,8 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
 
         <p><strong>Externe Datenverarbeitung:</strong></p>
         <ul>
-          <li><strong>Groq</strong> (USA) — Transkription von Sprachnachrichten</li>
+          <li><strong>Mistral AI</strong> (EU/Frankreich) — Sprach- und Texterkennung (Chat, Transkription)</li>
+          <li><strong>Anthropic Claude</strong> (USA, EU SCC) — PDF-Extraktion</li>
           <li><strong>Supabase</strong> (EU/Frankfurt) — Datenbank-Speicherung</li>
           <li><strong>Google Drive / OneDrive</strong> — Fotos und Dokumente</li>
           <li><strong>SMTP-Provider</strong> — E-Mail-Versand</li>
@@ -53,8 +54,10 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
           <strong>Rechtsgrundlage:</strong> Vertragserfüllung (nDSG Art. 31 Abs. 2 lit. a)
         </p>
         <p>
-          Es gilt das schweizerische Datenschutzgesetz (nDSG). Daten werden teilweise
-          in die USA übermittelt (mit Standardvertragsklauseln abgesichert).
+          Es gilt das schweizerische Datenschutzgesetz (nDSG). Sprach- und Textdaten
+          werden in der EU (Frankreich, Deutschland) verarbeitet. Einzelne Dienste
+          (Anthropic Claude für PDF-Extraktion, Microsoft OneDrive) übermitteln Daten
+          in die USA — mit Standardvertragsklauseln und Schweizer Zusatz abgesichert.
         </p>
         <p>
           Du hast jederzeit das Recht auf Auskunft, Berichtigung und Löschung deiner Daten.

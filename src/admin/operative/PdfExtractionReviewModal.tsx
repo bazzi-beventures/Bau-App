@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { fmtCHF } from '../utils/format'
 
 export interface ExtractedProduct {
   name: string
@@ -54,10 +55,6 @@ interface Props {
 
 function parseNum(v: string): number {
   return parseFloat(v.replace(',', '.')) || 0
-}
-
-function fmtCHF(n: number) {
-  return `CHF ${n.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
@@ -129,6 +126,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
   }
 
   const supplierLabel = data.supplier_label || 'Unbekannt'
+  const mouseDownOnBackdrop = useRef(false)
 
   return (
     <div
@@ -136,11 +134,14 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       }}
-      onClick={onCancel}
+      onMouseDown={e => { mouseDownOnBackdrop.current = e.target === e.currentTarget }}
+      onClick={e => {
+        if (e.target === e.currentTarget && mouseDownOnBackdrop.current) onCancel()
+        mouseDownOnBackdrop.current = false
+      }}
     >
       <div
         style={{ background: 'var(--bg, #fff)', borderRadius: 12, padding: 24, maxWidth: 880, width: '95%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}
-        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>

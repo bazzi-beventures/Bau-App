@@ -113,6 +113,79 @@ export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename
   }
 }
 
+/**
+ * SSE-Streaming-Fetch. Öffnet einen POST-Request gegen `path`, parst SSE-Events
+ * (`data: <json>\n\n`) und yieldet das geparste Objekt pro Event.
+ *
+ * Das Backend muss `text/event-stream` zurückliefern. Bei 4xx/5xx wird ApiError
+ * geworfen — der Caller kann dann auf nicht-streamendes apiFetch zurückfallen.
+ */
+export async function* apiStreamFetch(
+  path: string,
+  body: unknown,
+): AsyncGenerator<Record<string, unknown>, void, void> {
+  let res: Response
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...authHeaders(),
+        ...csrfHeader(),
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new ApiError(0, 'Keine Internetverbindung')
+  }
+
+  if (!res.ok) {
+    const detail = await parseErrorDetail(res)
+    if (handleExpiredSession(res.status, detail, path)) {
+      throw new ApiError(res.status, 'Sitzung abgelaufen')
+    }
+    throw new ApiError(res.status, detail)
+  }
+
+  if (!res.body) {
+    throw new ApiError(0, 'Stream nicht verfügbar')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buf = ''
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      // SSE events sind durch \n\n getrennt; jede Zeile beginnt mit "data: "
+      let boundary = buf.indexOf('\n\n')
+      while (boundary !== -1) {
+        const raw = buf.slice(0, boundary)
+        buf = buf.slice(boundary + 2)
+        const dataLines = raw
+          .split('\n')
+          .filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5).trimStart())
+        if (dataLines.length > 0) {
+          const payload = dataLines.join('\n')
+          try {
+            yield JSON.parse(payload) as Record<string, unknown>
+          } catch {
+            // Malformed event — überspringen
+          }
+        }
+        boundary = buf.indexOf('\n\n')
+      }
+    }
+  } finally {
+    try { reader.releaseLock() } catch {}
+  }
+}
+
 export async function apiFormFetch(path: string, form: FormData): Promise<unknown> {
   // No Content-Type header — browser sets it with the multipart boundary
   try {

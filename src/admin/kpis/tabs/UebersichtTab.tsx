@@ -27,7 +27,7 @@ export default function UebersichtTab() {
       sub: `${pctSign}${pct}% vs. Vormonat`,
       subColor: pctColor,
     },
-    { label: 'Kosten (Monat)', value: chf(row.kosten_aktueller_monat), sub: `Lohn: ${chf(row.lohnkosten_aktueller_monat)}` },
+    { label: 'Kosten Verrechn. (Monat)', value: chf(row.kosten_aktueller_monat), sub: `Lohn (Verr.): ${chf(row.lohnkosten_aktueller_monat)}` },
     { label: 'Umsatz (Monat)', value: chf(row.umsatz_aktueller_monat), color: '#22c55e' },
     {
       label: 'Offene Rechnungen',

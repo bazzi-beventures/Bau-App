@@ -1,6 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct } from './PdfExtractionReviewModal'
+import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
+import { fmtCHF, fmtDate } from '../utils/format'
+import { StatusFilterPopover } from '../components/StatusFilterPopover'
+import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
 
 interface Quote {
   id: number
@@ -66,34 +71,8 @@ interface TravelRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
 interface InstallationTemplate { id: string; label: string; default_fee: number; notes: string | null }
 
-export const QUOTE_STATUS_LABELS: Record<string, string> = {
-  entwurf: 'Entwurf',
-  gesendet: 'Gesendet',
-  akzeptiert: 'Akzeptiert',
-  abgelehnt: 'Abgelehnt',
-  absage: 'Absage',
-  archiviert: 'Archiviert',
-}
-
-export const QUOTE_STATUS_BADGE: Record<string, string> = {
-  entwurf: 'admin-badge-draft',
-  gesendet: 'admin-badge-sent',
-  akzeptiert: 'admin-badge-approved',
-  abgelehnt: 'admin-badge-rejected',
-  absage: 'admin-badge-rejected',
-  archiviert: 'admin-badge-closed',
-}
-
 const STATUS_LABELS = QUOTE_STATUS_LABELS
 const STATUS_BADGE = QUOTE_STATUS_BADGE
-
-function fmtCHF(amount: number) {
-  return `CHF ${amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
 
 function parseNum(v: string): number {
   return parseFloat(v.replace(',', '.')) || 0
@@ -156,20 +135,6 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   }
   function addExtraProduct() { setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }]) }
   function removeExtraProduct(i: number) { setExtraProducts(r => r.filter((_, j) => j !== i)) }
-
-  // ── Extra charge helpers ──
-  function updateExtraCharge(i: number, patch: Partial<ExtraChargeRow>) {
-    setExtraCharges(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
-  }
-  function addExtraCharge() { setExtraCharges(r => [...r, { description: '', total_price: '' }]) }
-  function removeExtraCharge(i: number) { setExtraCharges(r => r.filter((_, j) => j !== i)) }
-
-  // ── Travel helpers ──
-  function addTravel() { setTravelRows(r => [...r, { description: 'Fahrtpauschale', total_price: '' }]) }
-  function updateTravel(i: number, patch: Partial<TravelRow>) {
-    setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
-  }
-  function removeTravel(i: number) { setTravelRows(r => r.filter((_, j) => j !== i)) }
 
   // ── Installation helpers ──
   function addInstallationFromTemplate(tpl: InstallationTemplate) {
@@ -406,31 +371,20 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         </div>
       </fieldset>
 
-      {/* Extra Charges */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderaufwände</legend>
-        {extraCharges.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description} onChange={e => updateExtraCharge(i, { description: e.target.value })} />
-            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price} onChange={e => updateExtraCharge(i, { total_price: e.target.value })} />
-            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeExtraCharge(i)} title="Entfernen">✕</button>
-          </div>
-        ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addExtraCharge}>+ Sonderaufwand</button>
-      </fieldset>
+      <DescPriceFieldset
+        title="Sonderaufwände"
+        rows={extraCharges}
+        onChange={setExtraCharges}
+        addLabel="+ Sonderaufwand"
+      />
 
-      {/* Travel */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Fahrtkosten</legend>
-        {travelRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description} onChange={e => updateTravel(i, { description: e.target.value })} />
-            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price} onChange={e => updateTravel(i, { total_price: e.target.value })} />
-            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeTravel(i)} title="Entfernen">✕</button>
-          </div>
-        ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addTravel}>+ Fahrtkosten</button>
-      </fieldset>
+      <DescPriceFieldset
+        title="Fahrtkosten"
+        rows={travelRows}
+        onChange={setTravelRows}
+        addLabel="+ Fahrtkosten"
+        defaultDescription="Fahrtpauschale"
+      />
 
       {/* Installation */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -452,20 +406,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         </div>
       </fieldset>
 
-      {/* Discounts */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <label className="admin-form-label">Rabatt auf Lohn (%)</label>
-            <input className="admin-form-input" placeholder="0" value={laborDiscount} onChange={e => setLaborDiscount(e.target.value)} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label className="admin-form-label">Rabatt auf Material (%)</label>
-            <input className="admin-form-input" placeholder="0" value={materialDiscount} onChange={e => setMaterialDiscount(e.target.value)} />
-          </div>
-        </div>
-      </fieldset>
+      <DiscountsFieldset
+        laborDiscount={laborDiscount}
+        materialDiscount={materialDiscount}
+        onLaborChange={setLaborDiscount}
+        onMaterialChange={setMaterialDiscount}
+      />
 
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
@@ -565,6 +511,7 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
 
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
+      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={onCancel} disabled={saving} style={{ marginBottom: 12 }}>← Zurück</button>
       <h3 style={{ margin: '0 0 4px' }}>Offerte bearbeiten</h3>
       <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 20 }}>{quote.quote_number} · {quote.project_name}</div>
 
@@ -639,35 +586,20 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }])}>+ Freie Position</button>
       </fieldset>
 
-      {/* Extra Charges */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderaufwände</legend>
-        {extraCharges.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description}
-              onChange={e => setExtraCharges(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
-            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price}
-              onChange={e => setExtraCharges(rows => rows.map((r, j) => j === i ? { ...r, total_price: e.target.value } : r))} />
-            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExtraCharges(r => r.filter((_, j) => j !== i))}>✕</button>
-          </div>
-        ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraCharges(r => [...r, { description: '', total_price: '' }])}>+ Sonderaufwand</button>
-      </fieldset>
+      <DescPriceFieldset
+        title="Sonderaufwände"
+        rows={extraCharges}
+        onChange={setExtraCharges}
+        addLabel="+ Sonderaufwand"
+      />
 
-      {/* Travel */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Fahrtkosten</legend>
-        {travelRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input className="admin-form-input" style={{ flex: 3 }} placeholder="Beschreibung" value={row.description}
-              onChange={e => setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
-            <input className="admin-form-input" style={{ flex: 1 }} placeholder="Betrag CHF" value={row.total_price}
-              onChange={e => setTravelRows(rows => rows.map((r, j) => j === i ? { ...r, total_price: e.target.value } : r))} />
-            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setTravelRows(r => r.filter((_, j) => j !== i))}>✕</button>
-          </div>
-        ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setTravelRows(r => [...r, { description: 'Fahrtpauschale', total_price: '' }])}>+ Fahrtkosten</button>
-      </fieldset>
+      <DescPriceFieldset
+        title="Fahrtkosten"
+        rows={travelRows}
+        onChange={setTravelRows}
+        addLabel="+ Fahrtkosten"
+        defaultDescription="Fahrtpauschale"
+      />
 
       {/* Installation */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -692,20 +624,12 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         </div>
       </fieldset>
 
-      {/* Discounts */}
-      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <label className="admin-form-label">Rabatt auf Lohn (%)</label>
-            <input className="admin-form-input" placeholder="0" value={laborDiscount} onChange={e => setLaborDiscount(e.target.value)} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label className="admin-form-label">Rabatt auf Material (%)</label>
-            <input className="admin-form-input" placeholder="0" value={materialDiscount} onChange={e => setMaterialDiscount(e.target.value)} />
-          </div>
-        </div>
-      </fieldset>
+      <DiscountsFieldset
+        laborDiscount={laborDiscount}
+        materialDiscount={materialDiscount}
+        onLaborChange={setLaborDiscount}
+        onMaterialChange={setMaterialDiscount}
+      />
 
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
@@ -728,7 +652,9 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
 export default function QuotesScreen() {
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(
+    () => new Set(['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage'])
+  )
   const [search, setSearch] = useState('')
   const [acting, setActing] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -798,10 +724,10 @@ export default function QuotesScreen() {
     }
   }
 
-  const statuses = ['', 'entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage', 'archiviert']
+  const ALL_STATUSES = ['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage', 'archiviert']
 
   const filtered = quotes.filter(q => {
-    const matchStatus = !statusFilter || q.status === statusFilter
+    const matchStatus = statusFilters.has(q.status)
     const matchSearch = q.project_name.toLowerCase().includes(search.toLowerCase()) ||
       q.quote_number.toLowerCase().includes(search.toLowerCase())
     return matchStatus && matchSearch
@@ -850,16 +776,12 @@ export default function QuotesScreen() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select
-            className="admin-form-select"
-            style={{ width: 'auto', flexShrink: 0 }}
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            {statuses.map(s => (
-              <option key={s} value={s}>{s ? STATUS_LABELS[s] : 'Alle Status'}</option>
-            ))}
-          </select>
+          <StatusFilterPopover
+            allStatuses={ALL_STATUSES}
+            statusLabels={STATUS_LABELS}
+            selected={statusFilters}
+            onChange={setStatusFilters}
+          />
         </div>
 
         {loading ? (

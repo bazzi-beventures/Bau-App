@@ -119,7 +119,7 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
       {/* Ferienanspruch */}
       {entitlement && (
         <div className="menu-list" style={{ marginTop: 8 }}>
-          <div className="menu-item" style={{ pointerEvents: 'none' }}>
+          <div className="menu-item" style={{ pointerEvents: 'none', alignItems: 'flex-start' }}>
             <div className="menu-icon menu-icon-green">
               <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -128,10 +128,27 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
             </div>
-            <div className="menu-text">
+            <div className="menu-text" style={{ width: '100%' }}>
               <div className="menu-label">Ferienanspruch {new Date().getFullYear()}</div>
-              <div className="menu-sub">
-                {entitlement.remaining} von {entitlement.entitlement} Tagen übrig ({entitlement.used} beantragt/genehmigt)
+              <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 13, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11 }}>Rest</div>
+                  <div style={{ fontWeight: 700, color: entitlement.remaining < 0 ? '#ef4444' : '#22c55e' }}>
+                    {entitlement.remaining} d
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11 }}>Anspruch</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.entitlement} d</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11 }}>Bezogen</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.taken} d</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11 }}>Geplant</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.planned} d</div>
+                </div>
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { apiFetch, apiBlobFetch, apiFormFetch } from './client'
+import { apiFetch, apiBlobFetch, apiFormFetch, apiStreamFetch } from './client'
 
 export interface DisambiguationOption {
   name: string
@@ -22,11 +22,26 @@ export interface ChatResponse {
   }
 }
 
-export async function sendMessage(text: string): Promise<ChatResponse> {
-  return apiFetch('/pwa/chat/message', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
-  }) as Promise<ChatResponse>
+export type ChatStreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'result'; result: ChatResponse }
+
+/**
+ * Streamt eine Chat-Nachricht. Yieldet pro Backend-SSE-Event:
+ *   - { type: 'delta', text }       — Text-Chunk während der Bot tippt
+ *   - { type: 'result', result }    — Terminal-Event mit pending_summary etc.
+ *
+ * Caller bekommt am Ende garantiert genau ein "result"-Event.
+ */
+export async function* sendMessageStream(text: string): AsyncGenerator<ChatStreamEvent, void, void> {
+  for await (const raw of apiStreamFetch('/pwa/chat/message', { text })) {
+    const t = raw.type
+    if (t === 'delta' && typeof raw.text === 'string') {
+      yield { type: 'delta', text: raw.text }
+    } else if (t === 'result' && raw.result && typeof raw.result === 'object') {
+      yield { type: 'result', result: raw.result as ChatResponse }
+    }
+  }
 }
 
 export async function sendVoice(blob: Blob): Promise<ChatResponse> {
@@ -175,6 +190,8 @@ export async function createAbsenceRequest(payload: AbsenceCreatePayload): Promi
 export interface VacationEntitlement {
   entitlement: number
   used: number
+  taken: number
+  planned: number
   remaining: number
   source: string
 }

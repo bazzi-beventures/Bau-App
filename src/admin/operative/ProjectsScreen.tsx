@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import ProjectDetailScreen from './ProjectDetailScreen'
+import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 
 export interface Termin {
   datum: string
@@ -22,8 +23,6 @@ export interface DisposalDetails {
   nachweis_url: string
   bemerkung: string
 }
-
-export type ProjectStatus = 'offen' | 'abgeschlossen'
 
 export interface EmbeddedCustomer {
   id: string
@@ -79,16 +78,6 @@ export interface Project {
   bemerkung: string | null
   invoice?: ProjectInvoiceSummary | null
   quote?: ProjectQuoteSummary | null
-}
-
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  offen: 'Offen',
-  abgeschlossen: 'Abgeschlossen',
-}
-
-export const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
-  offen: 'admin-badge-active',
-  abgeschlossen: 'admin-badge-closed',
 }
 
 const DOC_STATUS_BADGE: Record<string, string> = {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessage, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
+import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
@@ -61,7 +61,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
   useEffect(() => {
     if (!initialMessage || initialSentRef.current) return
     initialSentRef.current = true
-    handleResponse(initialMessage, sendMessage(initialMessage))
+    handleResponseStream(initialMessage)
     onInitialMessageConsumed?.()
   }, [initialMessage])
 
@@ -114,6 +114,69 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
         return
       }
       addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Senden. Bitte erneut versuchen.', timestamp: now() })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /**
+   * Streaming-Variante: legt eine leere Bot-Bubble an und füllt sie chunkweise.
+   * Bei Tool-Call-Pfaden (kein Delta, nur ein Result-Event) bleibt die Bubble
+   * leer — der Spinner zeigt sich währenddessen — und wird am Ende mit dem
+   * vollen Reply ersetzt.
+   */
+  async function handleResponseStream(userText: string) {
+    addMessage({ role: 'user', text: userText, timestamp: now() })
+    const botId = nextId()
+    setMessages(prev => [...prev, { id: botId, role: 'bot', text: '', timestamp: now() }])
+    setLoading(true)
+    let sawDelta = false
+    try {
+      let finalRes: ChatResponse | null = null
+      for await (const ev of sendMessageStream(userText)) {
+        if (ev.type === 'delta') {
+          sawDelta = true
+          // Spinner ausblenden, sobald der erste Token kommt
+          setLoading(false)
+          setMessages(prev =>
+            prev.map(m => m.id === botId ? { ...m, text: m.text + ev.text } : m)
+          )
+        } else if (ev.type === 'result') {
+          finalRes = ev.result
+        }
+      }
+      if (!finalRes) {
+        setMessages(prev =>
+          prev.map(m => m.id === botId
+            ? { ...m, text: m.text || 'Fehler beim Verarbeiten. Bitte erneut versuchen.' }
+            : m)
+        )
+        return
+      }
+      // Result-Event ist autoritativ: Reply, action_taken, disambiguation übernehmen.
+      // Falls Deltas gestreamt wurden, ist result.reply normalerweise == bisheriger Bubble-Text.
+      setMessages(prev =>
+        prev.map(m => m.id === botId
+          ? {
+              ...m,
+              text: finalRes!.reply,
+              action_taken: finalRes!.action_taken,
+              disambiguation: finalRes!.disambiguation,
+            }
+          : m)
+      )
+      handleActionState(finalRes)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onLoggedOut()
+        return
+      }
+      const errText = isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Senden. Bitte erneut versuchen.'
+      setMessages(prev =>
+        prev.map(m => m.id === botId
+          ? { ...m, text: sawDelta ? m.text : errText }
+          : m)
+      )
     } finally {
       setLoading(false)
     }
@@ -173,7 +236,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
 
   function onSendText(text: string) {
     if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
-    handleResponse(text, sendMessage(text))
+    handleResponseStream(text)
   }
 
   function onSendVoice(blob: Blob) {
@@ -251,7 +314,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
               className="disambig-btn"
               onClick={() => {
                 setPendingQuoteQuestion(false)
-                handleResponse('Ja', sendMessage('Ja'))
+                handleResponseStream('Ja')
               }}
             >
               Ja, Offerte verwenden
@@ -260,7 +323,7 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
               className="disambig-btn"
               onClick={() => {
                 setPendingQuoteQuestion(false)
-                handleResponse('Nein', sendMessage('Nein'))
+                handleResponseStream('Nein')
               }}
             >
               Nein, normaler Flow

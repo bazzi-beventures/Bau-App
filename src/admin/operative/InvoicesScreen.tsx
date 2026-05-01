@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { INVOICE_STATUS_LABELS as STATUS_LABELS, INVOICE_STATUS_BADGE as STATUS_BADGE } from '../constants/statuses'
+import { fmtCHF, fmtDate } from '../utils/format'
+import { StatusFilterPopover } from '../components/StatusFilterPopover'
 
 interface Invoice {
   id: number
@@ -20,37 +23,14 @@ interface Project {
   is_closed?: boolean
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  ausstehend: 'Ausstehend',
-  offen: 'Offen',
-  gesendet: 'Gesendet',
-  bezahlt: 'Bezahlt',
-  archiviert: 'Archiviert',
-  inaktiv: 'Inaktiv',
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  ausstehend: 'admin-badge-open',
-  offen: 'admin-badge-open',
-  gesendet: 'admin-badge-sent',
-  bezahlt: 'admin-badge-paid',
-  archiviert: 'admin-badge-closed',
-  inaktiv: 'admin-badge-draft',
-}
-
-function fmtCHF(amount: number) {
-  return `CHF ${amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function fmtDate(d: string | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+const ALL_STATUSES = ['ausstehend', 'offen', 'gesendet', 'bezahlt', 'archiviert', 'inaktiv']
 
 export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(
+    () => new Set(['ausstehend', 'offen', 'gesendet', 'bezahlt', 'inaktiv'])
+  )
   const [search, setSearch] = useState('')
   const [acting, setActing] = useState<number | null>(null)
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
@@ -70,14 +50,13 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   async function load() {
     setLoading(true)
     try {
-      const url = statusFilter ? `/pwa/admin/invoices?status=${statusFilter}` : '/pwa/admin/invoices'
-      setInvoices(await apiFetch(url) as Invoice[])
+      setInvoices(await apiFetch('/pwa/admin/invoices') as Invoice[])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [statusFilter])
+  useEffect(() => { load() }, [])
 
   async function openGenerate() {
     try {
@@ -180,16 +159,16 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     }
   }
 
-  const filtered = invoices.filter(inv =>
-    inv.project_name.toLowerCase().includes(search.toLowerCase()) ||
-    inv.invoice_number.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = invoices.filter(inv => {
+    const matchStatus = statusFilters.has(inv.status)
+    const matchSearch = inv.project_name.toLowerCase().includes(search.toLowerCase()) ||
+      inv.invoice_number.toLowerCase().includes(search.toLowerCase())
+    return matchStatus && matchSearch
+  })
 
   const totalOpen = invoices
     .filter(i => i.status === 'ausstehend' || i.status === 'offen' || i.status === 'gesendet')
     .reduce((s, i) => s + i.total_amount, 0)
-
-  const statuses = ['', 'ausstehend', 'offen', 'gesendet', 'bezahlt', 'archiviert']
 
   return (
     <div className="admin-page">
@@ -211,16 +190,12 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <select
-            className="admin-form-select"
-            style={{ width: 'auto', flexShrink: 0 }}
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            {statuses.map(s => (
-              <option key={s} value={s}>{s ? STATUS_LABELS[s] : 'Alle Status'}</option>
-            ))}
-          </select>
+          <StatusFilterPopover
+            allStatuses={ALL_STATUSES}
+            statusLabels={STATUS_LABELS}
+            selected={statusFilters}
+            onChange={setStatusFilters}
+          />
         </div>
 
         {loading ? (

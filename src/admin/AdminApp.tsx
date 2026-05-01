@@ -11,6 +11,7 @@ import MyTimeScreen from './personal/MyTimeScreen'
 import AbsencesScreen from './personal/AbsencesScreen'
 import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
+import VacationOverviewScreen from './personal/VacationOverviewScreen'
 import ProjectsScreen from './operative/ProjectsScreen'
 import CustomersScreen from './operative/CustomersScreen'
 import MaterialsScreen from './operative/MaterialsScreen'
@@ -61,6 +62,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'absences': 'Absenzen',
   'corrections': 'Zeitkorrekturen',
   'hr-reports': 'HR-Berichte',
+  'vacation': 'Ferien',
   'projects': 'Projekte',
   'customers': 'Kundenstamm',
   'quotes': 'Offerten',
@@ -112,6 +114,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
+      case 'vacation':     return <VacationOverviewScreen />
       case 'projects':     return <ProjectsScreen />
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return <QuotesScreen />

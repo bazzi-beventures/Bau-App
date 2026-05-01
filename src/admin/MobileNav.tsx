@@ -156,6 +156,9 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'hr-reports' ? ' active' : ''}`} onClick={() => navigate('hr-reports')}>
                   <IconDocument /><span>HR-Berichte</span>
                 </button>
+                <button className={`admin-mobile-drawer-item${screen === 'vacation' ? ' active' : ''}`} onClick={() => navigate('vacation')}>
+                  <IconCalendar /><span>Ferien</span>
+                </button>
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>

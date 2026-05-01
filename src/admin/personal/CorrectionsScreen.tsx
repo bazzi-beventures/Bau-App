@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getAdminCorrections, approveCorrection, rejectCorrection, Correction } from '../../api/admin'
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import { fmtDate } from '../utils/format'
 
 function TimeChange({ before, after, label }: { before: string | null; after: string | null; label: string }) {
   if (!after) return null

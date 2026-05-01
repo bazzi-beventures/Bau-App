@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { SK } from '../../api/storageKeys'
+import MultiDropdown from '../kpis/components/MultiDropdown'
+import '../kpis/kpi-dashboard.css'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const LS_SHOW_MANAGEMENT = 'hr_reports_show_management'
+
+type StaffRole = 'management' | 'superadmin' | 'admin' | 'user' | 'user_light' | null
 
 interface Session {
   id: string
   staff_name: string
+  staff_role?: StaffRole
   date: string
   clock_in: string
   clock_out: string | null
@@ -34,11 +40,14 @@ interface TimesheetData {
   labor_hours: LaborHour[]
   overtime_by_staff: Record<string, OvertimeInfo>
   soll_stunden_woche: number
+  staff_roles?: Record<string, StaffRole>
+  currently_clocked_in?: string[]
 }
 
 interface DbViolation {
   id: string
   staff_name: string
+  staff_role?: StaffRole
   violation_date: string
   violation_type: string
   description: string
@@ -47,6 +56,8 @@ interface DbViolation {
   acknowledged_by: string | null
   acknowledged_at: string | null
 }
+
+const MANAGEMENT_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>(['management', 'superadmin'])
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' })
@@ -69,7 +80,6 @@ function fmtTime(iso: string | null) {
   return new Date(iso).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-// Group sessions by staff name
 function groupByStaff(sessions: Session[]) {
   const map = new Map<string, Session[]>()
   for (const s of sessions) {
@@ -90,13 +100,26 @@ export default function HrReportsScreen() {
   const [dateTo, setDateTo] = useState(defaultTo)
   const [data, setData] = useState<TimesheetData | null>(null)
   const [loading, setLoading] = useState(false)
-  const [expandedStaff, setExpandedStaff] = useState<string | null>(null)
+  const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const [violations, setViolations] = useState<DbViolation[]>([])
   const [violationsLoading, setViolationsLoading] = useState(false)
   const [acknowledging, setAcknowledging] = useState<string | null>(null)
+
+  const [showManagement, setShowManagement] = useState<boolean>(() => {
+    return localStorage.getItem(LS_SHOW_MANAGEMENT) === '1'
+  })
+  const [selectedStaff, setSelectedStaff] = useState<Set<string>>(new Set())
+  // Wenn null/leer interpretieren wir „Alle". Sobald der User explizit toggelt, hält das Set die Auswahl.
+  const [staffFilterUserModified, setStaffFilterUserModified] = useState(false)
+
+  function persistShowManagement(v: boolean) {
+    setShowManagement(v)
+    if (v) localStorage.setItem(LS_SHOW_MANAGEMENT, '1')
+    else localStorage.removeItem(LS_SHOW_MANAGEMENT)
+  }
 
   async function load() {
     setLoading(true)
@@ -105,9 +128,6 @@ export default function HrReportsScreen() {
         `/pwa/admin/hr/timesheet?date_from=${dateFrom}&date_to=${dateTo}`
       ) as TimesheetData
       setData(result)
-      if (result.sessions.length > 0) {
-        setExpandedStaff(result.sessions[0].staff_name)
-      }
     } catch {
       setData(null)
     } finally {
@@ -181,15 +201,97 @@ export default function HrReportsScreen() {
     }
   }
 
-  const staffGroups = data ? groupByStaff(data.sessions) : new Map<string, Session[]>()
+  // ── Lookup-Tabellen ──────────────────────────────
+  const roleByName: Map<string, StaffRole> = useMemo(() => {
+    const m = new Map<string, StaffRole>()
+    if (data?.staff_roles) {
+      for (const [name, role] of Object.entries(data.staff_roles)) m.set(name, role ?? null)
+    }
+    for (const s of data?.sessions ?? []) {
+      if (!m.has(s.staff_name) && s.staff_role !== undefined) m.set(s.staff_name, s.staff_role ?? null)
+    }
+    for (const v of violations) {
+      if (!m.has(v.staff_name) && v.staff_role !== undefined) m.set(v.staff_name, v.staff_role ?? null)
+    }
+    return m
+  }, [data, violations])
+
+  const liveStaff: Set<string> = useMemo(() => new Set(data?.currently_clocked_in ?? []), [data])
+
+  const isManagement = (staffName: string) => MANAGEMENT_ROLES.has(roleByName.get(staffName) ?? null)
+
+  // ── Mitarbeiter-Liste für Multi-Select aufbauen ──
+  // Union aus Sessions, overtime_by_staff (auch ohne Sessions), Verstössen.
+  const allStaffNames: string[] = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of data?.sessions ?? []) set.add(s.staff_name)
+    if (data?.overtime_by_staff) for (const k of Object.keys(data.overtime_by_staff)) set.add(k)
+    for (const v of violations) set.add(v.staff_name)
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de-CH'))
+  }, [data, violations])
+
+  // Visible (nach GF-Toggle) — bestimmt was im Multi-Select überhaupt zur Auswahl steht
+  const visibleStaffNames: string[] = useMemo(() => {
+    return showManagement ? allStaffNames : allStaffNames.filter(n => !isManagement(n))
+  }, [allStaffNames, showManagement, roleByName])
+
+  // Wenn der User noch nichts manuell gefiltert hat, gilt „alles ist ausgewählt".
+  // Sobald er einmal toggelt, halten wir seine Auswahl, blenden aber neu sichtbare/verschwundene Namen aktiv aus.
+  useEffect(() => {
+    if (!staffFilterUserModified) {
+      setSelectedStaff(new Set(visibleStaffNames))
+      return
+    }
+    setSelectedStaff(prev => {
+      const next = new Set<string>()
+      for (const n of visibleStaffNames) if (prev.has(n)) next.add(n)
+      return next
+    })
+  }, [visibleStaffNames.join('|')])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleStaff(name: string) {
+    setStaffFilterUserModified(true)
+    setSelectedStaff(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name); else next.add(name)
+      return next
+    })
+  }
+
+  function toggleAllStaff(all: boolean) {
+    setStaffFilterUserModified(true)
+    setSelectedStaff(all ? new Set(visibleStaffNames) : new Set())
+  }
+
+  // ── Sessions filtern + nach Staff gruppieren ──
+  const filteredSessions = useMemo(() => {
+    const sessions = data?.sessions ?? []
+    return sessions.filter(s => selectedStaff.has(s.staff_name))
+  }, [data, selectedStaff])
+
+  const staffGroups = useMemo(() => groupByStaff(filteredSessions), [filteredSessions])
 
   function staffTotalHours(sessions: Session[]) {
     return sessions.reduce((sum, s) => sum + (s.total_minutes ?? 0), 0)
   }
 
-  // Verstösse werden live aus den Sessions berechnet (admin_staff.py) und
-  // zusätzlich vom Mitternachts-Job in arg_violations persistiert. Wir zeigen
-  // beide Quellen zusammen und mergen über (staff, date, description).
+  // Mitarbeiter-Reihenfolge: aktuell eingestempelt zuerst, dann mit Sessions, dann Rest. Innerhalb Gruppen alphabetisch.
+  const orderedStaffNames: string[] = useMemo(() => {
+    const inGroups = new Set(staffGroups.keys())
+    const visibleSet = new Set(visibleStaffNames.filter(n => selectedStaff.has(n)))
+    const live: string[] = []
+    const withSessions: string[] = []
+    const others: string[] = []
+    for (const n of visibleSet) {
+      if (liveStaff.has(n)) live.push(n)
+      else if (inGroups.has(n)) withSessions.push(n)
+      else others.push(n)
+    }
+    const cmp = (a: string, b: string) => a.localeCompare(b, 'de-CH')
+    return [...live.sort(cmp), ...withSessions.sort(cmp), ...others.sort(cmp)]
+  }, [staffGroups, visibleStaffNames, selectedStaff, liveStaff])
+
+  // ── Verstösse vereinigen + filtern ──
   type UnifiedViolation = {
     key: string
     staff_name: string
@@ -199,47 +301,69 @@ export default function HrReportsScreen() {
     acknowledged: boolean
     severity: string
   }
-  const dbByKey = new Map<string, DbViolation>()
-  for (const v of violations) {
-    dbByKey.set(`${v.staff_name}|${v.violation_date}|${v.description}`, v)
-  }
-  const unifiedViolations: UnifiedViolation[] = []
-  const seenKeys = new Set<string>()
-  if (data) {
-    for (const s of data.sessions) {
-      for (const text of (s.violations ?? [])) {
-        const key = `${s.staff_name}|${s.date}|${text}`
-        if (seenKeys.has(key)) continue
-        seenKeys.add(key)
-        const db = dbByKey.get(key)
-        unifiedViolations.push({
-          key,
-          staff_name: s.staff_name,
-          date: s.date,
-          description: text,
-          dbId: db?.id ?? null,
-          acknowledged: db?.acknowledged ?? false,
-          severity: db?.severity ?? 'warning',
-        })
+
+  const unifiedViolations: UnifiedViolation[] = useMemo(() => {
+    const dbByKey = new Map<string, DbViolation>()
+    for (const v of violations) {
+      dbByKey.set(`${v.staff_name}|${v.violation_date}|${v.description}`, v)
+    }
+    const out: UnifiedViolation[] = []
+    const seenKeys = new Set<string>()
+    if (data) {
+      for (const s of data.sessions) {
+        for (const text of (s.violations ?? [])) {
+          const key = `${s.staff_name}|${s.date}|${text}`
+          if (seenKeys.has(key)) continue
+          seenKeys.add(key)
+          const dbv = dbByKey.get(key)
+          out.push({
+            key,
+            staff_name: s.staff_name,
+            date: s.date,
+            description: text,
+            dbId: dbv?.id ?? null,
+            acknowledged: dbv?.acknowledged ?? false,
+            severity: dbv?.severity ?? 'warning',
+          })
+        }
       }
     }
-  }
-  for (const v of violations) {
-    const key = `${v.staff_name}|${v.violation_date}|${v.description}`
-    if (seenKeys.has(key)) continue
-    seenKeys.add(key)
-    unifiedViolations.push({
-      key,
-      staff_name: v.staff_name,
-      date: v.violation_date,
-      description: v.description,
-      dbId: v.id,
-      acknowledged: v.acknowledged,
-      severity: v.severity,
+    for (const v of violations) {
+      const key = `${v.staff_name}|${v.violation_date}|${v.description}`
+      if (seenKeys.has(key)) continue
+      seenKeys.add(key)
+      out.push({
+        key,
+        staff_name: v.staff_name,
+        date: v.violation_date,
+        description: v.description,
+        dbId: v.id,
+        acknowledged: v.acknowledged,
+        severity: v.severity,
+      })
+    }
+    out.sort((a, b) => b.date.localeCompare(a.date))
+    return out
+  }, [data, violations])
+
+  const filteredViolations = useMemo(
+    () => unifiedViolations.filter(v => {
+      if (!selectedStaff.has(v.staff_name)) return false
+      if (!showManagement && isManagement(v.staff_name)) return false
+      return true
+    }),
+    [unifiedViolations, selectedStaff, showManagement, roleByName]
+  )
+
+  const unifiedBadgeCount = filteredViolations.filter(v => !v.acknowledged).length
+
+  function toggleExpand(name: string) {
+    setExpandedStaff(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name); else next.add(name)
+      return next
     })
   }
-  unifiedViolations.sort((a, b) => b.date.localeCompare(a.date))
-  const unifiedBadgeCount = unifiedViolations.filter(v => !v.acknowledged).length
 
   function handleLoad() {
     load()
@@ -283,7 +407,6 @@ export default function HrReportsScreen() {
       </div>
 
       {/* Filter */}
-      {(tab === 'timesheet' || tab === 'violations') && (
       <div className="admin-table-wrap" style={{ padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="admin-form-group">
@@ -302,20 +425,61 @@ export default function HrReportsScreen() {
               {exporting ? 'Exportieren…' : 'XLSX Export'}
             </button>
           )}
+
+          <div style={{ flex: '1 0 auto' }} />
+
+          {/* Mitarbeiter-Filter */}
+          {visibleStaffNames.length > 0 && (
+            <div className="admin-form-group">
+              <label className="admin-form-label">Mitarbeiter</label>
+              <MultiDropdown
+                label={
+                  selectedStaff.size === visibleStaffNames.length
+                    ? 'Alle'
+                    : `${selectedStaff.size}/${visibleStaffNames.length}`
+                }
+                options={visibleStaffNames.map(n => ({
+                  value: n,
+                  count: (data?.sessions ?? []).filter(s => s.staff_name === n).length,
+                }))}
+                selected={selectedStaff}
+                onToggle={toggleStaff}
+                onToggleAll={toggleAllStaff}
+              />
+            </div>
+          )}
+
+          {/* GF-Toggle */}
+          <div className="admin-form-group">
+            <label className="admin-form-label">&nbsp;</label>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 13, color: 'var(--text)', cursor: 'pointer',
+              padding: '6px 10px', border: '1px solid var(--border)',
+              borderRadius: 6, background: showManagement ? 'var(--surface-2)' : 'transparent',
+              userSelect: 'none', whiteSpace: 'nowrap',
+            }}>
+              <input
+                type="checkbox"
+                checked={showManagement}
+                onChange={e => persistShowManagement(e.target.checked)}
+              />
+              Geschäftsführung anzeigen
+            </label>
+          </div>
         </div>
       </div>
-      )}
 
       {/* ─── Violations Tab ─── */}
       {tab === 'violations' && (
         <>
           {(loading || violationsLoading) && <div className="admin-loading"><div className="admin-spinner" /> Verstösse werden geladen…</div>}
-          {!loading && !violationsLoading && unifiedViolations.length === 0 && (
+          {!loading && !violationsLoading && filteredViolations.length === 0 && (
             <div className="admin-table-wrap">
               <div className="admin-table-empty" style={{ padding: 48 }}>Keine Verstösse im gewählten Zeitraum.</div>
             </div>
           )}
-          {!loading && !violationsLoading && unifiedViolations.length > 0 && (
+          {!loading && !violationsLoading && filteredViolations.length > 0 && (
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead>
@@ -327,7 +491,7 @@ export default function HrReportsScreen() {
                   </tr>
                 </thead>
                 <tbody>
-                  {unifiedViolations.map(v => (
+                  {filteredViolations.map(v => (
                     <tr key={v.key}>
                       <td className="secondary" style={{ whiteSpace: 'nowrap' }}>{fmtDate(v.date)}</td>
                       <td className="primary">{v.staff_name}</td>
@@ -361,15 +525,17 @@ export default function HrReportsScreen() {
 
       {tab === 'timesheet' && data && !loading && (
         <>
-          {staffGroups.size === 0 ? (
+          {orderedStaffNames.length === 0 ? (
             <div className="admin-table-wrap">
               <div className="admin-table-empty" style={{ padding: 48 }}>Keine Daten für diesen Zeitraum gefunden.</div>
             </div>
           ) : (
-            Array.from(staffGroups.entries()).map(([staffName, sessions]) => {
+            orderedStaffNames.map(staffName => {
+              const sessions = staffGroups.get(staffName) ?? []
               const totalMin = staffTotalHours(sessions)
-              const isExpanded = expandedStaff === staffName
+              const isExpanded = expandedStaff.has(staffName)
               const overtime = data.overtime_by_staff?.[staffName]
+              const isLive = liveStaff.has(staffName)
 
               return (
                 <div key={staffName} className="admin-table-wrap" style={{ marginBottom: 14 }}>
@@ -379,15 +545,38 @@ export default function HrReportsScreen() {
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '14px 16px', cursor: 'pointer', userSelect: 'none',
                     }}
-                    onClick={() => setExpandedStaff(isExpanded ? null : staffName)}
+                    onClick={() => toggleExpand(staffName)}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div className="admin-avatar" style={{ width: 34, height: 34 }}>
-                        {staffName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                      <div style={{ position: 'relative' }}>
+                        <div className="admin-avatar" style={{ width: 34, height: 34 }}>
+                          {staffName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        {isLive && (
+                          <span
+                            title="Jetzt eingestempelt"
+                            style={{
+                              position: 'absolute', bottom: -2, right: -2,
+                              width: 12, height: 12, borderRadius: '50%',
+                              background: '#22c55e',
+                              border: '2px solid var(--surface, #0f172a)',
+                              boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+                            }}
+                          />
+                        )}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{staffName}</div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{sessions.length} Sessions</div>
+                        <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {staffName}
+                          {isLive && (
+                            <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>● live</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                          {sessions.length === 0
+                            ? 'Keine Sessions im Zeitraum'
+                            : `${sessions.length} Session${sessions.length === 1 ? '' : 's'}`}
+                        </div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -412,7 +601,7 @@ export default function HrReportsScreen() {
                     </div>
                   </div>
 
-                  {isExpanded && (
+                  {isExpanded && sessions.length > 0 && (
                     <table className="admin-table">
                       <thead>
                         <tr>
@@ -424,7 +613,10 @@ export default function HrReportsScreen() {
                         </tr>
                       </thead>
                       <tbody>
-                        {sessions.sort((a, b) => a.date.localeCompare(b.date)).map(s => (
+                        {[...sessions].sort((a, b) => {
+                          const c = b.date.localeCompare(a.date)
+                          return c !== 0 ? c : (b.clock_in ?? '').localeCompare(a.clock_in ?? '')
+                        }).map(s => (
                           <tr key={s.id}>
                             <td className="secondary">{fmtDate(s.date)}</td>
                             <td>{fmtTime(s.clock_in)}</td>
