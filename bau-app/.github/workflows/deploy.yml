@@ -33,4 +33,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: dist
+          cname: app.beventures.ch
           commit_message: "deploy: ${{ github.event.head_commit.message }}"
