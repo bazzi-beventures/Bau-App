@@ -2,6 +2,9 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
+    <!-- CSP wird im Production-Build via Vite-Plugin injiziert (siehe vite.config.ts).
+         In Dev bleibt sie weg, weil Vite-HMR Inline-Scripts braucht. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-KHW2/fFBgZvsBbicctmW6GYITa1XXRj3dOIgGdfMoWo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; base-uri 'self'; form-action 'self'; object-src 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1a73e8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -11,32 +14,12 @@
     <link rel="apple-touch-icon" href="/Bau-App/icons/icon-192.png" />
     <link rel="manifest" href="/Bau-App/manifest.json" />
     <title>Gehlhaar App Test</title>
-    <meta name="app-build-id" content="2026-05-01T13:49:49.641Z" />
-    <script type="module" crossorigin src="/Bau-App/assets/index-3o04ROaL.js"></script>
-    <link rel="stylesheet" crossorigin href="/Bau-App/assets/index-By3bmmcs.css">
+    <meta name="app-build-id" content="2026-05-09T00:11:35.150Z" />
+    <script type="module" crossorigin src="/Bau-App/assets/index-VOfnQ1oF.js"></script>
+    <link rel="stylesheet" crossorigin href="/Bau-App/assets/index-CPbxEwJw.css">
   <script id="vite-plugin-pwa:register-sw" src="/Bau-App/registerSW.js"></script></head>
   <body>
     <div id="root"></div>
-    <script>
-      // Nuclear-Kill-Switch: Wenn die zuletzt beobachtete Build-ID sich
-      // geändert hat, alte Service-Worker + Caches einmalig löschen.
-      // Nur bei tatsächlichem Versionswechsel — kein Effekt im Steady-State.
-      (function () {
-        try {
-          var meta = document.querySelector('meta[name="app-build-id"]');
-          var current = meta && meta.getAttribute('content');
-          if (!current || current === '2026-05-01T13:49:49.641Z') return;
-          var KEY = 'app_build_id';
-          var last = localStorage.getItem(KEY);
-          if (last === current) return;
-          localStorage.setItem(KEY, current);
-          if (last !== null && 'caches' in window) {
-            caches.keys().then(function (names) {
-              names.forEach(function (n) { caches.delete(n); });
-            });
-          }
-        } catch (e) { /* niemals Boot blockieren */ }
-      })();
-    </script>
+    <script>(function(){try{var m=document.querySelector('meta[name="app-build-id"]');var c=m&&m.getAttribute('content');if(!c||c.indexOf('_'+'_')===0)return;var K='app_build_id';var l=localStorage.getItem(K);if(l===c)return;localStorage.setItem(K,c);if(l!==null&&'caches'in window){caches.keys().then(function(n){n.forEach(function(x){caches.delete(x);});});}}catch(e){}})();</script>
   </body>
 </html>
