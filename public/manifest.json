@@ -2,21 +2,21 @@
   "name": "Gehlhaar App Test",
   "short_name": "Gehlhaar App Test",
   "description": "Zeiterfassung & Rapporte für Bauarbeiter",
-  "start_url": "/Bau-App/",
-  "scope": "/Bau-App/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a73e8",
   "lang": "de",
   "icons": [
     {
-      "src": "/Bau-App/icons/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Bau-App/icons/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

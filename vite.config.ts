@@ -3,9 +3,9 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { createHash } from 'node:crypto'
 
-// GitHub Pages serves at https://<user>.github.io/bau-app/
-// Update BASE_PATH if the repo name is different.
-const BASE_PATH = '/Bau-App/'
+// Custom-Domain-Setup (app.beventures.ch / app-staging.beventures.ch) → App auf Root.
+// Falls je wieder ein Build ohne Custom Domain gefahren wird, --base im CI-Workflow setzen.
+const BASE_PATH = '/'
 
 // Build-ID wird beim Build injiziert (index.html Platzhalter __BUILD_ID__).
 // Dient als Nuclear-Kill-Switch: Wenn localStorage eine andere ID hält als
