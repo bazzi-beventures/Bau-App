@@ -2,12 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError, apiFormFetch } from '../api/client'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 
-interface Termin {
-  datum: string
-  uhrzeit: string
-  notiz: string
-}
-
 interface Kontakt {
   name: string
   kommentar: string
@@ -26,16 +20,38 @@ interface EmbeddedCustomer {
   phone: string | null
 }
 
+type ProjectKind = 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt' | 'sonstiges'
+
+const KIND_LABELS: Record<ProjectKind, string> = {
+  project: 'Projekt',
+  teamsitzung: 'Teamsitzung',
+  lagerarbeit: 'Lagerarbeit',
+  werkstatt: 'Werkstatt',
+  sonstiges: 'Sonstiges',
+}
+
+const KIND_COLORS: Record<ProjectKind, string> = {
+  project: 'var(--accent-amber)',
+  teamsitzung: '#7c3aed',
+  lagerarbeit: '#d97706',
+  werkstatt: '#0d9488',
+  sonstiges: '#475569',
+}
+
 interface Project {
   id: string
   name: string
+  kind: ProjectKind
   art_der_arbeit: string | null
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
   local_contact_name: string | null
   local_contact_phone: string | null
-  termine: Termin[]
+  start_date: string | null
+  end_date: string | null
+  start_time: string | null
+  end_time: string | null
   kontakte: Kontakt[]
   bemerkung: string | null
 }
@@ -65,15 +81,27 @@ interface Props {
   onLoggedOut: () => void
 }
 
-function nextTermin(termine: Termin[]): Termin | null {
-  const today = new Date().toISOString().slice(0, 10)
-  const upcoming = (termine ?? []).filter(t => t.datum >= today).sort((a, b) => a.datum.localeCompare(b.datum))
-  return upcoming[0] ?? null
-}
-
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-')
   return `${d}.${m}.${y}`
+}
+
+function formatTime(t: string | null): string {
+  if (!t) return ''
+  return t.slice(0, 5)
+}
+
+function formatTimeRange(p: { start_time: string | null; end_time: string | null }): string {
+  const s = formatTime(p.start_time)
+  const e = formatTime(p.end_time)
+  if (s && e) return `${s}–${e}`
+  return s || e
+}
+
+function formatDateRange(p: { start_date: string | null; end_date: string | null }): string {
+  if (!p.start_date) return ''
+  if (!p.end_date || p.end_date === p.start_date) return formatDate(p.start_date)
+  return `${formatDate(p.start_date)} – ${formatDate(p.end_date)}`
 }
 
 function formatDateTime(iso: string): string {
@@ -166,7 +194,6 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
 
   // ── Detail-Ansicht ──────────────────────────────────────────
   if (selected) {
-    const termin = nextTermin(selected.termine)
     return (
       <div className="app-screen">
         <div className="inner-header">
@@ -180,11 +207,29 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
         </div>
 
         <div className="projekte-detail-scroll">
-          {selected.art_der_arbeit && (
-            <div className="projekte-detail-badge-row">
-              <span className="projekte-detail-badge">{selected.art_der_arbeit}</span>
-            </div>
-          )}
+          {(() => {
+            const k = (selected.kind || 'project') as ProjectKind
+            if (k !== 'project') {
+              return (
+                <div className="projekte-detail-badge-row">
+                  <span
+                    className="projekte-detail-badge"
+                    style={{ background: KIND_COLORS[k], color: '#fff' }}
+                  >
+                    {KIND_LABELS[k]}
+                  </span>
+                </div>
+              )
+            }
+            if (selected.art_der_arbeit) {
+              return (
+                <div className="projekte-detail-badge-row">
+                  <span className="projekte-detail-badge">{selected.art_der_arbeit}</span>
+                </div>
+              )
+            }
+            return null
+          })()}
 
           {/* Bemerkung — rot hervorgehoben */}
           {selected.bemerkung && (
@@ -256,27 +301,14 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             )}
           </div>
 
-          {/* Nächster Termin */}
-          {termin && (
+          {/* Einsatz-Termin */}
+          {selected.start_date && (
             <div className="projekte-detail-card projekte-detail-card-accent">
-              <div className="projekte-detail-title">Nächster Termin</div>
+              <div className="projekte-detail-title">Einsatz</div>
               <div className="projekte-detail-termin-date">
-                {formatDate(termin.datum)}{termin.uhrzeit ? ` · ${termin.uhrzeit}` : ''}
+                {formatDateRange(selected)}
+                {formatTimeRange(selected) && ` · ${formatTimeRange(selected)}`}
               </div>
-              {termin.notiz && <div className="projekte-detail-termin-notiz">{termin.notiz}</div>}
-            </div>
-          )}
-
-          {/* Alle Termine */}
-          {(selected.termine ?? []).length > 1 && (
-            <div className="projekte-detail-card">
-              <div className="projekte-detail-title">Alle Termine</div>
-              {selected.termine.map((t, i) => (
-                <div key={i} className="projekte-detail-row">
-                  <span className="projekte-detail-label">{formatDate(t.datum)}{t.uhrzeit ? ` ${t.uhrzeit}` : ''}</span>
-                  <span className="projekte-detail-value">{t.notiz || '—'}</span>
-                </div>
-              ))}
             </div>
           )}
 
@@ -483,8 +515,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
           const groupMap = new Map<string, Project[]>()
           const noDateKey = '__none__'
           projects.forEach(p => {
-            const t = nextTermin(p.termine)
-            const key = t ? t.datum : noDateKey
+            const key = p.start_date || noDateKey
             const arr = groupMap.get(key) ?? []
             arr.push(p)
             groupMap.set(key, arr)
@@ -508,31 +539,36 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                   </div>
                   <div className="projekte-group-tiles">
                     {groupProjects.map(p => {
-                      const termin = nextTermin(p.termine)
+                      const timeLabel = formatTimeRange(p)
+                      const kind = (p.kind || 'project') as ProjectKind
+                      const isInternal = kind !== 'project'
+                      const tileColor = KIND_COLORS[kind] || KIND_COLORS.project
                       return (
                         <div key={p.id} className="projekte-tile" onClick={() => setSelected(p)}>
                           <div className="projekte-tile-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+                            <svg viewBox="0 0 24 24" fill="none" stroke={tileColor} strokeWidth="1.8">
                               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                               <path d="M9 22V12h6v10"/>
                             </svg>
                           </div>
                           <div className="projekte-tile-name">{p.name}</div>
-                          <div className="projekte-tile-sub">
-                            {p.art_der_arbeit || p.customer?.billing_name || p.customer?.name || '—'}
+                          <div className="projekte-tile-sub" style={isInternal ? { color: tileColor, fontWeight: 600 } : undefined}>
+                            {isInternal
+                              ? KIND_LABELS[kind]
+                              : (p.art_der_arbeit || p.customer?.billing_name || p.customer?.name || '—')}
                           </div>
                           {p.bemerkung && (
                             <div style={{ fontSize: 11, color: '#c53030', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               ⚠ {p.bemerkung}
                             </div>
                           )}
-                          {termin && (
+                          {p.start_date && (
                             <div className="projekte-tile-termin">
                               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                                 <rect x="1" y="3" width="14" height="12" rx="2"/>
                                 <path d="M5 1v3M11 1v3M1 7h14"/>
                               </svg>
-                              {termin.uhrzeit || formatDate(termin.datum)}
+                              {timeLabel || formatDate(p.start_date)}
                             </div>
                           )}
                           <div className="projekte-tile-arrow">

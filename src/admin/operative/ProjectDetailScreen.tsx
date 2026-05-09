@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
-import { Kontakt, Project, Termin, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
+import { Kontakt, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { QuoteCreateForm } from './QuotesScreen'
 import { WORK_TYPES } from '../../api/workTypes'
@@ -47,7 +47,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
   const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
   const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
-  const [termine, setTermine] = useState<Termin[]>(project?.termine ?? [])
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
   const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
   const [disposal, setDisposal] = useState<DisposalDetails>(project?.disposal_details ?? EMPTY_DISPOSAL)
@@ -296,17 +295,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     ? (selectedCustomer.billing_address || selectedCustomer.address || '')
     : (project ? projectBillingAddress(project) : '')
 
-  // ── Termine helpers ──────────────────────────────────────────
-  function addTermin() {
-    setTermine(prev => [...prev, { datum: '', uhrzeit: '', notiz: '' }])
-  }
-  function updateTermin(i: number, field: keyof Termin, value: string) {
-    setTermine(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t))
-  }
-  function removeTermin(i: number) {
-    setTermine(prev => prev.filter((_, idx) => idx !== i))
-  }
-
   // ── Kontakte helpers ─────────────────────────────────────────
   function addKontakt() {
     setKontakte(prev => [...prev, { name: '', kommentar: '', telefon: '', email: '' }])
@@ -342,7 +330,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           bemerkung: bemerkung || null,
           projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
-          termine,
           kontakte,
           disposal_details: artDerArbeit === 'Demontage' && !disposalEmpty(disposal) ? disposal : null,
           wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
@@ -573,38 +560,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* ── Termine ──────────────────────────────────────── */}
-          <div className="admin-table-wrap" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div className="admin-section-title" style={{ margin: 0 }}>Termine</div>
-              <button type="button" className="admin-btn admin-btn-sm admin-btn-secondary" onClick={addTermin}>
-                + Termin hinzufügen
-              </button>
-            </div>
-            {termine.length === 0 && (
-              <div style={{ color: 'var(--muted)', fontSize: 13 }}>Keine Termine eingetragen.</div>
-            )}
-            {termine.map((t, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
-                <div className="admin-form-group" style={{ margin: 0 }}>
-                  <label className="admin-form-label">Datum</label>
-                  <input className="admin-form-input" type="date" value={t.datum} onChange={e => updateTermin(i, 'datum', e.target.value)} />
-                </div>
-                <div className="admin-form-group" style={{ margin: 0 }}>
-                  <label className="admin-form-label">Uhrzeit</label>
-                  <input className="admin-form-input" type="time" value={t.uhrzeit} onChange={e => updateTermin(i, 'uhrzeit', e.target.value)} />
-                </div>
-                <div className="admin-form-group" style={{ margin: 0 }}>
-                  <label className="admin-form-label">Notiz</label>
-                  <input className="admin-form-input" value={t.notiz} onChange={e => updateTermin(i, 'notiz', e.target.value)} placeholder="optional" />
-                </div>
-                <button type="button" className="admin-btn admin-btn-sm admin-btn-danger" style={{ marginBottom: 1 }} onClick={() => removeTermin(i)}>
-                  ✕
-                </button>
-              </div>
-            ))}
           </div>
 
           {/* ── Ansprechpersonen ──────────────────────────────── */}

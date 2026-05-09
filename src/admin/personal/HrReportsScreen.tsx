@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
-import { SK } from '../../api/storageKeys'
 import MultiDropdown from '../kpis/components/MultiDropdown'
 import '../kpis/kpi-dashboard.css'
 
@@ -167,14 +166,10 @@ export default function HrReportsScreen() {
   async function handleExport() {
     setExporting(true)
     try {
-      const token = localStorage.getItem(SK.TOKEN)
       const res = await fetch(`${BASE_URL}/pwa/admin/hr/export-timesheets`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
       })
       if (!res.ok) {

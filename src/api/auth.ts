@@ -1,4 +1,4 @@
-import { apiFetch, clearToken } from './client'
+import { apiFetch } from './client'
 
 export interface UserInfo {
   authorized_user_id: string
@@ -33,7 +33,6 @@ export async function getMe(): Promise<UserInfo> {
 
 export async function logout(): Promise<void> {
   await apiFetch('/pwa/auth/logout', { method: 'POST' })
-  clearToken()
 }
 
 export async function acceptConsent(): Promise<void> {

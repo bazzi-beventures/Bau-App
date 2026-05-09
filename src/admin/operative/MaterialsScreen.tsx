@@ -344,7 +344,7 @@ export default function MaterialsScreen() {
                 const supplierName = m.supplier_id ? (supplierMap[m.supplier_id] ?? null) : null
                 return (
                   <tr key={m.id} onClick={() => setEditMaterial(m)}>
-                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{m.art_nr}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{m.art_nr}</td>
                     <td><strong>{m.name}</strong>{supplierName ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{supplierName}</span> : null}</td>
                     <td style={{ color: 'var(--muted)' }}>{m.category || '—'}</td>
                     <td>{m.unit || '—'}</td>

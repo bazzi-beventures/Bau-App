@@ -243,32 +243,13 @@ input, textarea { font-family: var(--font); color: var(--text); }
   opacity: 1;
 }
 
-.home-admin-btn {
-  background: var(--accent-blue-dim);
-  border: 1px solid var(--accent-blue-25);
-  border-radius: 8px;
-  color: var(--accent-blue);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.home-admin-btn:hover {
-  background: var(--accent-blue);
-  color: #fff;
-}
-
+.home-admin-btn,
 .home-theme-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
   height: 32px;
+  box-sizing: border-box;
   background: var(--accent-blue-dim);
   border: 1px solid var(--accent-blue-25);
   border-radius: 8px;
@@ -277,6 +258,19 @@ input, textarea { font-family: var(--font); color: var(--text); }
   transition: background 0.15s, color 0.15s;
 }
 
+.home-admin-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 10px;
+  gap: 5px;
+}
+
+.home-theme-btn {
+  width: 32px;
+  padding: 0;
+}
+
+.home-admin-btn:hover,
 .home-theme-btn:hover {
   background: var(--accent-blue);
   color: #fff;
@@ -302,9 +296,9 @@ input, textarea { font-family: var(--font); color: var(--text); }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 99px;
-  padding: 5px 12px;
-  font-size: 12px; color: var(--muted);
-  font-family: var(--mono);
+  padding: 4px 10px;
+  font-size: 12.5px; font-weight: 500; color: var(--muted);
+  font-family: var(--font);
   margin-top: 10px;
 }
 .date-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); flex-shrink: 0; }

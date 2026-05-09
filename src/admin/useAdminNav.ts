@@ -9,6 +9,7 @@ export type AdminScreen =
   | 'hr-reports'
   | 'vacation'
   | 'projects'
+  | 'project-schedule'
   | 'customers'
   | 'quotes'
   | 'invoices'

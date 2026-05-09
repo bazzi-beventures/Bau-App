@@ -1,4 +1,4 @@
-import { apiFetch, saveToken } from '../api/client'
+import { apiFetch } from '../api/client'
 
 // ── base64url helpers ────────────────────────────────────────
 
@@ -54,8 +54,8 @@ export async function registerPasskey(
   const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential
   const response = credential.response as AuthenticatorAttestationResponse
 
-  // 4. Send to server
-  const regResult = (await apiFetch('/pwa/auth/register-complete', {
+  // 4. Send to server (Session-Cookie wird vom Server gesetzt)
+  await apiFetch('/pwa/auth/register-complete', {
     method: 'POST',
     body: JSON.stringify({
       tenant_slug: tenantSlug,
@@ -72,8 +72,7 @@ export async function registerPasskey(
         },
       },
     }),
-  })) as { token?: string }
-  if (regResult.token) saveToken(regResult.token)
+  })
 }
 
 // ── Authentication ────────────────────────────────────────────
@@ -122,8 +121,7 @@ export async function authenticatePasskey(
         },
       },
     }),
-  })) as { display_name: string; token?: string }
+  })) as { display_name: string }
 
-  if (result.token) saveToken(result.token)
   return result.display_name
 }

@@ -13,6 +13,7 @@ import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
 import VacationOverviewScreen from './personal/VacationOverviewScreen'
 import ProjectsScreen from './operative/ProjectsScreen'
+import ProjectScheduleScreen from './operative/ProjectScheduleScreen'
 import CustomersScreen from './operative/CustomersScreen'
 import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
@@ -64,6 +65,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'hr-reports': 'HR-Berichte',
   'vacation': 'Ferien',
   'projects': 'Projekte',
+  'project-schedule': 'Einsatzplanung',
   'customers': 'Kundenstamm',
   'quotes': 'Offerten',
   'invoices': 'Rechnungen',
@@ -76,7 +78,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
-  const { screen, nav } = useAdminNav()
+  const { screen, detailId, nav, clearDetail } = useAdminNav()
   const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
@@ -109,13 +111,14 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
-      case 'my-time':      return <MyTimeScreen onLoggedOut={onLoggedOut} />
+      case 'my-time':      return <MyTimeScreen onLoggedOut={onLoggedOut} onNav={nav} />
       case 'staff':        return <StaffScreen />
       case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />
       case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
       case 'hr-reports':   return <HrReportsScreen />
       case 'vacation':     return <VacationOverviewScreen />
-      case 'projects':     return <ProjectsScreen />
+      case 'projects':     return <ProjectsScreen openNew={detailId === 'new'} onConsumedNew={clearDetail} />
+      case 'project-schedule': return <ProjectScheduleScreen canton={canton} onNav={nav} />
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return <QuotesScreen />
       case 'invoices':     return <InvoicesScreen onBadgeChange={loadDashboard} />
@@ -134,7 +137,8 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       <div className="admin-shell-mobile">
         <main className="admin-content admin-content-mobile">
           <div className="admin-content-inner">
-            <div className="admin-content-topbar">
+            <div className="admin-content-topbar admin-content-topbar--mobile">
+              <div className="admin-mobile-topbar-title">{SCREEN_TITLES[screen]}</div>
               <button
                 type="button"
                 className="admin-btn-icon admin-theme-toggle"

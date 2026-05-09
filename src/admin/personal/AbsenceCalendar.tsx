@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Absence } from '../../api/admin'
+import { getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday } from '../utils/calendarHelpers'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
@@ -19,116 +20,9 @@ function getTypeColor(type: string): string {
   return TYPE_COLORS[type] ?? '#6b7280'
 }
 
-// ─── Swiss Public Holidays (canton-aware) ─────────────────────────────────────
-
-function getEaster(year: number): Date {
-  const a = year % 19
-  const b = Math.floor(year / 100)
-  const c = year % 100
-  const d = Math.floor(b / 4)
-  const e = b % 4
-  const f = Math.floor((b + 8) / 25)
-  const g = Math.floor((b - f + 1) / 3)
-  const h = (19 * a + b - d - g + 15) % 30
-  const i = Math.floor(c / 4)
-  const k = c % 4
-  const l = (32 + 2 * e + 2 * i - h - k) % 7
-  const m = Math.floor((a + 11 * h + 22 * l) / 451)
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1
-  const day = ((h + l - 7 * m + 114) % 31) + 1
-  return new Date(year, month, day)
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-function toDateStr(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-// Katholische Kantone (haben Fronleichnam, Maria Himmelfahrt, Allerheiligen, Mariä Empfängnis)
-const CATHOLIC_CANTONS = new Set(['AG', 'AI', 'FR', 'JU', 'LU', 'NW', 'OW', 'SG', 'SO', 'SZ', 'TI', 'UR', 'VS', 'ZG'])
-// Kantone mit Berchtoldstag (2.1)
-const WITH_BERCHTOLDSTAG = new Set(['ZH', 'BE', 'AG', 'LU', 'SG', 'SH', 'TG', 'ZG', 'AR', 'AI', 'GL', 'GR', 'SZ', 'UR', 'NW', 'OW'])
-// Kantone mit Tag der Arbeit (1.5)
-const WITH_TAG_DER_ARBEIT = new Set(['ZH', 'BL', 'BS', 'JU', 'NE', 'SH', 'TG'])
-// Kantone mit Stephanstag (26.12)
-const WITH_STEPHANSTAG = new Set(['ZH', 'BE', 'AG', 'LU', 'SG', 'SH', 'TG', 'ZG', 'AR', 'AI', 'GL', 'GR', 'SZ', 'UR', 'NW', 'OW', 'BL', 'BS', 'SO'])
-
-function getSwissHolidays(year: number, canton: string): Map<string, string> {
-  const c = canton.toUpperCase()
-  const easter = getEaster(year)
-  const holidays = new Map<string, string>()
-  const add = (d: Date, name: string) => holidays.set(toDateStr(d), name)
-
-  // Alle Kantone
-  add(new Date(year, 0, 1),   'Neujahr')
-  add(new Date(year, 7, 1),   'Nationalfeiertag')
-  add(new Date(year, 11, 25), 'Weihnachten')
-
-  // Bewegliche (fast alle Kantone)
-  add(addDays(easter, -2),  'Karfreitag')
-  add(addDays(easter, 1),   'Ostermontag')
-  add(addDays(easter, 39),  'Auffahrt')
-  add(addDays(easter, 50),  'Pfingstmontag')
-
-  if (WITH_BERCHTOLDSTAG.has(c)) add(new Date(year, 0, 2),   'Berchtoldstag')
-  if (WITH_TAG_DER_ARBEIT.has(c)) add(new Date(year, 4, 1),  'Tag der Arbeit')
-  if (WITH_STEPHANSTAG.has(c))    add(new Date(year, 11, 26), 'Stephanstag')
-
-  // Katholische Feiertage
-  if (CATHOLIC_CANTONS.has(c)) {
-    add(addDays(easter, 60),     'Fronleichnam')
-    add(new Date(year, 7, 15),   'Maria Himmelfahrt')
-    add(new Date(year, 10, 1),   'Allerheiligen')
-    add(new Date(year, 11, 8),   'Mariä Empfängnis')
-  }
-
-  return holidays
-}
-
-// ─── Calendar Helpers ─────────────────────────────────────────────────────────
-
-function getWeekDays(date: Date): Date[] {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = (day + 6) % 7
-  d.setDate(d.getDate() - diff)
-  return Array.from({ length: 7 }, (_, i) => {
-    const n = new Date(d)
-    n.setDate(d.getDate() + i)
-    return n
-  })
-}
-
-function getMonthDays(date: Date): (Date | null)[] {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-  const startPad = (firstDay.getDay() + 6) % 7
-  const result: (Date | null)[] = Array(startPad).fill(null)
-  for (let d = 1; d <= lastDay.getDate(); d++) result.push(new Date(year, month, d))
-  while (result.length % 7 !== 0) result.push(null)
-  return result
-}
-
 function absenceCoversDay(absence: Absence, day: Date): boolean {
   const dayStr = toDateStr(day)
   return dayStr >= absence.start_date.slice(0, 10) && dayStr <= absence.end_date.slice(0, 10)
-}
-
-function isToday(date: Date): boolean {
-  const t = new Date()
-  return (
-    date.getDate() === t.getDate() &&
-    date.getMonth() === t.getMonth() &&
-    date.getFullYear() === t.getFullYear()
-  )
 }
 
 function fmt(dateStr: string) {

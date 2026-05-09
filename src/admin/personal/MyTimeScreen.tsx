@@ -7,6 +7,8 @@ import {
   CorrectionPayload,
 } from '../../api/chat'
 import { apiFetch, ApiError, isOfflineError } from '../../api/client'
+import BerichtScreen, { BerichtType } from '../../screens/BerichtScreen'
+import { AdminScreen } from '../useAdminNav'
 
 interface SessionStatus {
   status: 'active' | 'inactive' | 'on_break'
@@ -70,26 +72,76 @@ const IconStop = () => (
   </svg>
 )
 const IconPause = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="6" y="5" width="4" height="14" />
     <rect x="14" y="5" width="4" height="14" />
   </svg>
 )
 const IconPauseEnd = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="8 5 19 12 8 19 8 5" />
+  </svg>
+)
+const IconReport = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <polyline points="8 13 12 17 16 13" />
+    <line x1="12" y1="17" x2="12" y2="9" />
+  </svg>
+)
+const IconCalendar = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+)
+const IconCalendarLast = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <polyline points="8 14 10 16 8 18" />
+  </svg>
+)
+const IconUsers = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+)
+const IconEdit = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
   </svg>
 )
 
 interface Props {
   onLoggedOut: () => void
+  onNav: (screen: AdminScreen) => void
 }
 
-export default function MyTimeScreen({ onLoggedOut }: Props) {
+interface ActionCard {
+  label: string
+  sub: string
+  icon: React.ReactNode
+  iconClass: string
+  onClick: () => void
+  disabled?: boolean
+}
+
+export default function MyTimeScreen({ onLoggedOut, onNav }: Props) {
   const [loadingAction, setLoadingAction] = useState<ZeitAction | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [stempel, setStempel] = useState<StempelState>(() => loadStempelState())
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
+  const [berichtModal, setBerichtModal] = useState<BerichtType | null>(null)
 
   useEffect(() => {
     try { localStorage.setItem(STEMPEL_STATE_KEY, JSON.stringify(stempel)) } catch { /* ignore */ }
@@ -246,12 +298,53 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
     }
   }
 
+  const reportCards: ActionCard[] = [
+    {
+      label: 'Arbeitszeitbericht',
+      sub: 'Monatszeiten & Überstunden',
+      icon: <IconReport />,
+      iconClass: 'green',
+      onClick: () => setBerichtModal('monthly'),
+    },
+    {
+      label: 'Diese Woche',
+      sub: 'Stundenjournal aktuell',
+      icon: <IconCalendar />,
+      iconClass: 'blue',
+      onClick: () => setBerichtModal('weekly-this'),
+    },
+    {
+      label: 'Letzte Woche',
+      sub: 'Stundenjournal vergangen',
+      icon: <IconCalendarLast />,
+      iconClass: 'blue',
+      onClick: () => setBerichtModal('weekly-last'),
+    },
+  ]
+
+  const moreCards: ActionCard[] = [
+    {
+      label: 'Absenzen',
+      sub: 'Urlaub & Abwesenheiten',
+      icon: <IconUsers />,
+      iconClass: 'orange',
+      onClick: () => onNav('absences'),
+    },
+    {
+      label: 'Arbeitszeit korrigieren',
+      sub: 'Korrekturantrag einreichen',
+      icon: <IconEdit />,
+      iconClass: 'orange',
+      onClick: () => setShowCorrection(v => !v),
+    },
+  ]
+
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Meine Zeiterfassung</div>
-          <div className="admin-page-subtitle">Ein-/Ausstempeln, Pausen und Korrekturen für dich persönlich.</div>
+          <div className="admin-page-subtitle">Ein-/Ausstempeln, Pausen, Berichte und Korrekturen für dich persönlich.</div>
         </div>
       </div>
 
@@ -283,7 +376,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
             <div
               className="admin-kpi-value"
               style={{
-                fontFamily: 'DM Mono, ui-monospace, SFMono-Regular, monospace',
+                fontFamily: 'var(--mono)',
                 color: stempel.clockedIn
                   ? (stempel.onBreak ? 'var(--warning)' : 'var(--success)')
                   : 'var(--text-muted)',
@@ -310,7 +403,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
         </div>
       </div>
 
-      {/* Aktions-Buttons */}
+      {/* Primäre Stempel-Aktionen */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--s-3)', marginBottom: 'var(--s-6)' }}>
         <button
           className={`admin-btn admin-btn-hero ${stempel.clockedIn ? 'admin-btn-danger' : 'admin-btn-success'}`}
@@ -334,25 +427,49 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
           {stempel.onBreak ? <IconPauseEnd /> : <IconPause />}
           {loadingAction === 'start_break' || loadingAction === 'end_break'
             ? '…'
-            : (stempel.onBreak ? 'Pause beenden' : 'Pause')}
+            : (stempel.onBreak ? 'Pause beenden' : 'Pause starten')}
         </button>
       </div>
 
-      {/* Korrekturantrag */}
-      <div style={{ maxWidth: 520 }}>
-        <button
-          className="admin-btn admin-btn-secondary"
-          onClick={() => setShowCorrection(v => !v)}
-          style={{ marginBottom: 14 }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-          {showCorrection ? 'Korrekturantrag schliessen' : 'Arbeitszeit korrigieren'}
-        </button>
+      {/* Berichte */}
+      <div className="admin-kpi-section">
+        <div className="admin-kpi-group-title">Berichte</div>
+        <div className="admin-kpi-grid">
+          {reportCards.map(card => (
+            <div key={card.label} className="admin-kpi-card" onClick={card.onClick}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)' }}>
+                <div className={`admin-kpi-icon ${card.iconClass}`}>{card.icon}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{card.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{card.sub}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        {showCorrection && (
+      {/* Weitere Aktionen */}
+      <div className="admin-kpi-section">
+        <div className="admin-kpi-group-title">Weitere Aktionen</div>
+        <div className="admin-kpi-grid">
+          {moreCards.map(card => (
+            <div key={card.label} className="admin-kpi-card" onClick={card.onClick}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-3)' }}>
+                <div className={`admin-kpi-icon ${card.iconClass}`}>{card.icon}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{card.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{card.sub}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Korrekturantrag-Formular */}
+      {showCorrection && (
+        <div style={{ maxWidth: 520, marginTop: 'var(--s-4)' }}>
           <div
             style={{
               background: 'var(--surface)',
@@ -436,8 +553,41 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Bericht-Modal (Mitarbeiter-Ansicht) */}
+      {berichtModal && (
+        <div
+          className="admin-bericht-modal-backdrop"
+          onClick={() => setBerichtModal(null)}
+        >
+          <div
+            className="admin-bericht-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="admin-bericht-modal-close"
+              onClick={() => setBerichtModal(null)}
+              aria-label="Schliessen"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <BerichtScreen
+              berichtType={berichtModal}
+              onBack={() => setBerichtModal(null)}
+              onNavHome={() => setBerichtModal(null)}
+              onNavRapport={() => setBerichtModal(null)}
+              onNavProfile={() => setBerichtModal(null)}
+              onLoggedOut={onLoggedOut}
+            />
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="admin-toast-container">

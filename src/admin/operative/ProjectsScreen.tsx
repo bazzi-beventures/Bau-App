@@ -3,12 +3,6 @@ import { apiFetch } from '../../api/client'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 
-export interface Termin {
-  datum: string
-  uhrzeit: string
-  notiz: string
-}
-
 export interface Kontakt {
   name: string
   kommentar: string
@@ -51,10 +45,21 @@ export interface ProjectQuoteSummary {
   pdf_url: string | null
 }
 
+export type ProjectKind = 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt' | 'sonstiges'
+
+export const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
+  project: 'Projekt',
+  teamsitzung: 'Teamsitzung',
+  lagerarbeit: 'Lagerarbeit',
+  werkstatt: 'Werkstatt',
+  sonstiges: 'Sonstiges',
+}
+
 export interface Project {
   id: string
   project_id_text: string | null
   name: string
+  kind: ProjectKind
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
@@ -63,7 +68,6 @@ export interface Project {
   art_der_arbeit: string | null
   projektleiter_id: string | null
   monteur_ids: string[]
-  termine: Termin[]
   kontakte: Kontakt[]
   disposal_details: DisposalDetails | null
   is_warranty?: boolean
@@ -76,6 +80,10 @@ export interface Project {
   created_by: string | null
   created_by_id: string | null
   bemerkung: string | null
+  start_date: string | null
+  end_date: string | null
+  start_time: string | null
+  end_time: string | null
   invoice?: ProjectInvoiceSummary | null
   quote?: ProjectQuoteSummary | null
 }
@@ -121,7 +129,12 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   )
 }
 
-export default function ProjectsScreen() {
+interface ProjectsScreenProps {
+  openNew?: boolean
+  onConsumedNew?: () => void
+}
+
+export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScreenProps = {}) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -130,6 +143,13 @@ export default function ProjectsScreen() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
+
+  useEffect(() => {
+    if (openNew) {
+      setShowNew(true)
+      onConsumedNew?.()
+    }
+  }, [openNew, onConsumedNew])
 
   async function load() {
     setLoading(true)

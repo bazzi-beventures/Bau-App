@@ -4,6 +4,7 @@ import {
   PendingReminderQuote, getPendingReminderQuotes, sendQuoteReminder,
   PendingActionInvoice, getPendingActionInvoices, sendZahlungserinnerung, sendMahnung,
   PendingApproval, getPendingApprovals, approveApproval, rejectApproval,
+  OverdueProject, getOverdueProjects, updateProjectSchedule, closeProject,
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { fmtDate } from '../utils/format'
@@ -54,6 +55,9 @@ function IconBell() {
 }
 function IconExclamation() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1-8a1 1 0 0 0-1 1v3a1 1 0 0 0 2 0V6a1 1 0 0 0-1-1z" clipRule="evenodd"/></svg>
+}
+function IconCalendarAlert() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1V3a1 1 0 1 0-2 0v1H7V3a1 1 0 0 0-1-1zm5 7a1 1 0 1 0-2 0v3a1 1 0 1 0 2 0V9zm-1 7a1 1 0 1 1 0-2 1 1 0 0 1 0 2z" clipRule="evenodd"/></svg>
 }
 function IconApproval() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0 0 10 1.944 11.954 11.954 0 0 0 17.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 0 0-1.414-1.414L9 10.586 7.707 9.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4z" clipRule="evenodd"/></svg>
@@ -389,12 +393,203 @@ function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
   )
 }
 
+// ─── Modal: Überfällige Projekte ─────────────────────────────
+
+interface OverdueProjectsModalProps {
+  onClose: () => void
+  onChanged: () => void
+}
+
+interface RowDraft {
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+}
+
+function rowFromProject(p: OverdueProject): RowDraft {
+  return {
+    startDate: p.start_date?.slice(0, 10) ?? '',
+    endDate: p.end_date?.slice(0, 10) ?? '',
+    startTime: p.start_time?.slice(0, 5) ?? '',
+    endTime: p.end_time?.slice(0, 5) ?? '',
+  }
+}
+
+function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps) {
+  const [projects, setProjects] = useState<OverdueProject[] | null>(null)
+  const [drafts, setDrafts] = useState<Record<string, RowDraft>>({})
+  const [busy, setBusy] = useState<{ id: string; type: 'save' | 'close' } | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    getOverdueProjects()
+      .then(list => {
+        setProjects(list)
+        const init: Record<string, RowDraft> = {}
+        list.forEach(p => { init[p.id] = rowFromProject(p) })
+        setDrafts(init)
+      })
+      .catch(() => setProjects([]))
+  }, [])
+
+  function showToast(msg: string, type: 'success' | 'error') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  function patchDraft(id: string, patch: Partial<RowDraft>) {
+    setDrafts(d => ({ ...d, [id]: { ...d[id], ...patch } }))
+  }
+
+  async function handleSave(p: OverdueProject) {
+    const d = drafts[p.id]
+    if (!d) return
+    if (d.startDate && d.endDate && d.endDate < d.startDate) {
+      showToast('Enddatum muss ≥ Startdatum sein', 'error')
+      return
+    }
+    setBusy({ id: p.id, type: 'save' })
+    try {
+      await updateProjectSchedule(
+        p.id,
+        d.startDate || null,
+        d.endDate || null,
+        d.startTime || null,
+        d.endTime || null,
+      )
+      const today = new Date().toISOString().slice(0, 10)
+      if (d.endDate && d.endDate >= today) {
+        setProjects(list => list ? list.filter(x => x.id !== p.id) : list)
+        showToast('Termin aktualisiert', 'success')
+        onChanged()
+      } else {
+        showToast('Gespeichert', 'success')
+      }
+    } catch {
+      showToast('Fehler beim Speichern', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleClose(p: OverdueProject) {
+    if (!window.confirm(`Projekt "${p.name}" als abgeschlossen markieren?`)) return
+    setBusy({ id: p.id, type: 'close' })
+    try {
+      await closeProject(p.id)
+      setProjects(list => list ? list.filter(x => x.id !== p.id) : list)
+      showToast('Projekt geschlossen', 'success')
+      onChanged()
+    } catch {
+      showToast('Fehler beim Schliessen', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const isBusy = (id: string, type: 'save' | 'close') =>
+    busy?.id === id && busy?.type === type
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <div className="admin-modal-header">
+          <div className="admin-modal-title">Überfällige Projekte</div>
+          <button className="admin-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="admin-modal-body">
+          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          {projects === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
+          {projects !== null && projects.length === 0 && <div className="admin-empty">Keine überfälligen Projekte</div>}
+          {projects !== null && projects.length > 0 && (
+            <div className="admin-list">
+              {projects.map(p => {
+                const d = drafts[p.id]
+                if (!d) return null
+                return (
+                  <div key={p.id} className="admin-list-item" style={{ flexDirection: 'column', gap: 10, alignItems: 'stretch' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{p.name}</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{p.customer_name ?? '—'}</div>
+                      <div style={{ fontSize: 12, color: '#ef4444', marginTop: 2 }}>
+                        Geplant bis {fmtDate(p.end_date)} ({daysSince(p.end_date)} Tage überfällig)
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        <span>Start</span>
+                        <input
+                          type="date"
+                          className="admin-input"
+                          value={d.startDate}
+                          onChange={e => patchDraft(p.id, { startDate: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        <span>Ende</span>
+                        <input
+                          type="date"
+                          className="admin-input"
+                          value={d.endDate}
+                          onChange={e => patchDraft(p.id, { endDate: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        <span>Startzeit</span>
+                        <input
+                          type="time"
+                          className="admin-input"
+                          value={d.startTime}
+                          onChange={e => patchDraft(p.id, { startTime: e.target.value })}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        <span>Endzeit</span>
+                        <input
+                          type="time"
+                          className="admin-input"
+                          value={d.endTime}
+                          onChange={e => patchDraft(p.id, { endTime: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="admin-btn admin-btn-primary"
+                        style={{ flex: 1 }}
+                        disabled={busy !== null}
+                        onClick={() => handleSave(p)}
+                      >
+                        {isBusy(p.id, 'save') ? 'Speichere…' : 'Speichern'}
+                      </button>
+                      <button
+                        className="admin-btn admin-btn-secondary"
+                        style={{ flex: 1 }}
+                        disabled={busy !== null}
+                        onClick={() => handleClose(p)}
+                      >
+                        {isBusy(p.id, 'close') ? '…' : 'Projekt schliessen'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Dashboard ───────────────────────────────────────────────
 
 export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Props) {
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showMahnungModal, setShowMahnungModal] = useState(false)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [showOverdueProjectsModal, setShowOverdueProjectsModal] = useState(false)
 
   return (
     <div className="admin-page">
@@ -405,67 +600,90 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
         </div>
       </div>
 
-      <div className="admin-kpi-grid">
-        <KpiCard
-          label="Zeitkorrekturen offen"
-          value={dashboard?.pending_corrections ?? null}
-          colorClass="orange"
-          onClick={() => onNav('corrections')}
-          icon={<IconClock />}
-        />
-        <KpiCard
-          label="Rechnungen offen"
-          value={dashboard?.open_invoices ?? null}
-          colorClass="red"
-          onClick={() => onNav('invoices')}
-          icon={<IconCash />}
-        />
-        <KpiCard
-          label="Eingestempelt"
-          value={dashboard?.open_sessions ?? null}
-          colorClass="green"
-          onClick={() => onNav('hr-reports')}
-          icon={<IconUsers />}
-        />
-        <KpiCard
-          label="Absenzen pendent"
-          value={dashboard?.pending_absences ?? null}
-          colorClass="blue"
-          onClick={() => onNav('absences')}
-          icon={<IconCalendar />}
-        />
-        <KpiCard
-          label="Offerten in Bearbeitung"
-          value={dashboard?.draft_quotes ?? null}
-          colorClass="purple"
-          onClick={() => onNav('quotes')}
-          icon={<IconReceipt />}
-        />
-        <KpiCard
-          label="Offerten-Erinnerungen"
-          value={dashboard?.quotes_pending_reminder ?? null}
-          colorClass="yellow"
-          onClick={() => setShowReminderModal(true)}
-          icon={<IconBell />}
-          badge
-        />
-        <KpiCard
-          label="Rechnungen überfällig"
-          value={dashboard?.invoices_pending_action ?? null}
-          colorClass="red"
-          onClick={() => setShowMahnungModal(true)}
-          icon={<IconExclamation />}
-          badge
-        />
-        <KpiCard
-          label="Bestellfreigaben für mich"
-          value={dashboard?.pending_approvals ?? null}
-          colorClass="blue"
-          onClick={() => setShowApprovalModal(true)}
-          icon={<IconApproval />}
-          badge
-        />
-      </div>
+      <section className="admin-kpi-section">
+        <h3 className="admin-kpi-group-title">Personal & Zeit</h3>
+        <div className="admin-kpi-grid">
+          <KpiCard
+            label="Zeitkorrekturen offen"
+            value={dashboard?.pending_corrections ?? null}
+            colorClass="orange"
+            onClick={() => onNav('corrections')}
+            icon={<IconClock />}
+          />
+          <KpiCard
+            label="Eingestempelt"
+            value={dashboard?.open_sessions ?? null}
+            colorClass="green"
+            onClick={() => onNav('hr-reports')}
+            icon={<IconUsers />}
+          />
+          <KpiCard
+            label="Absenzen pendent"
+            value={dashboard?.pending_absences ?? null}
+            colorClass="blue"
+            onClick={() => onNav('absences')}
+            icon={<IconCalendar />}
+          />
+        </div>
+      </section>
+
+      <section className="admin-kpi-section">
+        <h3 className="admin-kpi-group-title">Finanzen & Einkauf</h3>
+        <div className="admin-kpi-grid">
+          <KpiCard
+            label="Rechnungen offen"
+            value={dashboard?.open_invoices ?? null}
+            colorClass="red"
+            onClick={() => onNav('invoices')}
+            icon={<IconCash />}
+          />
+          <KpiCard
+            label="Rechnungen überfällig"
+            value={dashboard?.invoices_pending_action ?? null}
+            colorClass="red"
+            onClick={() => setShowMahnungModal(true)}
+            icon={<IconExclamation />}
+            badge
+          />
+          <KpiCard
+            label="Bestellfreigaben für mich"
+            value={dashboard?.pending_approvals ?? null}
+            colorClass="blue"
+            onClick={() => setShowApprovalModal(true)}
+            icon={<IconApproval />}
+            badge
+          />
+        </div>
+      </section>
+
+      <section className="admin-kpi-section">
+        <h3 className="admin-kpi-group-title">Vertrieb & Projekte</h3>
+        <div className="admin-kpi-grid">
+          <KpiCard
+            label="Offerten in Bearbeitung"
+            value={dashboard?.draft_quotes ?? null}
+            colorClass="purple"
+            onClick={() => onNav('quotes')}
+            icon={<IconReceipt />}
+          />
+          <KpiCard
+            label="Offerten-Erinnerungen"
+            value={dashboard?.quotes_pending_reminder ?? null}
+            colorClass="yellow"
+            onClick={() => setShowReminderModal(true)}
+            icon={<IconBell />}
+            badge
+          />
+          <KpiCard
+            label="Projekte überfällig"
+            value={dashboard?.projects_overdue ?? null}
+            colorClass="red"
+            onClick={() => setShowOverdueProjectsModal(true)}
+            icon={<IconCalendarAlert />}
+            badge
+          />
+        </div>
+      </section>
 
       {dashboard === null && (
         <div className="admin-loading">
@@ -492,6 +710,13 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
         <ApprovalModal
           onClose={() => setShowApprovalModal(false)}
           onSent={() => onBadgeChange?.()}
+        />
+      )}
+
+      {showOverdueProjectsModal && (
+        <OverdueProjectsModal
+          onClose={() => setShowOverdueProjectsModal(false)}
+          onChanged={() => onBadgeChange?.()}
         />
       )}
     </div>

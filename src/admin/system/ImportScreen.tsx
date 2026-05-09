@@ -122,7 +122,7 @@ export default function ImportScreen() {
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 8px' }}>
           Trennzeichen: Semikolon (<code>;</code>) oder Komma (<code>,</code>). Encoding: UTF-8 oder Latin-1.
         </p>
-        <div style={{ background: '#0f1117', borderRadius: 8, padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#93c5fd', overflowX: 'auto' }}>
+        <div style={{ background: '#0f1117', borderRadius: 8, padding: '12px 16px', fontFamily: 'var(--mono)', fontSize: 12, color: '#93c5fd', overflowX: 'auto' }}>
           art_nr;name;unit;purchase_price;category;supplier_name<br />
           W-001;Schraube M6×40;Stk;0.12;Befestigung;Würth<br />
           W-002;Dübel 10mm;Stk;0.35;Befestigung;Würth
@@ -201,7 +201,7 @@ export default function ImportScreen() {
                     <td><strong>{row.art_nr || '—'}</strong></td>
                     <td>{row.name || '—'}</td>
                     <td style={{ color: 'var(--muted)' }}>{row.unit || '—'}</td>
-                    <td style={{ fontFamily: 'monospace' }}>
+                    <td style={{ fontFamily: 'var(--mono)' }}>
                       {row.purchase_price != null ? `CHF ${row.purchase_price.toFixed(2)}` : '—'}
                     </td>
                     <td style={{ color: 'var(--muted)' }}>{row.category || '—'}</td>

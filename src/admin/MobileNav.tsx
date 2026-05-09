@@ -71,7 +71,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
           className={`admin-mobile-tab${screen === 'dashboard' ? ' active' : ''}`}
           onClick={() => navigate('dashboard')}
         >
-          <IconDashboard />
+          <span className="admin-mobile-tab-icon"><IconDashboard /></span>
           <span className="admin-mobile-tab-label">Dashboard</span>
         </button>
 
@@ -79,7 +79,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
           className={`admin-mobile-tab${screen === 'projects' ? ' active' : ''}`}
           onClick={() => navigate('projects')}
         >
-          <IconFolder />
+          <span className="admin-mobile-tab-icon"><IconFolder /></span>
           <span className="admin-mobile-tab-label">Projekte</span>
         </button>
 
@@ -87,33 +87,36 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
           className={`admin-mobile-tab${screen === 'corrections' ? ' active' : ''}`}
           onClick={() => navigate('corrections')}
         >
-          <IconClock />
+          <span className="admin-mobile-tab-icon">
+            <IconClock />
+            {(badges?.corrections ?? 0) > 0 && (
+              <span className="admin-mobile-tab-badge">{badges!.corrections}</span>
+            )}
+          </span>
           <span className="admin-mobile-tab-label">Korrekturen</span>
-          {(badges?.corrections ?? 0) > 0 && (
-            <span className="admin-mobile-tab-badge">{badges!.corrections}</span>
-          )}
         </button>
 
         <button
           className={`admin-mobile-tab${screen === 'invoices' ? ' active' : ''}`}
           onClick={() => navigate('invoices')}
         >
-          <IconCash />
+          <span className="admin-mobile-tab-icon">
+            <IconCash />
+          </span>
           <span className="admin-mobile-tab-label">Rechnungen</span>
-          {(badges?.invoices ?? 0) > 0 && (
-            <span className="admin-mobile-tab-badge">{badges!.invoices}</span>
-          )}
         </button>
 
         <button
           className={`admin-mobile-tab${isMoreActive ? ' active' : ''}`}
           onClick={() => setDrawerOpen(true)}
         >
-          <IconMenu />
+          <span className="admin-mobile-tab-icon">
+            <IconMenu />
+            {hasSecondaryBadge && !isMoreActive && (
+              <span className="admin-mobile-tab-dot" />
+            )}
+          </span>
           <span className="admin-mobile-tab-label">Mehr</span>
-          {hasSecondaryBadge && !isMoreActive && (
-            <span className="admin-mobile-tab-dot" />
-          )}
         </button>
       </nav>
 
@@ -134,6 +137,9 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 </button>
                 <button className={`admin-mobile-drawer-item${screen === 'staff' ? ' active' : ''}`} onClick={() => navigate('staff')}>
                   <IconUsers /><span>Mitarbeiter</span>
+                </button>
+                <button className={`admin-mobile-drawer-item${screen === 'project-schedule' ? ' active' : ''}`} onClick={() => navigate('project-schedule')}>
+                  <IconCalendar /><span>Einsatzplanung</span>
                 </button>
                 <button className={`admin-mobile-drawer-item${screen === 'customers' ? ' active' : ''}`} onClick={() => navigate('customers')}>
                   <IconAddressBook /><span>Kundenstamm</span>

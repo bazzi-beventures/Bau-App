@@ -1,5 +1,4 @@
 import { apiFetch } from './client'
-import { SK } from './storageKeys'
 import { AdminScreen } from '../admin/useAdminNav'
 
 // ─── Dashboard ─────────────────────────────────────────────
@@ -13,6 +12,21 @@ export interface AdminDashboard {
   quotes_pending_reminder: number
   invoices_pending_action: number
   pending_approvals: number
+  projects_overdue: number
+}
+
+export interface OverdueProject {
+  id: string
+  name: string
+  customer_name: string | null
+  start_date: string | null
+  end_date: string | null
+  start_time: string | null
+  end_time: string | null
+}
+
+export async function getOverdueProjects(): Promise<OverdueProject[]> {
+  return apiFetch('/pwa/admin/projects/overdue') as Promise<OverdueProject[]>
 }
 
 export interface PendingApproval {
@@ -137,15 +151,10 @@ export async function deleteStaff(staffId: string): Promise<void> {
 // ─── Password Auth ─────────────────────────────────────────
 
 export async function loginWithPassword(username: string, password: string): Promise<{ tenant_slug: string }> {
-  const result = await apiFetch('/pwa/auth/login-password', {
+  return await apiFetch('/pwa/auth/login-password', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
-  }) as { tenant_slug: string; token?: string }
-  if (result.token) {
-    const { saveToken } = await import('./client')
-    saveToken(result.token)
-  }
-  return result
+  }) as { tenant_slug: string }
 }
 
 export async function setAdminPassword(currentPassword: string | null, newPassword: string): Promise<void> {
@@ -247,6 +256,10 @@ export interface Project {
   local_contact_phone: string | null
   is_closed: boolean
   created_at: string
+  start_date: string | null
+  end_date: string | null
+  start_time: string | null
+  end_time: string | null
 }
 
 export async function getAdminProjects(): Promise<Project[]> {
@@ -261,6 +274,24 @@ export async function upsertProject(data: Partial<Project> & { id?: string }): P
 
 export async function closeProject(id: string): Promise<void> {
   await apiFetch(`/pwa/admin/projects/${id}/close`, { method: 'POST' })
+}
+
+export async function updateProjectSchedule(
+  id: string,
+  start_date: string | null,
+  end_date: string | null,
+  start_time?: string | null,
+  end_time?: string | null,
+): Promise<void> {
+  await apiFetch(`/pwa/admin/projects/${id}/schedule`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      start_date,
+      end_date,
+      start_time: start_time ?? null,
+      end_time: end_time ?? null,
+    }),
+  })
 }
 
 // ─── Invoices ──────────────────────────────────────────────
@@ -287,10 +318,8 @@ export async function markInvoicePaid(id: string): Promise<void> {
 }
 
 export async function getInvoicePdf(id: string): Promise<Blob> {
-  const token = localStorage.getItem(SK.TOKEN)
   const resp = await fetch(`/pwa/admin/invoices/${id}/pdf`, {
     credentials: 'include',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!resp.ok) throw new Error('PDF-Download fehlgeschlagen')
   return resp.blob()

@@ -192,7 +192,7 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
               {member.username && (
                 <>
                   <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Benutzername</div>
-                  <div style={{ fontSize: 13.5, fontFamily: 'monospace' }}>{member.username}</div>
+                  <div style={{ fontSize: 13.5, fontFamily: 'var(--mono)' }}>{member.username}</div>
                 </>
               )}
               <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Rolle</div>

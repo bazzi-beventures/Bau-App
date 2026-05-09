@@ -803,7 +803,7 @@ export default function QuotesScreen() {
                 <tr><td colSpan={6} className="admin-table-empty">Keine Offerten gefunden.</td></tr>
               ) : filtered.map(q => (
                 <tr key={q.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{q.quote_number}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{q.quote_number}</td>
                   <td><strong>{q.project_name}</strong></td>
                   <td style={{ fontWeight: 700 }}>{fmtCHF(q.total_amount)}</td>
                   <td>

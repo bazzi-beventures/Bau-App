@@ -1,26 +1,9 @@
-import { SK } from './storageKeys'
-
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
-const TOKEN_KEY = SK.TOKEN
-
-export function saveToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-function csrfHeader(): Record<string, string> {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)
-  return match ? { 'X-CSRF-Token': match[1] } : {}
-}
+// Auth läuft ausschliesslich via httpOnly-Cookie (pwa_session). Kein Token in
+// localStorage → XSS kann ihn nicht stehlen. Cross-Origin (GitHub Pages →
+// Railway) funktioniert via SameSite=None; Secure Cookies + credentials:'include'.
+// CSRF-Schutz: Server prüft Origin-Header serverseitig (siehe agents/app.py).
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -45,7 +28,6 @@ function handleExpiredSession(status: number, detail: string, path: string): boo
   if (!expired) return false
   if (sessionExpiredHandled) return true
   sessionExpiredHandled = true
-  clearToken()
   window.dispatchEvent(new CustomEvent('auth:expired'))
   return true
 }
@@ -66,8 +48,6 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders(),
-        ...csrfHeader(),
         ...(options.headers ?? {}),
       },
     })
@@ -87,11 +67,23 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   }
 }
 
+// Liest den Datei-Namen aus dem Content-Disposition-Header. Unterstuetzt
+// sowohl filename="..." als auch das RFC-5987-Format filename*=utf-8''<urlencoded>,
+// das FastAPI/Starlette automatisch verwenden, sobald der Name Leerzeichen
+// oder Sonderzeichen enthaelt — z.B. "Einsatzplanung Gehlhaar Test KW 19.pdf".
+function parseDispositionFilename(disposition: string): string | null {
+  const m5987 = disposition.match(/filename\*\s*=\s*([^']*)''([^;]+)/i)
+  if (m5987) {
+    try { return decodeURIComponent(m5987[2].trim()) } catch { /* fall through */ }
+  }
+  const mPlain = disposition.match(/filename\s*=\s*"?([^"]+?)"?(?:;|$)/i)
+  return mPlain ? mPlain[1] : null
+}
+
 export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename: string }> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       credentials: 'include',
-      headers: { ...authHeaders(), ...csrfHeader() },
     })
 
     if (!res.ok) {
@@ -103,8 +95,7 @@ export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename
     }
 
     const disposition = res.headers.get('Content-Disposition') ?? ''
-    const match = disposition.match(/filename="?([^"]+)"?/)
-    const filename = match ? match[1] : 'download.pdf'
+    const filename = parseDispositionFilename(disposition) ?? 'download.pdf'
 
     return { blob: await res.blob(), filename }
   } catch (e) {
@@ -132,8 +123,6 @@ export async function* apiStreamFetch(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        ...authHeaders(),
-        ...csrfHeader(),
       },
       body: JSON.stringify(body),
     })
@@ -192,7 +181,6 @@ export async function apiFormFetch(path: string, form: FormData): Promise<unknow
     const res = await fetch(`${BASE_URL}${path}`, {
       method: 'POST',
       credentials: 'include',
-      headers: { ...authHeaders(), ...csrfHeader() },
       body: form,
     })
 

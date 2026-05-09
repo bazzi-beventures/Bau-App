@@ -1,28 +1,14 @@
-interface Termin {
-  datum: string
-  uhrzeit: string
-  notiz: string
-}
-
 interface TimelineProject {
   id: string
   name: string
-  termine: Termin[]
+  start_date: string | null
+  end_date: string | null
 }
 
 interface TimelineInfo {
   start: string
   days: string[]
   todayIndex: number
-}
-
-interface ProjectSpan {
-  project: TimelineProject
-  firstDatum: string | null
-  lastDatum: string | null
-  startOffset: number
-  length: number
-  terminIndices: number[]
 }
 
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -51,10 +37,16 @@ function diffDays(startISO: string, endISO: string): number {
   return Math.round(ms / 86400000)
 }
 
-function buildTimeline<P extends TimelineProject>(projects: P[]): { info: TimelineInfo; spans: { project: P; firstDatum: string | null; lastDatum: string | null; startOffset: number; length: number; terminIndices: number[] }[] } {
+function buildTimeline<P extends TimelineProject>(projects: P[]): {
+  info: TimelineInfo
+  spans: { project: P; startDate: string | null; endDate: string | null; startOffset: number; length: number }[]
+} {
   const today = toISO(new Date())
   const allDates: string[] = []
-  projects.forEach(p => (p.termine ?? []).forEach(t => { if (t.datum) allDates.push(t.datum) }))
+  projects.forEach(p => {
+    if (p.start_date) allDates.push(p.start_date)
+    if (p.end_date) allDates.push(p.end_date)
+  })
 
   let startISO = today
   let endISO = addDays(today, 13)
@@ -73,26 +65,21 @@ function buildTimeline<P extends TimelineProject>(projects: P[]): { info: Timeli
   const todayIndex = days.indexOf(today)
 
   const spans = projects.map(p => {
-    const sorted = (p.termine ?? [])
-      .map(t => t.datum)
-      .filter((d): d is string => !!d)
-      .sort()
-    if (sorted.length === 0) {
-      return { project: p, firstDatum: null, lastDatum: null, startOffset: -1, length: 0, terminIndices: [] }
+    if (!p.start_date) {
+      return { project: p, startDate: null, endDate: null, startOffset: -1, length: 0 }
     }
-    const first = sorted[0]
-    const last = sorted[sorted.length - 1]
-    const startOffset = diffDays(startISO, first)
-    const length = diffDays(first, last) + 1
-    const terminIndices = Array.from(new Set(sorted.map(d => diffDays(startISO, d))))
-    return { project: p, firstDatum: first, lastDatum: last, startOffset, length, terminIndices }
+    const start = p.start_date
+    const end = p.end_date && p.end_date >= start ? p.end_date : start
+    const startOffset = diffDays(startISO, start)
+    const length = diffDays(start, end) + 1
+    return { project: p, startDate: start, endDate: end, startOffset, length }
   })
 
   spans.sort((a, b) => {
-    if (!a.firstDatum && !b.firstDatum) return a.project.name.localeCompare(b.project.name)
-    if (!a.firstDatum) return 1
-    if (!b.firstDatum) return -1
-    return a.firstDatum.localeCompare(b.firstDatum)
+    if (!a.startDate && !b.startDate) return a.project.name.localeCompare(b.project.name)
+    if (!a.startDate) return 1
+    if (!b.startDate) return -1
+    return a.startDate.localeCompare(b.startDate)
   })
 
   return { info: { start: startISO, days, todayIndex }, spans }
@@ -112,7 +99,6 @@ export function ProjectTimeline<P extends TimelineProject>({ projects, onSelect 
     <div className="projekte-timeline">
       <div className="projekte-timeline-scroll">
         <div className="projekte-timeline-inner" style={{ width: totalWidth }}>
-          {/* Header mit Tagen */}
           <div className="projekte-timeline-header">
             {info.days.map((iso, idx) => {
               const d = parseISO(iso)
@@ -135,7 +121,6 @@ export function ProjectTimeline<P extends TimelineProject>({ projects, onSelect 
             })}
           </div>
 
-          {/* Zeilen */}
           <div className="projekte-timeline-body">
             {info.todayIndex >= 0 && (
               <div
@@ -162,7 +147,7 @@ export function ProjectTimeline<P extends TimelineProject>({ projects, onSelect 
                     )
                   })}
                 </div>
-                {span.firstDatum && (
+                {span.startDate && (
                   <div
                     className="projekte-timeline-bar"
                     style={{
@@ -171,18 +156,11 @@ export function ProjectTimeline<P extends TimelineProject>({ projects, onSelect 
                     }}
                   >
                     <span className="projekte-timeline-bar-label">{span.project.name}</span>
-                    {span.terminIndices.map(i => (
-                      <div
-                        key={i}
-                        className="projekte-timeline-bar-dot"
-                        style={{ left: (i - span.startOffset) * DAY_WIDTH + DAY_WIDTH / 2 - 4 }}
-                      />
-                    ))}
                   </div>
                 )}
-                {!span.firstDatum && (
+                {!span.startDate && (
                   <div className="projekte-timeline-bar projekte-timeline-bar-empty" style={{ left: 4, width: 120 }}>
-                    <span className="projekte-timeline-bar-label">{span.project.name} · keine Termine</span>
+                    <span className="projekte-timeline-bar-label">{span.project.name} · kein Termin</span>
                   </div>
                 )}
               </div>

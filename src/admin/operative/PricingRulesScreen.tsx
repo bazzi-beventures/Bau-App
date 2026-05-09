@@ -152,7 +152,7 @@ export default function PricingRulesScreen() {
                   <td><strong>{r.suppliers?.name ?? '—'}</strong></td>
                   <td style={{ color: 'var(--muted)' }}>{r.category || 'Alle Kategorien'}</td>
                   <td style={{ fontWeight: 700 }}>{r.markup_pct.toFixed(1)} %</td>
-                  <td style={{ color: 'var(--muted)', fontFamily: 'monospace' }}>
+                  <td style={{ color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
                     × {(1 + r.markup_pct / 100).toFixed(3)}
                   </td>
                   <td>

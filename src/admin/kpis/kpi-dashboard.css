@@ -522,3 +522,11 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+@media (max-width: 767px) {
+  .kpi-date-btn {
+    min-height: 44px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+}

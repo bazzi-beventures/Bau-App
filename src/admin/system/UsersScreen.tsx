@@ -96,7 +96,7 @@ export default function UsersScreen() {
               ) : filtered.map(u => (
                 <tr key={u.id} onClick={() => setSelected(u)}>
                   <td><strong>{u.display_name || '—'}</strong></td>
-                  <td style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono, monospace)' }}>{u.username || '—'}</td>
+                  <td style={{ color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{u.username || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{u.email || '—'}</td>
                   <td>
                     <span className={`admin-badge ${u.role === 'admin' || u.role === 'management' || u.role === 'superadmin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>

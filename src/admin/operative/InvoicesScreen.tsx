@@ -218,7 +218,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 <tr><td colSpan={7} className="admin-table-empty">Keine Rechnungen gefunden.</td></tr>
               ) : filtered.map(inv => (
                 <tr key={inv.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{inv.invoice_number}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{inv.invoice_number}</td>
                   <td><strong>{inv.project_name}</strong></td>
                   <td style={{ fontWeight: 700 }}>{fmtCHF(inv.total_amount)}</td>
                   <td>

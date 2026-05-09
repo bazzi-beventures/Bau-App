@@ -7,15 +7,15 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 3
+export const APP_DATA_VERSION = 5
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
 // ist Legacy/Müll und wird beim Schema-Wechsel entfernt.
 // Bei neuen localStorage-Keys in der App: hier ergänzen.
 function isKnownKey(k: string): boolean {
-  // Aktuelle auth/tenant keys (env-suffixed)
-  if (k === SK.TOKEN) return true
+  // Aktuelle auth/tenant keys (env-suffixed). SK.TOKEN ist NICHT mehr known —
+  // Token läuft nun via httpOnly-Cookie, localStorage-Reste werden in v3→v4 entfernt.
   if (k === SK.TENANT_SLUG) return true
   if (k === SK.AUTHORIZED_USER_ID) return true
   if (k === SK.DISPLAY_NAME) return true
@@ -30,8 +30,9 @@ function isKnownKey(k: string): boolean {
 }
 
 // Keys, die bei einem Fallback-Wipe (unbekannte Zukunftsversion) minimal
-// erhalten bleiben — Nutzer bleibt eingeloggt.
-const SURVIVE_WIPE: readonly string[] = [SK.TOKEN, SK.TENANT_SLUG]
+// erhalten bleiben. Auth läuft via httpOnly-Cookie — der Tenant-Slug genügt,
+// damit der Login-Screen weiss, gegen welchen Tenant aufgelöst werden soll.
+const SURVIVE_WIPE: readonly string[] = [SK.TENANT_SLUG]
 
 type Migration = {
   from: number
@@ -77,7 +78,29 @@ const migration_2_to_3: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3]
+// v3 → v4: Auth-Token wandert vom localStorage in ein httpOnly-Cookie (XSS-Härtung).
+// Bestehende Tokens in localStorage werden gelöscht — Nutzer muss sich ggf. neu
+// einloggen. Cookie wird vom Server beim nächsten Login frisch gesetzt.
+const migration_3_to_4: Migration = {
+  from: 3,
+  to: 4,
+  run: () => {
+    localStorage.removeItem(SK.TOKEN)
+  },
+}
+
+// v4 → v5: Project-Shape bekommt `kind` (Einsatz-Art für interne Einträge).
+// Project-Listen werden nicht in localStorage gehalten — no-op reicht, dient
+// als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_4_to_5: Migration = {
+  from: 4,
+  to: 5,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

@@ -1,0 +1,583 @@
+import { useEffect, useState } from 'react'
+import { Project } from './ProjectsScreen'
+import {
+  getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
+  parseDateStr, diffDays, shiftISO,
+} from '../utils/calendarHelpers'
+
+// Drag-Transfer payload format: "<projectId>|<grabDayISO>"
+const DRAG_MIME = 'application/x-bau-project'
+
+interface StaffLite {
+  id: string
+  name: string
+}
+
+interface Props {
+  projects: Project[]
+  staff: StaffLite[]
+  loading: boolean
+  canton?: string
+  onSelect: (p: Project) => void
+  onShift: (id: string, deltaDays: number) => Promise<void> | void
+  // Meldet die aktuell sichtbare Kalenderwoche (Mo, ISO-Datum) hoch — für PDF-Export.
+  onVisibleWeekChange?: (mondayIso: string) => void
+  // Meldet die aktuell im Filter aktiven Staff-IDs hoch (alle ohne Hide-Flag).
+  // Wenn null gemeldet wird, ist kein Filter aktiv (Default = alle Monteure).
+  onVisibleStaffChange?: (visibleIds: string[] | null) => void
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function projectCoversDay(p: Project, day: Date): boolean {
+  if (!p.start_date || !p.end_date) return false
+  const s = toDateStr(day)
+  return s >= p.start_date.slice(0, 10) && s <= p.end_date.slice(0, 10)
+}
+
+function fmtRange(p: Project): string {
+  if (!p.start_date || !p.end_date) return ''
+  const s = parseDateStr(p.start_date).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
+  const e = parseDateStr(p.end_date).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
+  const datePart = s === e ? s : `${s} – ${e}`
+  const timePart = fmtTimeRange(p)
+  return timePart ? `${datePart} · ${timePart}` : datePart
+}
+
+function fmtTime(t: string | null | undefined): string {
+  return t ? t.slice(0, 5) : ''
+}
+
+function fmtTimeRange(p: Project): string {
+  const s = fmtTime(p.start_time), e = fmtTime(p.end_time)
+  if (s && e) return `${s}–${e}`
+  if (s) return `ab ${s}`
+  if (e) return `bis ${e}`
+  return ''
+}
+
+function pillLabel(p: Project): string {
+  const t = fmtTime(p.start_time)
+  return t ? `${t} ${p.name}` : p.name
+}
+
+// Pill-Farbe je Einsatz-Art. Kundenprojekte bleiben Brand-Blau, interne
+// Einsätze unterscheiden sich farblich klar davon.
+const KIND_COLORS: Record<string, string> = {
+  project:     'var(--primary)',
+  teamsitzung: 'var(--kind-teamsitzung, #7c3aed)',  // Lila
+  lagerarbeit: 'var(--kind-lagerarbeit, #d97706)',  // Bernstein
+  werkstatt:   'var(--kind-werkstatt, #0d9488)',    // Türkis
+  sonstiges:   'var(--kind-sonstiges, #475569)',    // Slate
+}
+
+function pillBg(p: Project): string {
+  return KIND_COLORS[p.kind || 'project'] ?? KIND_COLORS.project
+}
+
+function projectMonteurNames(p: Project, staff: StaffLite[]): string {
+  if (!p.monteur_ids || p.monteur_ids.length === 0) return ''
+  const byId = new Map(staff.map(s => [s.id, s.name]))
+  return p.monteur_ids.map(id => byId.get(id) || '').filter(Boolean).join(', ')
+}
+
+// ─── Drag-Handlers ────────────────────────────────────────────────────────────
+
+function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string) {
+  e.dataTransfer.setData(DRAG_MIME, `${projectId}|${grabDayISO}`)
+  e.dataTransfer.setData('text/plain', `${projectId}|${grabDayISO}`)
+  e.dataTransfer.effectAllowed = 'move'
+}
+
+function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string } | null {
+  const raw = e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')
+  if (!raw || !raw.includes('|')) return null
+  const [projectId, grabDayISO] = raw.split('|')
+  return { projectId, grabDayISO }
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+function CalendarLegend({ canton }: { canton: string }) {
+  return (
+    <div className="absence-cal-legend">
+      <div className="absence-cal-legend-item">
+        <span className="absence-cal-legend-dot absence-cal-legend-dot--holiday" />
+        Feiertag {canton.toUpperCase()}
+      </div>
+      <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
+        Tipp: Projekt-Pille greifen und auf neuen Tag ziehen, um den Einsatz zu verschieben.
+      </div>
+    </div>
+  )
+}
+
+// ─── Month View ───────────────────────────────────────────────────────────────
+
+function MonthView({
+  projects, currentDate, onSelect, onShift, holidays,
+}: {
+  projects: Project[]
+  currentDate: Date
+  onSelect: (p: Project) => void
+  onShift: (id: string, delta: number) => void
+  holidays: Map<string, string>
+}) {
+  const days = getMonthDays(currentDate)
+  const DOW = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+  const [hoverDay, setHoverDay] = useState<string | null>(null)
+  const projById = new Map(projects.map(p => [p.id, p]))
+
+  function handleDrop(e: React.DragEvent, dropDay: Date) {
+    e.preventDefault()
+    setHoverDay(null)
+    const payload = readDragPayload(e)
+    if (!payload) return
+    const proj = projById.get(payload.projectId)
+    if (!proj) return
+    const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
+    if (delta !== 0) onShift(proj.id, delta)
+  }
+
+  return (
+    <div>
+      <div className="absence-cal-month-grid" style={{ marginBottom: 1 }}>
+        {DOW.map(d => (
+          <div key={d} className="absence-cal-day-header">{d}</div>
+        ))}
+      </div>
+
+      <div className="absence-cal-month-grid">
+        {days.map((day, i) => {
+          if (!day) {
+            return <div key={i} className="absence-cal-day-cell outside-month" />
+          }
+          const dayISO = toDateStr(day)
+          const today = isToday(day)
+          const holidayName = holidays.get(dayISO)
+          const dayProjects = projects.filter(p => projectCoversDay(p, day))
+
+          return (
+            <div
+              key={i}
+              className={`absence-cal-day-cell${today ? ' today' : ''}${holidayName ? ' holiday' : ''}${hoverDay === dayISO ? ' project-cal-drop-hover' : ''}`}
+              onDragOver={e => { e.preventDefault(); setHoverDay(dayISO) }}
+              onDragLeave={() => setHoverDay(prev => prev === dayISO ? null : prev)}
+              onDrop={e => handleDrop(e, day)}
+            >
+              <div className="absence-cal-day-top">
+                <span className="absence-cal-day-num">{day.getDate()}</span>
+                {holidayName && (
+                  <span className="absence-cal-holiday-label" title={holidayName}>
+                    {holidayName}
+                  </span>
+                )}
+              </div>
+              {dayProjects.map((p, j) => (
+                <div
+                  key={j}
+                  className="absence-cal-pill project-cal-pill"
+                  draggable
+                  onDragStart={e => setDragPayload(e, p.id, dayISO)}
+                  title={`${p.name} · ${fmtRange(p)}`}
+                  style={{ background: pillBg(p) }}
+                  onClick={() => onSelect(p)}
+                >
+                  {pillLabel(p)}
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Week View (Zeitraster: Stunden links, Tage als Spalten) ─────────────────
+
+const WEEK_HOURS_START = 6
+const WEEK_HOURS_END = 20
+const WEEK_HOUR_HEIGHT = 38
+
+function timeOffsetPx(t: string): number {
+  const [h, m] = t.slice(0, 5).split(':').map(Number)
+  const mins = (h - WEEK_HOURS_START) * 60 + m
+  return Math.max(0, (mins / 60) * WEEK_HOUR_HEIGHT)
+}
+
+function blockHeightPx(start: string, end: string): number {
+  return Math.max(22, timeOffsetPx(end) - timeOffsetPx(start))
+}
+
+function toMinutes(t: string): number {
+  const [h, m] = t.slice(0, 5).split(':').map(Number)
+  return h * 60 + m
+}
+
+// Spalten-Layout für überlappende Events (Cluster-basiert, wie Google Calendar):
+// Events, die sich in der Zeit überlappen, werden auf parallele Lanes verteilt.
+function computeLanes(events: Project[]): Map<string, { col: number; total: number }> {
+  const result = new Map<string, { col: number; total: number }>()
+  const sorted = [...events].sort((a, b) => toMinutes(a.start_time!) - toMinutes(b.start_time!))
+
+  let cluster: Project[] = []
+  let clusterEnd = -1
+
+  function flush() {
+    if (cluster.length === 0) return
+    const colEnds: number[] = []
+    const assigns: number[] = []
+    for (const ev of cluster) {
+      const s = toMinutes(ev.start_time!)
+      const e = ev.end_time ? toMinutes(ev.end_time) : s + 60
+      let placed = -1
+      for (let i = 0; i < colEnds.length; i++) {
+        if (colEnds[i] <= s) { colEnds[i] = e; placed = i; break }
+      }
+      if (placed === -1) { colEnds.push(e); placed = colEnds.length - 1 }
+      assigns.push(placed)
+    }
+    const total = colEnds.length
+    cluster.forEach((ev, i) => result.set(ev.id, { col: assigns[i], total }))
+    cluster = []
+    clusterEnd = -1
+  }
+
+  for (const ev of sorted) {
+    const s = toMinutes(ev.start_time!)
+    const e = ev.end_time ? toMinutes(ev.end_time) : s + 60
+    if (cluster.length === 0 || s >= clusterEnd) {
+      flush()
+      cluster.push(ev)
+      clusterEnd = e
+    } else {
+      cluster.push(ev)
+      clusterEnd = Math.max(clusterEnd, e)
+    }
+  }
+  flush()
+  return result
+}
+
+function WeekView({
+  projects, staff, currentDate, onSelect, onShift, holidays,
+}: {
+  projects: Project[]
+  staff: StaffLite[]
+  currentDate: Date
+  onSelect: (p: Project) => void
+  onShift: (id: string, delta: number) => void
+  holidays: Map<string, string>
+}) {
+  const days = getWeekDays(currentDate)
+  const [hoverDayISO, setHoverDayISO] = useState<string | null>(null)
+  const projById = new Map(projects.map(p => [p.id, p]))
+
+  const hours: number[] = []
+  for (let h = WEEK_HOURS_START; h <= WEEK_HOURS_END; h++) hours.push(h)
+  const gridHeight = (WEEK_HOURS_END - WEEK_HOURS_START) * WEEK_HOUR_HEIGHT
+
+  const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
+
+  function handleDrop(e: React.DragEvent, dropDay: Date) {
+    e.preventDefault()
+    setHoverDayISO(null)
+    const payload = readDragPayload(e)
+    if (!payload) return
+    const proj = projById.get(payload.projectId)
+    if (!proj) return
+    const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
+    if (delta !== 0) onShift(proj.id, delta)
+  }
+
+  function renderBlock(
+    p: Project,
+    dayISO: string,
+    allDay: boolean,
+    lane?: { col: number; total: number },
+  ) {
+    const monteurs = projectMonteurNames(p, staff)
+    const timeLabel = fmtTimeRange(p)
+    const laneStyle: React.CSSProperties = {}
+    if (!allDay && lane && lane.total > 1) {
+      // Gleichverteilte Lanes mit kleinem Spalt; left/right der CSS-Defaults
+      // werden ueberschrieben (right: auto), damit width greift.
+      const widthPct = 100 / lane.total
+      laneStyle.left = `calc(${lane.col * widthPct}% + 2px)`
+      laneStyle.width = `calc(${widthPct}% - 4px)`
+      laneStyle.right = 'auto'
+    }
+    return (
+      <div
+        key={p.id}
+        className={`project-cal-week-event${allDay ? ' allday' : ''}`}
+        draggable
+        onDragStart={e => setDragPayload(e, p.id, dayISO)}
+        onClick={() => onSelect(p)}
+        title={`${p.name}${timeLabel ? ' · ' + timeLabel : ''}${monteurs ? ' · ' + monteurs : ''}`}
+        style={
+          allDay
+            ? { background: pillBg(p) }
+            : {
+                background: pillBg(p),
+                top: timeOffsetPx(p.start_time!),
+                height: p.end_time
+                  ? blockHeightPx(p.start_time!, p.end_time)
+                  : Math.max(WEEK_HOUR_HEIGHT, 44),
+                ...laneStyle,
+              }
+        }
+      >
+        {timeLabel && !allDay && (
+          <div className="project-cal-week-event-time">{timeLabel}</div>
+        )}
+        <div className="project-cal-week-event-name">{p.name}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="project-cal-week">
+      {/* Header */}
+      <div className="project-cal-week-header">
+        <div className="project-cal-week-corner" />
+        {days.map((d, i) => {
+          const holidayName = holidays.get(toDateStr(d))
+          return (
+            <div key={i} className={`project-cal-week-day-head${isToday(d) ? ' today' : ''}`}>
+              <div className="project-cal-week-day-wd">{d.toLocaleDateString('de-CH', { weekday: 'short' })}</div>
+              <div className="project-cal-week-day-num">{d.getDate()}.{d.getMonth() + 1}.</div>
+              {holidayName && <div className="project-cal-week-day-holiday">{holidayName}</div>}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Ganztägig-Strip (Projekte ohne Startzeit) */}
+      {projectsByDay.some(list => list.some(p => !p.start_time)) && (
+        <div className="project-cal-week-allday-row">
+          <div className="project-cal-week-allday-label">Ganztägig</div>
+          {days.map((d, i) => {
+            const dayISO = toDateStr(d)
+            const allDayProjects = projectsByDay[i].filter(p => !p.start_time)
+            return (
+              <div
+                key={i}
+                className={`project-cal-week-allday-cell${hoverDayISO === dayISO ? ' project-cal-drop-hover' : ''}`}
+                onDragOver={e => { e.preventDefault(); setHoverDayISO(dayISO) }}
+                onDragLeave={() => setHoverDayISO(prev => prev === dayISO ? null : prev)}
+                onDrop={e => handleDrop(e, d)}
+              >
+                {allDayProjects.map(p => renderBlock(p, dayISO, true))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Zeitraster */}
+      <div className="project-cal-week-body" style={{ height: gridHeight + 1 }}>
+        <div className="project-cal-week-hours">
+          {hours.slice(0, -1).map(h => (
+            <div key={h} className="project-cal-week-hour-label" style={{ height: WEEK_HOUR_HEIGHT }}>
+              {String(h).padStart(2, '0')}:00
+            </div>
+          ))}
+        </div>
+
+        {days.map((d, i) => {
+          const dayISO = toDateStr(d)
+          const timed = projectsByDay[i].filter(p => p.start_time)
+          const lanes = computeLanes(timed)
+          return (
+            <div
+              key={i}
+              className={`project-cal-week-day-col${hoverDayISO === dayISO ? ' project-cal-drop-hover' : ''}`}
+              onDragOver={e => { e.preventDefault(); setHoverDayISO(dayISO) }}
+              onDragLeave={() => setHoverDayISO(prev => prev === dayISO ? null : prev)}
+              onDrop={e => handleDrop(e, d)}
+            >
+              {hours.slice(0, -1).map(h => (
+                <div key={h} className="project-cal-week-hour-cell" style={{ height: WEEK_HOUR_HEIGHT }} />
+              ))}
+              {timed.map(p => renderBlock(p, dayISO, false, lanes.get(p.id)))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function ProjectScheduleCalendar({
+  projects, staff, loading, canton = 'ZH', onSelect, onShift,
+  onVisibleWeekChange, onVisibleStaffChange,
+}: Props) {
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
+
+  // Wochenstart der aktuell sichtbaren Ansicht nach oben melden, damit der
+  // PDF-Export-Button im Screen-Header weiß, welche Woche er anfordern muss.
+  useEffect(() => {
+    if (!onVisibleWeekChange) return
+    onVisibleWeekChange(toDateStr(getWeekDays(currentDate)[0]))
+  }, [currentDate, onVisibleWeekChange])
+
+  // Filter-Auswahl an den Screen melden: null = kein Filter (alle), sonst Liste der sichtbaren IDs.
+  useEffect(() => {
+    if (!onVisibleStaffChange) return
+    if (hiddenStaff.size === 0) onVisibleStaffChange(null)
+    else onVisibleStaffChange(staff.filter(s => !hiddenStaff.has(s.id)).map(s => s.id))
+  }, [hiddenStaff, staff, onVisibleStaffChange])
+
+  function toggleStaff(id: string) {
+    setHiddenStaff(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  // Filter: Projekt sichtbar, wenn kein Filter aktiv oder mind. ein zugewiesener
+  // Monteur nicht ausgeblendet ist. Projekte ohne Monteure verschwinden, sobald
+  // ein Filter gesetzt ist — sonst würden sie das "Alle ausblenden" ignorieren.
+  // Stale monteur_ids (nicht mehr in staff) werden ignoriert, sonst könnten sie
+  // das Filter aushebeln (hiddenStaff enthält nur bekannte Staff-IDs).
+  const staffIds = new Set(staff.map(s => s.id))
+  const visibleProjects = projects.filter(p => {
+    if (hiddenStaff.size === 0) return true
+    if (!p.monteur_ids || p.monteur_ids.length === 0) return false
+    return p.monteur_ids.some(id => staffIds.has(id) && !hiddenStaff.has(id))
+  })
+
+  const year = currentDate.getFullYear()
+  const holidays = new Map<string, string>([
+    ...getSwissHolidays(year - 1, canton),
+    ...getSwissHolidays(year, canton),
+    ...getSwissHolidays(year + 1, canton),
+  ])
+
+  function handlePrev() {
+    if (viewMode === 'month') {
+      setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+    } else {
+      setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n })
+    }
+  }
+
+  function handleNext() {
+    if (viewMode === 'month') {
+      setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+    } else {
+      setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n })
+    }
+  }
+
+  const title = viewMode === 'month'
+    ? currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' })
+    : (() => {
+        const days = getWeekDays(currentDate)
+        const from = days[0].toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
+        const to = days[6].toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        return `${from} – ${to}`
+      })()
+
+  return (
+    <div>
+      <div className="absence-cal-toolbar">
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className={`admin-btn admin-btn-sm ${viewMode === 'month' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setViewMode('month')}
+          >Monat</button>
+          <button
+            className={`admin-btn admin-btn-sm ${viewMode === 'week' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setViewMode('week')}
+          >Woche</button>
+        </div>
+
+        <div className="absence-cal-title">{title}</div>
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={handlePrev}>←</button>
+          <button
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => setCurrentDate(new Date())}
+          >Heute</button>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={handleNext}>→</button>
+        </div>
+      </div>
+
+      {!loading && staff.length > 0 && (
+        <div className="project-cal-filter">
+          <div className="project-cal-filter-head">
+            <span>
+              <span className="project-cal-filter-label">Monteure</span>
+              <span className="project-cal-filter-count">
+                {staff.length - hiddenStaff.size} von {staff.length} sichtbar
+              </span>
+            </span>
+            <button
+              type="button"
+              className="project-schedule-mini-btn"
+              onClick={() => {
+                const allHidden = hiddenStaff.size === staff.length
+                setHiddenStaff(allHidden ? new Set() : new Set(staff.map(s => s.id)))
+              }}
+            >
+              {hiddenStaff.size === staff.length ? 'Alle anzeigen' : 'Alle ausblenden'}
+            </button>
+          </div>
+          <div className="absence-cal-staff-filter">
+            {staff.map(s => (
+              <button
+                key={s.id}
+                className={`absence-cal-staff-chip${hiddenStaff.has(s.id) ? ' hidden' : ''}`}
+                onClick={() => toggleStaff(s.id)}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+      ) : viewMode === 'month' ? (
+        <MonthView
+          projects={visibleProjects}
+          currentDate={currentDate}
+          onSelect={onSelect}
+          onShift={(id, d) => { void onShift(id, d) }}
+          holidays={holidays}
+        />
+      ) : (
+        <WeekView
+          projects={visibleProjects}
+          staff={staff}
+          currentDate={currentDate}
+          onSelect={onSelect}
+          onShift={(id, d) => { void onShift(id, d) }}
+          holidays={holidays}
+        />
+      )}
+
+      {!loading && <CalendarLegend canton={canton} />}
+    </div>
+  )
+}
+
+// Helper für optimistisches Update von außen
+export function shiftProjectDates(p: Project, deltaDays: number): Project {
+  if (!p.start_date || !p.end_date) return p
+  return {
+    ...p,
+    start_date: shiftISO(p.start_date, deltaDays),
+    end_date: shiftISO(p.end_date, deltaDays),
+  }
+}
