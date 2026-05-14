@@ -227,6 +227,11 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
                     <div>
                       <div style={{ fontWeight: 600 }}>{inv.invoice_number}</div>
                       <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{inv.project_name}</div>
+                      {inv.project_id && (
+                        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', fontFamily: 'monospace', marginTop: 2 }}>
+                          Projekt-ID: {inv.project_id}
+                        </div>
+                      )}
                       <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
                         Gesendet: {fmtDate(inv.sent_at)} ({daysSince(inv.sent_at)} Tage offen)
                         {inv.due_date ? ` · Fällig: ${fmtDate(inv.due_date)}` : ''}

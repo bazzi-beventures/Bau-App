@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, ApiError, isOfflineError } from '../api/client'
+import { ModuleName } from '../api/modules'
 import { Theme, loadTheme, applyTheme, toggleTheme } from '../theme'
 
 interface Props {
   displayName: string
   logoUrl?: string
   role?: string
+  enabledModules: string[]
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProjekte: () => void
@@ -38,9 +40,12 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
+  const has = (m: ModuleName) => enabledModules.includes(m)
+  const showRapport = !isLight && has('ai')        // Rapport-Workflow läuft über Mistral-Chat
+  const showArbeitszeit = has('timekeeping')
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
 
@@ -51,6 +56,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
   }
 
   useEffect(() => {
+    if (!showArbeitszeit) return
     let cancelled = false
     async function fetchStatus() {
       if (!navigator.onLine) return
@@ -66,7 +72,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
     fetchStatus()
     const interval = setInterval(fetchStatus, 30_000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [])
+  }, [showArbeitszeit])
 
   return (
     <div className="app-screen">
@@ -120,7 +126,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
       <div className="home-scroll">
       {/* Tiles */}
       <div className="tiles">
-        {!isLight && (
+        {showRapport && (
           <div className="tile tile-blue" onClick={onNavRapport}>
             <div className="tile-icon tile-icon-blue">
               <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
@@ -142,23 +148,25 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
           </div>
         )}
 
-        <div className={`tile tile-green${isLight ? ' tile-full' : ''}`} onClick={onNavArbeitszeit}>
-          <div className="tile-icon tile-icon-green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" strokeWidth="1.8">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
+        {showArbeitszeit && (
+          <div className={`tile tile-green${(isLight || !showRapport) ? ' tile-full' : ''}`} onClick={onNavArbeitszeit}>
+            <div className="tile-icon tile-icon-green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" strokeWidth="1.8">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Arbeitszeit</div>
+              <div className="tile-desc">Zeiten, Pausen &amp; Absenzen</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
           </div>
-          <div>
-            <div className="tile-label">Arbeitszeit</div>
-            <div className="tile-desc">Zeiten, Pausen &amp; Absenzen</div>
-          </div>
-          <div className="tile-arrow">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 8h10M9 4l4 4-4 4"/>
-            </svg>
-          </div>
-        </div>
+        )}
 
         {!isLight && (
           <div className="tile tile-amber" style={{ gridColumn: 'span 2' }} onClick={onNavProjekte}>
@@ -182,6 +190,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
       </div>
 
       {/* Status card */}
+      {showArbeitszeit && (
       <div className="home-footer" style={{ paddingBottom: 16 }}>
         <div className="status-card">
           <div className="status-left">
@@ -214,6 +223,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
           {(!sessionStatus || sessionStatus.status === 'inactive') && <div className="status-badge-inactive">Inaktiv</div>}
         </div>
       </div>
+      )}
       </div>{/* end home-scroll */}
 
       {/* Nav bar */}
@@ -224,7 +234,7 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
           </svg>
           <span>Home</span>
         </div>
-        {!isLight && (
+        {showRapport && (
           <div className="nav-item" onClick={onNavRapport}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -233,13 +243,15 @@ export default function HomeScreen({ displayName, logoUrl, role, onNavRapport, o
             <span>Rapporte</span>
           </div>
         )}
-        <div className="nav-item" onClick={onNavArbeitszeit}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-          </svg>
-          <span>Arbeitszeit</span>
-        </div>
+        {showArbeitszeit && (
+          <div className="nav-item" onClick={onNavArbeitszeit}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Arbeitszeit</span>
+          </div>
+        )}
         {!isLight && (
           <div className="nav-item" onClick={onNavProjekte}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

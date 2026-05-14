@@ -3,6 +3,7 @@ import { UserInfo } from '../api/auth'
 import { getAdminDashboard, AdminDashboard } from '../api/admin'
 import AdminSidebar from './AdminSidebar'
 import MobileNav from './MobileNav'
+import RequireModule from './RequireModule'
 import { useAdminNav, AdminScreen } from './useAdminNav'
 import { useIsMobile } from './useIsMobile'
 import DashboardScreen from './dashboard/DashboardScreen'
@@ -105,29 +106,34 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
 
   const isManagement = user.role === 'management' || user.role === 'superadmin'
 
+  const enabledModules = user.enabled_modules ?? []
+  const guard = (mod: Parameters<typeof RequireModule>[0]['module'], el: JSX.Element) => (
+    <RequireModule module={mod} enabledModules={enabledModules}>{el}</RequireModule>
+  )
+
   function renderScreen() {
     if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
-      case 'my-time':      return <MyTimeScreen onLoggedOut={onLoggedOut} onNav={nav} />
+      case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} onNav={nav} />)
       case 'staff':        return <StaffScreen />
-      case 'absences':     return <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />
-      case 'corrections':  return <CorrectionsScreen onBadgeChange={loadDashboard} />
-      case 'hr-reports':   return <HrReportsScreen />
-      case 'vacation':     return <VacationOverviewScreen />
+      case 'absences':     return guard('hr', <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />)
+      case 'corrections':  return guard('timekeeping', <CorrectionsScreen onBadgeChange={loadDashboard} />)
+      case 'hr-reports':   return guard('hr', <HrReportsScreen />)
+      case 'vacation':     return guard('hr', <VacationOverviewScreen />)
       case 'projects':     return <ProjectsScreen openNew={detailId === 'new'} onConsumedNew={clearDetail} />
-      case 'project-schedule': return <ProjectScheduleScreen canton={canton} onNav={nav} />
+      case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={nav} />)
       case 'customers':    return <CustomersScreen />
-      case 'quotes':       return <QuotesScreen />
-      case 'invoices':     return <InvoicesScreen onBadgeChange={loadDashboard} />
+      case 'quotes':       return guard('quotes', <QuotesScreen />)
+      case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
       case 'suppliers':    return <SuppliersScreen />
       case 'materials':    return <MaterialsScreen />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
-      case 'kpis':         return <KpiScreen />
-      case 'configuration': return <ConfigurationScreen />
+      case 'kpis':         return guard('kpis', <KpiScreen />)
+      case 'configuration': return <ConfigurationScreen userRole={user.role} />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
@@ -168,6 +174,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           onSwitchToUser={onSwitchToUser}
           displayName={user.display_name}
           role={user.role}
+          enabledModules={user.enabled_modules ?? []}
           badges={badges}
         />
       </div>
@@ -184,6 +191,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
         displayName={user.display_name}
         role={user.role}
         tenantName={tenantName}
+        enabledModules={user.enabled_modules ?? []}
         badges={badges}
       />
       <main className="admin-content">

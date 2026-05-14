@@ -12,6 +12,8 @@
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* respect iOS status bar / Dynamic Island (status-bar-style: black-translucent) */
+  padding-top: env(safe-area-inset-top, 0px);
   /* clear the fixed bottom tab bar */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 }
@@ -57,6 +59,29 @@
 
 .admin-mobile-tab.active {
   color: var(--primary);
+}
+
+.admin-mobile-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--primary);
+}
+
+.admin-mobile-tab.active .admin-mobile-tab-icon {
+  background: rgba(48, 129, 171, 0.25);
+  border-radius: 12px;
+  width: 44px;
+  height: 26px;
+}
+
+.admin-mobile-tab.active .admin-mobile-tab-label {
+  font-weight: 700;
 }
 
 /* Icon wrapper — anchors badge relative to icon, not to button half-width */

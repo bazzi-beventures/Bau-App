@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AdminScreen } from './useAdminNav'
 import { logout } from '../api/auth'
+import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconFolder, IconClock, IconCash,
   IconUsers, IconAddressBook, IconReceipt, IconCalendar,
@@ -14,6 +15,7 @@ interface Props {
   onSwitchToUser: () => void
   displayName: string
   role: string
+  enabledModules: string[]
   badges?: {
     corrections?: number
     absences?: number
@@ -39,11 +41,12 @@ function IconSwitchUser() {
   )
 }
 
-export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, badges }: Props) {
+export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, enabledModules, badges }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const isManagement = role === 'management' || role === 'superadmin'
+  const has = (m: ModuleName) => enabledModules.includes(m)
   const isMoreActive = !PRIMARY_TABS.includes(screen)
   const hasSecondaryBadge = (badges?.absences ?? 0) > 0
 
@@ -83,28 +86,32 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
           <span className="admin-mobile-tab-label">Projekte</span>
         </button>
 
-        <button
-          className={`admin-mobile-tab${screen === 'corrections' ? ' active' : ''}`}
-          onClick={() => navigate('corrections')}
-        >
-          <span className="admin-mobile-tab-icon">
-            <IconClock />
-            {(badges?.corrections ?? 0) > 0 && (
-              <span className="admin-mobile-tab-badge">{badges!.corrections}</span>
-            )}
-          </span>
-          <span className="admin-mobile-tab-label">Korrekturen</span>
-        </button>
+        {has('timekeeping') && (
+          <button
+            className={`admin-mobile-tab${screen === 'corrections' ? ' active' : ''}`}
+            onClick={() => navigate('corrections')}
+          >
+            <span className="admin-mobile-tab-icon">
+              <IconClock />
+              {(badges?.corrections ?? 0) > 0 && (
+                <span className="admin-mobile-tab-badge">{badges!.corrections}</span>
+              )}
+            </span>
+            <span className="admin-mobile-tab-label">Korrekturen</span>
+          </button>
+        )}
 
-        <button
-          className={`admin-mobile-tab${screen === 'invoices' ? ' active' : ''}`}
-          onClick={() => navigate('invoices')}
-        >
-          <span className="admin-mobile-tab-icon">
-            <IconCash />
-          </span>
-          <span className="admin-mobile-tab-label">Rechnungen</span>
-        </button>
+        {has('invoicing') && (
+          <button
+            className={`admin-mobile-tab${screen === 'invoices' ? ' active' : ''}`}
+            onClick={() => navigate('invoices')}
+          >
+            <span className="admin-mobile-tab-icon">
+              <IconCash />
+            </span>
+            <span className="admin-mobile-tab-label">Rechnungen</span>
+          </button>
+        )}
 
         <button
           className={`admin-mobile-tab${isMoreActive ? ' active' : ''}`}
@@ -132,39 +139,51 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
               <div className="admin-mobile-drawer-group">
                 <div className="admin-mobile-drawer-group-label">Häufig genutzt</div>
 
-                <button className={`admin-mobile-drawer-item${screen === 'my-time' ? ' active' : ''}`} onClick={() => navigate('my-time')}>
-                  <IconClock /><span>Meine Zeit</span>
-                </button>
+                {has('timekeeping') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'my-time' ? ' active' : ''}`} onClick={() => navigate('my-time')}>
+                    <IconClock /><span>Meine Zeit</span>
+                  </button>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'staff' ? ' active' : ''}`} onClick={() => navigate('staff')}>
                   <IconUsers /><span>Mitarbeiter</span>
                 </button>
-                <button className={`admin-mobile-drawer-item${screen === 'project-schedule' ? ' active' : ''}`} onClick={() => navigate('project-schedule')}>
-                  <IconCalendar /><span>Einsatzplanung</span>
-                </button>
+                {has('scheduling') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'project-schedule' ? ' active' : ''}`} onClick={() => navigate('project-schedule')}>
+                    <IconCalendar /><span>Einsatzplanung</span>
+                  </button>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'customers' ? ' active' : ''}`} onClick={() => navigate('customers')}>
                   <IconAddressBook /><span>Kundenstamm</span>
                 </button>
-                <button className={`admin-mobile-drawer-item${screen === 'quotes' ? ' active' : ''}`} onClick={() => navigate('quotes')}>
-                  <IconReceipt /><span>Offerten</span>
-                </button>
-                <button className={`admin-mobile-drawer-item${screen === 'absences' ? ' active' : ''}`} onClick={() => navigate('absences')}>
-                  <IconCalendar /><span>Absenzen</span>
-                  {(badges?.absences ?? 0) > 0 && (
-                    <span className="admin-mobile-drawer-item-badge">{badges!.absences}</span>
-                  )}
-                </button>
+                {has('quotes') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'quotes' ? ' active' : ''}`} onClick={() => navigate('quotes')}>
+                    <IconReceipt /><span>Offerten</span>
+                  </button>
+                )}
+                {has('hr') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'absences' ? ' active' : ''}`} onClick={() => navigate('absences')}>
+                    <IconCalendar /><span>Absenzen</span>
+                    {(badges?.absences ?? 0) > 0 && (
+                      <span className="admin-mobile-drawer-item-badge">{badges!.absences}</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* All remaining screens */}
               <div className="admin-mobile-drawer-group">
                 <div className="admin-mobile-drawer-group-label">Alle Bereiche</div>
 
-                <button className={`admin-mobile-drawer-item${screen === 'hr-reports' ? ' active' : ''}`} onClick={() => navigate('hr-reports')}>
-                  <IconDocument /><span>HR-Berichte</span>
-                </button>
-                <button className={`admin-mobile-drawer-item${screen === 'vacation' ? ' active' : ''}`} onClick={() => navigate('vacation')}>
-                  <IconCalendar /><span>Ferien</span>
-                </button>
+                {has('hr') && (
+                  <>
+                    <button className={`admin-mobile-drawer-item${screen === 'hr-reports' ? ' active' : ''}`} onClick={() => navigate('hr-reports')}>
+                      <IconDocument /><span>HR-Berichte</span>
+                    </button>
+                    <button className={`admin-mobile-drawer-item${screen === 'vacation' ? ' active' : ''}`} onClick={() => navigate('vacation')}>
+                      <IconCalendar /><span>Ferien</span>
+                    </button>
+                  </>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>
@@ -173,7 +192,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                     <IconTag /><span>Lieferantenpreise</span>
                   </button>
                 )}
-                {isManagement && (
+                {isManagement && has('kpis') && (
                   <button className={`admin-mobile-drawer-item${screen === 'kpis' ? ' active' : ''}`} onClick={() => navigate('kpis')}>
                     <IconChart /><span>Kennzahlen</span>
                   </button>

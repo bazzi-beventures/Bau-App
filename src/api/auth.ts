@@ -11,6 +11,7 @@ export interface UserInfo {
   role: string
   consent_version: string | null
   consent_required: boolean
+  enabled_modules: string[]
 }
 
 export async function lookupUser(tenantSlug: string, displayName: string): Promise<{ authorized_user_id: string; display_name: string }> {

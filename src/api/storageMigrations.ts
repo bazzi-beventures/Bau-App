@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 5
+export const APP_DATA_VERSION = 6
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -100,7 +100,18 @@ const migration_4_to_5: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5]
+// v5 → v6: UserInfo bekommt `enabled_modules` (Tenant-Module-Flags).
+// Wird vom Server bei nächstem /pwa/me-Call mitgeliefert — no-op reicht,
+// dient als Tripwire für Fallback-Wipes älterer Clients ohne enabled_modules.
+const migration_5_to_6: Migration = {
+  from: 5,
+  to: 6,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

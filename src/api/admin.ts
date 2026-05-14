@@ -62,6 +62,7 @@ export async function rejectApproval(id: string, note?: string): Promise<void> {
 export interface PendingActionInvoice {
   id: number
   invoice_number: string
+  project_id: string | null
   project_name: string
   total_amount: number
   sent_at: string | null
@@ -346,4 +347,23 @@ export interface LaborHourRow {
 
 export async function getAdminHrTimesheet(dateFrom: string, dateTo: string): Promise<{ sessions: WorkSession[]; labor_hours: LaborHourRow[] }> {
   return apiFetch(`/pwa/admin/hr/timesheet?date_from=${dateFrom}&date_to=${dateTo}`) as Promise<{ sessions: WorkSession[]; labor_hours: LaborHourRow[] }>
+}
+
+// ─── Tenant Module Management ───────────────────────────────
+
+export interface TenantModulesResponse {
+  enabled_modules: string[]
+  known_modules: string[]
+  dependencies: Record<string, string[]>
+}
+
+export async function getTenantModules(): Promise<TenantModulesResponse> {
+  return apiFetch('/pwa/admin/tenant/modules') as Promise<TenantModulesResponse>
+}
+
+export async function updateTenantModules(modules: string[]): Promise<{ enabled_modules: string[] }> {
+  return apiFetch('/pwa/admin/tenant/modules', {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled_modules: modules }),
+  }) as Promise<{ enabled_modules: string[] }>
 }

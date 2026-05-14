@@ -1,5 +1,6 @@
 import { AdminScreen } from './useAdminNav'
 import { logout } from '../api/auth'
+import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
   IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
@@ -14,6 +15,7 @@ interface Props {
   displayName: string
   role: string
   tenantName: string
+  enabledModules: string[]
   badges?: {
     corrections?: number
     absences?: number
@@ -46,9 +48,10 @@ function NavItem({ label, target, current, onNav, badge, icon }: NavItemProps) {
   )
 }
 
-export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, badges }: Props) {
+export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, enabledModules, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const isManagement = role === 'management' || role === 'superadmin'
+  const has = (m: ModuleName) => enabledModules.includes(m)
 
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
@@ -63,21 +66,37 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
       <nav className="admin-nav">
         <NavItem label="Dashboard" target="dashboard" current={screen} onNav={onNav} icon={<IconDashboard />} />
-        <NavItem label="Meine Zeit" target="my-time" current={screen} onNav={onNav} icon={<IconClock />} />
+        {has('timekeeping') && (
+          <NavItem label="Meine Zeit" target="my-time" current={screen} onNav={onNav} icon={<IconClock />} />
+        )}
 
         <div className="admin-nav-group-label">Personal</div>
         <NavItem label="Mitarbeiter" target="staff" current={screen} onNav={onNav} icon={<IconUsers />} />
-        <NavItem label="Absenzen" target="absences" current={screen} onNav={onNav} icon={<IconCalendar />} badge={badges?.absences} />
-        <NavItem label="Zeitkorrekturen" target="corrections" current={screen} onNav={onNav} icon={<IconClock />} badge={badges?.corrections} />
-        <NavItem label="HR-Berichte" target="hr-reports" current={screen} onNav={onNav} icon={<IconDocument />} />
-        <NavItem label="Ferien" target="vacation" current={screen} onNav={onNav} icon={<IconCalendar />} />
+        {has('hr') && (
+          <NavItem label="Absenzen" target="absences" current={screen} onNav={onNav} icon={<IconCalendar />} badge={badges?.absences} />
+        )}
+        {has('timekeeping') && (
+          <NavItem label="Zeitkorrekturen" target="corrections" current={screen} onNav={onNav} icon={<IconClock />} badge={badges?.corrections} />
+        )}
+        {has('hr') && (
+          <>
+            <NavItem label="HR-Berichte" target="hr-reports" current={screen} onNav={onNav} icon={<IconDocument />} />
+            <NavItem label="Ferien" target="vacation" current={screen} onNav={onNav} icon={<IconCalendar />} />
+          </>
+        )}
 
         <div className="admin-nav-group-label">Operativ</div>
         <NavItem label="Projekte" target="projects" current={screen} onNav={onNav} icon={<IconFolder />} />
-        <NavItem label="Einsatzplanung" target="project-schedule" current={screen} onNav={onNav} icon={<IconCalendar />} />
+        {has('scheduling') && (
+          <NavItem label="Einsatzplanung" target="project-schedule" current={screen} onNav={onNav} icon={<IconCalendar />} />
+        )}
         <NavItem label="Kundenstamm" target="customers" current={screen} onNav={onNav} icon={<IconAddressBook />} />
-        <NavItem label="Offerten" target="quotes" current={screen} onNav={onNav} icon={<IconReceipt />} />
-        <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} />
+        {has('quotes') && (
+          <NavItem label="Offerten" target="quotes" current={screen} onNav={onNav} icon={<IconReceipt />} />
+        )}
+        {has('invoicing') && (
+          <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} />
+        )}
 
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />
@@ -86,7 +105,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
         )}
 
-        {isManagement && (
+        {isManagement && has('kpis') && (
           <>
             <div className="admin-nav-group-label">Analyse</div>
             <NavItem label="Kennzahlen" target="kpis" current={screen} onNav={onNav} icon={<IconChart />} />

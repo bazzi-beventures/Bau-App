@@ -1,5 +1,19 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { getTenantModules, updateTenantModules, TenantModulesResponse } from '../../api/admin'
+
+const MODULE_LABELS: Record<string, { label: string; desc: string }> = {
+  timekeeping:      { label: 'Zeiterfassung',     desc: 'Stempeln, Sessions, Pausen für Mitarbeiter' },
+  scheduling:       { label: 'Einsatzplanung',    desc: 'Wochenplan inkl. interne Einsätze' },
+  quotes:           { label: 'Offerten',          desc: 'Offerten mit PDF-Generierung' },
+  invoicing:        { label: 'Rechnungen',        desc: 'Rechnungen mit PDF-Generierung' },
+  inventory:        { label: 'Lager',             desc: 'Bestände & Lagerbewegungen (Material-Katalog bleibt verfügbar)' },
+  hr:               { label: 'HR',                desc: 'Absenzen, Ferien, HR-Berichte' },
+  arg_compliance:   { label: 'ArG-Compliance',    desc: 'Arbeitsgesetz-Verstoss-Erkennung (benötigt HR + Zeiterfassung)' },
+  violation_emails: { label: 'Verstoss-Mails',    desc: 'Wöchentliche Verstoss-E-Mails (benötigt ArG-Compliance)' },
+  kpis:             { label: 'Kennzahlen',        desc: 'KPI-Dashboard + Montags-Mail' },
+  ai:               { label: 'AI-Funktionen',     desc: 'Mistral-Chat, Voxtral-Voice, KPI-Insights' },
+}
 
 interface WeeklyPlanEntry {
   week_number: number
@@ -29,8 +43,13 @@ function isoWeeksInYear(year: number): number {
   return (jan1 === 4 || dec31 === 4) ? 53 : 52
 }
 
-export default function ConfigurationScreen() {
-  const [tab, setTab] = useState<'weekly-plan' | 'year-end'>('weekly-plan')
+interface ConfigProps {
+  userRole?: string
+}
+
+export default function ConfigurationScreen({ userRole }: ConfigProps) {
+  const isSuperadmin = userRole === 'superadmin'
+  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules'>('weekly-plan')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -60,10 +79,19 @@ export default function ConfigurationScreen() {
         >
           Jahresabschluss
         </button>
+        {isSuperadmin && (
+          <button
+            className={`admin-btn ${tab === 'modules' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setTab('modules')}
+          >
+            Module
+          </button>
+        )}
       </div>
 
       {tab === 'weekly-plan' && <WeeklyPlanTab onToast={showToast} />}
       {tab === 'year-end' && <YearEndTab onToast={showToast} />}
+      {tab === 'modules' && isSuperadmin && <ModulesTab onToast={showToast} />}
 
       {toast && (
         <div className="admin-toast-container">
@@ -454,4 +482,151 @@ function YearEndTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
       </div>
     </div>
   )
+}
+
+function ModulesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [data, setData] = useState<TenantModulesResponse | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const result = await getTenantModules()
+      setData(result)
+      setSelected(new Set(result.enabled_modules))
+    } catch {
+      onToast('Laden fehlgeschlagen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  if (loading || !data) {
+    return <div className="admin-loading"><div className="admin-spinner" /> Module werden geladen…</div>
+  }
+
+  const dependencies = data.dependencies
+  const dirty = !setEqual(selected, new Set(data.enabled_modules))
+
+  // Live-Validierung: fehlende Dependencies pro Modul
+  const errors: string[] = []
+  for (const m of selected) {
+    const deps = dependencies[m] ?? []
+    const missing = deps.filter(d => !selected.has(d))
+    if (missing.length > 0) {
+      errors.push(`${MODULE_LABELS[m]?.label ?? m} benötigt: ${missing.map(d => MODULE_LABELS[d]?.label ?? d).join(', ')}`)
+    }
+  }
+
+  function toggle(module: string) {
+    const next = new Set(selected)
+    if (next.has(module)) next.delete(module)
+    else next.add(module)
+    setSelected(next)
+  }
+
+  async function save() {
+    if (errors.length > 0) {
+      onToast('Bitte zuerst Dependency-Fehler beheben', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      const result = await updateTenantModules(Array.from(selected).sort())
+      setSelected(new Set(result.enabled_modules))
+      setData(prev => prev ? { ...prev, enabled_modules: result.enabled_modules } : prev)
+      onToast('Module gespeichert', 'success')
+    } catch {
+      onToast('Speichern fehlgeschlagen', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24, maxWidth: 760 }}>
+      <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+        Schalte Endpunkt-Features pro Mandant ein oder aus. Stammdaten (Kunden, Projekte, Material, Lieferanten,
+        Preisregeln) bleiben immer verfügbar — sie sind Voraussetzung für mehrere Module.
+        Abhängige Module (z. B. <code>arg_compliance</code>) lassen sich nur mit ihren Voraussetzungen aktivieren.
+      </div>
+
+      <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
+        {data.known_modules.map(m => {
+          const meta = MODULE_LABELS[m] ?? { label: m, desc: '' }
+          const deps = dependencies[m] ?? []
+          const isOn = selected.has(m)
+          return (
+            <label
+              key={m}
+              style={{
+                display: 'flex', gap: 12, padding: 12, alignItems: 'flex-start',
+                border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+                background: isOn ? 'rgba(34,197,94,0.06)' : 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isOn}
+                onChange={() => toggle(m)}
+                style={{ marginTop: 2 }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>
+                  {meta.label} <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--muted)' }}>({m})</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{meta.desc}</div>
+                {deps.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                    Benötigt: {deps.map(d => MODULE_LABELS[d]?.label ?? d).join(', ')}
+                  </div>
+                )}
+              </div>
+            </label>
+          )
+        })}
+      </div>
+
+      {errors.length > 0 && (
+        <div style={{
+          padding: 12, marginBottom: 16, borderRadius: 8,
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          fontSize: 13, color: '#fca5a5',
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Dependency-Fehler:</div>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {errors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={save}
+          disabled={!dirty || saving || errors.length > 0}
+        >
+          {saving ? 'Speichern…' : 'Speichern'}
+        </button>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={load}
+          disabled={saving || !dirty}
+        >
+          Verwerfen
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function setEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
 }

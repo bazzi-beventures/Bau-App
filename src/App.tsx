@@ -282,6 +282,7 @@ export default function App() {
         displayName={user.display_name}
         logoUrl={logoUrl}
         role={user.role}
+        enabledModules={user.enabled_modules ?? []}
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
@@ -304,6 +305,7 @@ export default function App() {
     )
   } else if (screen === 'rapport' && user) {
     if (user.role === 'user_light') { setScreen('home'); return null }
+    if (!user.enabled_modules?.includes('ai')) { setScreen('home'); return null }
     inner = (
       <ChatScreen
         displayName={user.display_name}
@@ -319,6 +321,7 @@ export default function App() {
       />
     )
   } else if (screen === 'arbeitszeit' && user) {
+    if (!user.enabled_modules?.includes('timekeeping')) { setScreen('home'); return null }
     inner = (
       <ArbeitsZeitScreen
         displayName={user.display_name}
@@ -334,6 +337,7 @@ export default function App() {
       />
     )
   } else if (screen === 'absenzen' && user) {
+    if (!user.enabled_modules?.includes('hr')) { setScreen('home'); return null }
     inner = (
       <AbsenzenScreen
         logoUrl={logoUrl}
@@ -361,6 +365,7 @@ export default function App() {
       />
     )
   } else if (screen === 'bericht' && user) {
+    if (!user.enabled_modules?.includes('hr')) { setScreen('home'); return null }
     inner = (
       <BerichtScreen
         berichtType={berichtType}
