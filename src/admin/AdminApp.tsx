@@ -117,7 +117,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
-      case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} onNav={nav} />)
+      case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} />)
       case 'staff':        return <StaffScreen />
       case 'absences':     return guard('hr', <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />)
       case 'corrections':  return guard('timekeeping', <CorrectionsScreen onBadgeChange={loadDashboard} />)

@@ -272,6 +272,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  async function handleSendInvoice(invoiceId: number, recipientEmail: string): Promise<boolean> {
+    try {
+      await apiFetch('/pwa/admin/invoices/send', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: invoiceId, recipient_email: recipientEmail }),
+      })
+      showToast(`Rechnung an ${recipientEmail} gesendet`)
+      await reloadInvoices()
+      return true
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen')
+      return false
+    }
+  }
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
@@ -779,9 +794,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           invoices={invoices}
           useAcceptedQuote={useAcceptedQuote}
           generatingInvoice={generatingInvoice}
+          defaultEmail={selectedCustomer?.email ?? project?.customer?.email ?? ''}
           onUseAcceptedQuoteChange={setUseAcceptedQuote}
           onGenerateInvoice={handleGenerateInvoice}
           onMarkPaid={handleMarkInvoicePaid}
+          onSendInvoice={handleSendInvoice}
         />
       )}
 

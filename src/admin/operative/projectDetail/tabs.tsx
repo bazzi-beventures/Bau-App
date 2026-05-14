@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmtCHF, fmtDate } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 
@@ -216,12 +217,26 @@ interface InvoicesTabProps {
   invoices: ProjectInvoice[]
   useAcceptedQuote: boolean
   generatingInvoice: boolean
+  defaultEmail: string
   onUseAcceptedQuoteChange: (v: boolean) => void
   onGenerateInvoice: () => void
   onMarkPaid: (invoiceId: number) => void
+  onSendInvoice: (invoiceId: number, recipientEmail: string) => Promise<boolean>
 }
 
-export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid }: InvoicesTabProps) {
+export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onSendInvoice }: InvoicesTabProps) {
+  const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
+  const [sendEmail, setSendEmail] = useState('')
+  const [sending, setSending] = useState(false)
+
+  async function handleSend() {
+    if (!sendInvoice || !sendEmail) return
+    setSending(true)
+    const ok = await onSendInvoice(sendInvoice.id, sendEmail)
+    setSending(false)
+    if (ok) setSendInvoice(null)
+  }
+
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -260,13 +275,49 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, onU
                       <a href={inv.pdf_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
                     )}
                     {idx === 0 && (inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
-                      <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
+                      <>
+                        <button
+                          className="admin-btn admin-btn-primary admin-btn-sm"
+                          onClick={() => { setSendEmail(defaultEmail); setSendInvoice(inv) }}
+                        >
+                          Senden
+                        </button>
+                        <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
+                      </>
                     )}
                   </div>
                 ))}
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Dialog: Rechnung senden */}
+      {sendInvoice && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Rechnung senden</div>
+            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+              {sendInvoice.invoice_number} · {fmtCHF(sendInvoice.total_amount)}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label">Empfänger E-Mail</label>
+              <input
+                className="admin-form-input"
+                type="email"
+                value={sendEmail}
+                onChange={e => setSendEmail(e.target.value)}
+                placeholder="kunde@example.com"
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setSendInvoice(null)} disabled={sending}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleSend} disabled={!sendEmail || sending}>
+                {sending ? 'Wird gesendet…' : 'Rechnung senden'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

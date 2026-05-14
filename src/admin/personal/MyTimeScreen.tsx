@@ -5,10 +5,13 @@ import {
   submitCorrectionRequest,
   getCorrectionStatus,
   CorrectionPayload,
+  createAbsenceRequest,
+  fetchVacationEntitlement,
+  AbsenceCreatePayload,
+  VacationEntitlement,
 } from '../../api/chat'
 import { apiFetch, ApiError, isOfflineError } from '../../api/client'
 import BerichtScreen, { BerichtType } from '../../screens/BerichtScreen'
-import { AdminScreen } from '../useAdminNav'
 
 interface SessionStatus {
   status: 'active' | 'inactive' | 'on_break'
@@ -22,6 +25,13 @@ function formatClockIn(isoUtc: string): string {
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+const ABSENCE_TYPE_LABELS: Record<AbsenceCreatePayload['absence_type'], string> = {
+  vacation: 'Urlaub',
+  sick: 'Krankheit',
+  military: 'Militärdienst',
+  other: 'Sonstiges',
+}
 
 interface Toast {
   msg: string
@@ -124,7 +134,6 @@ const IconEdit = () => (
 
 interface Props {
   onLoggedOut: () => void
-  onNav: (screen: AdminScreen) => void
 }
 
 interface ActionCard {
@@ -136,7 +145,7 @@ interface ActionCard {
   disabled?: boolean
 }
 
-export default function MyTimeScreen({ onLoggedOut, onNav }: Props) {
+export default function MyTimeScreen({ onLoggedOut }: Props) {
   const [loadingAction, setLoadingAction] = useState<ZeitAction | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [stempel, setStempel] = useState<StempelState>(() => loadStempelState())
@@ -198,6 +207,52 @@ export default function MyTimeScreen({ onLoggedOut, onNav }: Props) {
   const [corrLoading, setCorrLoading] = useState(false)
   const [pendingCorrection, setPendingCorrection] = useState<{ id: string; date: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const [showAbsence, setShowAbsence] = useState(false)
+  const [absForm, setAbsForm] = useState<AbsenceCreatePayload>({
+    absence_type: 'vacation',
+    date_start: today(),
+    date_end: today(),
+    comment: '',
+  })
+  const [absLoading, setAbsLoading] = useState(false)
+  const [entitlement, setEntitlement] = useState<VacationEntitlement | null>(null)
+
+  function toggleAbsence() {
+    setShowAbsence(v => {
+      const next = !v
+      if (next && !entitlement) {
+        fetchVacationEntitlement().then(setEntitlement).catch(() => { /* optional */ })
+      }
+      return next
+    })
+  }
+
+  async function handleAbsenceSubmit() {
+    if (!absForm.date_start || !absForm.date_end) return
+    if (absForm.date_end < absForm.date_start) {
+      showToast('Enddatum muss nach dem Startdatum liegen.', 'error')
+      return
+    }
+    setAbsLoading(true)
+    try {
+      await createAbsenceRequest(absForm)
+      showToast(`${ABSENCE_TYPE_LABELS[absForm.absence_type]} wurde eingereicht.`, 'success')
+      setShowAbsence(false)
+      setAbsForm({ absence_type: 'vacation', date_start: today(), date_end: today(), comment: '' })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onLoggedOut()
+        return
+      }
+      showToast(
+        isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Einreichen',
+        'error',
+      )
+    } finally {
+      setAbsLoading(false)
+    }
+  }
 
   function showToast(msg: string, type: Toast['type']) {
     setToast({ msg, type })
@@ -324,11 +379,11 @@ export default function MyTimeScreen({ onLoggedOut, onNav }: Props) {
 
   const moreCards: ActionCard[] = [
     {
-      label: 'Absenzen',
-      sub: 'Urlaub & Abwesenheiten',
+      label: 'Absenz beantragen',
+      sub: 'Urlaub, Krankheit oder Sonstiges',
       icon: <IconUsers />,
       iconClass: 'orange',
-      onClick: () => onNav('absences'),
+      onClick: toggleAbsence,
     },
     {
       label: 'Arbeitszeit korrigieren',
@@ -550,6 +605,106 @@ export default function MyTimeScreen({ onLoggedOut, onNav }: Props) {
                 }
               >
                 {corrLoading ? '…' : 'Einreichen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Absenz-Antrag-Formular */}
+      {showAbsence && (
+        <div style={{ maxWidth: 520, marginTop: 'var(--s-4)' }}>
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--s-4)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--s-3)',
+              boxShadow: 'var(--shadow-card)',
+            }}
+          >
+            {entitlement && (
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>Resturlaub</div>
+                  <div style={{ fontWeight: 700, color: entitlement.remaining < 0 ? 'var(--danger)' : 'var(--success)' }}>
+                    {entitlement.remaining} d
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>Anspruch</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.entitlement} d</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>Bezogen</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.taken} d</div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>Geplant</div>
+                  <div style={{ fontWeight: 700 }}>{entitlement.planned} d</div>
+                </div>
+              </div>
+            )}
+            <div className="admin-form-group">
+              <label className="admin-form-label">Typ</label>
+              <select
+                className="admin-form-input"
+                value={absForm.absence_type}
+                onChange={e => setAbsForm(f => ({ ...f, absence_type: e.target.value as AbsenceCreatePayload['absence_type'] }))}
+              >
+                <option value="vacation">Urlaub</option>
+                <option value="sick">Krankheit</option>
+                <option value="military">Militärdienst</option>
+                <option value="other">Sonstiges</option>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Von</label>
+                <input
+                  className="admin-form-input"
+                  type="date"
+                  value={absForm.date_start}
+                  onChange={e => setAbsForm(f => ({ ...f, date_start: e.target.value }))}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Bis</label>
+                <input
+                  className="admin-form-input"
+                  type="date"
+                  value={absForm.date_end}
+                  onChange={e => setAbsForm(f => ({ ...f, date_end: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="admin-form-group">
+              <label className="admin-form-label">Bemerkung</label>
+              <input
+                className="admin-form-input"
+                type="text"
+                placeholder="Optional"
+                value={absForm.comment}
+                onChange={e => setAbsForm(f => ({ ...f, comment: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => setShowAbsence(false)}
+                disabled={absLoading}
+              >
+                Abbrechen
+              </button>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={handleAbsenceSubmit}
+                disabled={absLoading || !absForm.date_start || !absForm.date_end}
+              >
+                {absLoading ? '…' : 'Einreichen'}
               </button>
             </div>
           </div>
