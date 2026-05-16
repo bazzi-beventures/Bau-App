@@ -31,3 +31,24 @@ export interface HealthStatusResponse {
 export async function getHealthStatus(): Promise<HealthStatusResponse> {
   return apiFetch('/pwa/superadmin/health/status') as Promise<HealthStatusResponse>
 }
+
+export interface DayUptime {
+  uptime_pct: number
+  checks: number
+  avg_ms: number | null
+}
+
+export interface HistoryDay {
+  day: string  // YYYY-MM-DD
+  railway: DayUptime | null
+  supabase: DayUptime | null
+  mistral: DayUptime | null
+}
+
+export interface HealthHistoryResponse {
+  days: HistoryDay[]
+}
+
+export async function getHealthHistory(days = 90): Promise<HealthHistoryResponse> {
+  return apiFetch(`/pwa/superadmin/health/history?days=${days}`) as Promise<HealthHistoryResponse>
+}
