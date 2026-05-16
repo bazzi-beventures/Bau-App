@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   getHealthStatus, getHealthHistory,
   HealthStatusResponse, HealthHistoryResponse, HistoryDay, DayUptime,
@@ -6,25 +6,35 @@ import {
 } from '../../api/serviceHealth'
 
 const SERVICE_LABELS: Record<ServiceName, string> = {
-  railway: 'Railway (Backend)',
-  supabase: 'Supabase (Datenbank)',
-  mistral: 'Mistral (KI)',
+  railway: 'Railway',
+  supabase: 'Supabase',
+  mistral: 'Mistral',
 }
 
-const SERVICE_DESCRIPTIONS: Record<ServiceName, string> = {
-  railway: 'Hostet die FastAPI-Anwendung — Probe alle 5 Min',
-  supabase: 'Hostet die PostgreSQL-DB — Probe alle 5 Min',
-  mistral: 'KI-API für Chat/KPI/Material — Probe alle 15 Min',
+const SERVICE_SUB: Record<ServiceName, string> = {
+  railway: 'Backend · FastAPI',
+  supabase: 'Datenbank · PostgreSQL',
+  mistral: 'KI · Chat/KPI/Material',
+}
+
+const SERVICE_ACCENT: Record<ServiceName, string> = {
+  railway: '#8b5cf6',
+  supabase: '#10b981',
+  mistral: '#3b82f6',
 }
 
 const HISTORY_RANGES = [30, 90, 180, 365] as const
 type HistoryRange = typeof HISTORY_RANGES[number]
 
+const COLOR_OK = '#10b981'
+const COLOR_WARN = '#f59e0b'
+const COLOR_BAD = '#ef4444'
+const COLOR_NONE = '#e5e7eb'
+
 function dotColor(status: ServiceStatus | undefined, uptimePct: number): string {
-  if (status === 'down') return '#ef4444'
-  if (status === 'slow' || uptimePct < 99) return '#f59e0b'
-  if (uptimePct < 95) return '#ef4444'
-  return '#10b981'
+  if (status === 'down' || uptimePct < 95) return COLOR_BAD
+  if (status === 'slow' || uptimePct < 99) return COLOR_WARN
+  return COLOR_OK
 }
 
 function statusBadge(status: ServiceStatus | undefined): { text: string; bg: string; fg: string } {
@@ -49,150 +59,199 @@ function timeAgo(iso: string | undefined | null): string {
   return `vor ${d}d`
 }
 
-function uptimeCellColor(pct: number | null): string {
-  if (pct == null) return 'var(--surface)'
-  if (pct >= 99.5) return '#dcfce7'
-  if (pct >= 95) return '#fef3c7'
-  return '#fee2e2'
-}
-
-function uptimeCellFg(pct: number | null): string {
-  if (pct == null) return 'var(--text-muted)'
-  if (pct >= 99.5) return '#166534'
-  if (pct >= 95) return '#92400e'
-  return '#991b1b'
+function cellColor(uptime: DayUptime | null): string {
+  if (!uptime || uptime.checks === 0) return COLOR_NONE
+  if (uptime.uptime_pct >= 99.5) return COLOR_OK
+  if (uptime.uptime_pct >= 95) return COLOR_WARN
+  return COLOR_BAD
 }
 
 function formatDay(day: string): string {
-  // YYYY-MM-DD → DD.MM.
   const [, m, d] = day.split('-')
   return `${d}.${m}.`
+}
+
+function weightedAvg(days: HistoryDay[], pick: (d: HistoryDay) => DayUptime | null): number | null {
+  let sumPctWeighted = 0
+  let sumChecks = 0
+  for (const d of days) {
+    const u = pick(d)
+    if (!u || u.checks === 0) continue
+    sumPctWeighted += u.uptime_pct * u.checks
+    sumChecks += u.checks
+  }
+  return sumChecks > 0 ? sumPctWeighted / sumChecks : null
 }
 
 function StatusCard({ name, data }: { name: ServiceName; data: ServiceHealth }) {
   const status = data.latest?.status
   const badge = statusBadge(status)
   const dot = dotColor(status, data.uptime_24h.uptime_pct)
+  const pct = data.uptime_24h.checks > 0 ? data.uptime_24h.uptime_pct : null
 
   return (
-    <div className="kpi-admin-card" style={{ minHeight: 180 }}>
-      <div className="kpi-admin-card-dot" style={{ background: dot }} />
-      <div className="kpi-admin-card-label">{SERVICE_LABELS[name]}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4, marginBottom: 12 }}>
-        <span
-          style={{
-            display: 'inline-block',
-            padding: '3px 8px',
-            borderRadius: 4,
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            background: badge.bg,
-            color: badge.fg,
-          }}
-        >
-          {badge.text}
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {timeAgo(data.latest?.checked_at)}
-        </span>
+    <div className="svc-card" style={{ ['--svc-accent' as string]: SERVICE_ACCENT[name] }}>
+      <div className="svc-card-head">
+        <div>
+          <div className="svc-card-title">{SERVICE_LABELS[name]}</div>
+          <div className="svc-card-sub">{SERVICE_SUB[name]}</div>
+        </div>
+        <div className="svc-card-dot" style={{ background: dot }} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
-        <div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Uptime 24h
-          </div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600 }}>
-            {data.uptime_24h.checks > 0 ? `${data.uptime_24h.uptime_pct.toFixed(2)}%` : '—'}
-          </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-            {data.uptime_24h.ok}/{data.uptime_24h.checks} Checks
-          </div>
+      <div>
+        <div className="svc-card-value">
+          {pct != null ? pct.toFixed(2) : '—'}
+          <span className="svc-card-value-unit">%</span>
         </div>
+        <div className="svc-card-caption">
+          Uptime 24h · {data.uptime_24h.ok}/{data.uptime_24h.checks} Checks
+        </div>
+      </div>
+
+      <div className="svc-card-badge-row">
+        <span className="svc-badge" style={{ background: badge.bg, color: badge.fg }}>
+          <span className="svc-badge-dot" />{badge.text}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{timeAgo(data.latest?.checked_at)}</span>
+      </div>
+
+      <div className="svc-card-meta">
         <div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Uptime 7d
-          </div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600 }}>
+          Uptime 7d
+          <div className="svc-card-meta-val">
             {data.uptime_7d.checks > 0 ? `${data.uptime_7d.uptime_pct.toFixed(2)}%` : '—'}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-            {data.uptime_7d.ok}/{data.uptime_7d.checks} Checks
+        </div>
+        <div>
+          Ø Antwort
+          <div className="svc-card-meta-val">
+            {data.uptime_24h.avg_ms != null ? `${data.uptime_24h.avg_ms} ms` : '—'}
           </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>
-        <div>{SERVICE_DESCRIPTIONS[name]}</div>
-        {data.latest?.response_ms != null && (
-          <div style={{ marginTop: 4 }}>
-            Letzte Antwortzeit: <span style={{ fontFamily: 'var(--mono)' }}>{data.latest.response_ms} ms</span>
-            {' · '}Ø 24h: <span style={{ fontFamily: 'var(--mono)' }}>{data.uptime_24h.avg_ms ?? '—'} ms</span>
-          </div>
-        )}
-        {data.latest?.error && (
-          <div style={{ marginTop: 4, color: '#991b1b' }}>
-            Fehler: {data.latest.error}
-          </div>
-        )}
+      {data.latest?.error && (
+        <div style={{ fontSize: 11, color: '#991b1b', background: '#fee2e2', padding: '6px 10px', borderRadius: 6 }}>
+          {data.latest.error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HeatmapRow({
+  name,
+  days,
+  pick,
+}: {
+  name: ServiceName
+  days: HistoryDay[]
+  pick: (d: HistoryDay) => DayUptime | null
+}) {
+  const avgPct = weightedAvg(days, pick)
+
+  return (
+    <div className="svc-heatmap-row">
+      <div className="svc-heatmap-label">
+        <span className="svc-heatmap-label-dot" style={{ background: SERVICE_ACCENT[name] }} />
+        {SERVICE_LABELS[name]}
+      </div>
+      <div className="svc-heatmap-cells">
+        {days.map(d => {
+          const u = pick(d)
+          const title = u && u.checks > 0
+            ? `${formatDay(d.day)} · ${u.uptime_pct.toFixed(2)}% · ${u.checks} Checks · Ø ${u.avg_ms ?? '—'} ms`
+            : `${formatDay(d.day)} · keine Daten`
+          return (
+            <div
+              key={d.day}
+              className="svc-heatmap-cell"
+              style={{ background: cellColor(u) }}
+              title={title}
+            />
+          )
+        })}
+      </div>
+      <div className="svc-heatmap-pct">
+        {avgPct != null ? `${avgPct.toFixed(2)}%` : '—'}
+        <small>Uptime</small>
       </div>
     </div>
   )
 }
 
-function UptimeCell({ uptime }: { uptime: DayUptime | null }) {
-  const pct = uptime ? uptime.uptime_pct : null
-  return (
-    <td
-      title={uptime ? `${uptime.checks} Checks · Ø ${uptime.avg_ms ?? '—'} ms` : 'Keine Daten'}
-      style={{
-        padding: '6px 10px',
-        textAlign: 'right',
-        fontFamily: 'var(--mono)',
-        fontSize: 13,
-        background: uptimeCellColor(pct),
-        color: uptimeCellFg(pct),
-        borderRadius: 4,
-      }}
-    >
-      {pct != null ? `${pct.toFixed(2)}%` : '—'}
-    </td>
-  )
-}
-
-function HistoryTable({ days }: { days: HistoryDay[] }) {
+function Heatmap({ days, range }: { days: HistoryDay[]; range: HistoryRange }) {
   if (days.length === 0) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+      <div className="svc-heatmap" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 36 }}>
         Noch keine Historie verfügbar — Daten sammeln sich an, sobald die Workflows laufen.
       </div>
     )
   }
+  const first = formatDay(days[0].day)
+  const last = formatDay(days[days.length - 1].day)
+  const sameDay = days.length === 1
+
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '4px 2px', fontSize: 13 }}>
-        <thead>
-          <tr style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            <th style={{ padding: '6px 10px', textAlign: 'left' }}>Tag</th>
-            <th style={{ padding: '6px 10px', textAlign: 'right' }}>Railway</th>
-            <th style={{ padding: '6px 10px', textAlign: 'right' }}>Supabase</th>
-            <th style={{ padding: '6px 10px', textAlign: 'right' }}>Mistral</th>
-          </tr>
-        </thead>
-        <tbody>
-          {days.map(d => (
-            <tr key={d.day}>
-              <td style={{ padding: '6px 10px', fontFamily: 'var(--mono)', color: 'var(--text)' }}>
-                {formatDay(d.day)}
-              </td>
-              <UptimeCell uptime={d.railway} />
-              <UptimeCell uptime={d.supabase} />
-              <UptimeCell uptime={d.mistral} />
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="svc-heatmap">
+      <HeatmapRow name="railway" days={days} pick={d => d.railway} />
+      <HeatmapRow name="supabase" days={days} pick={d => d.supabase} />
+      <HeatmapRow name="mistral" days={days} pick={d => d.mistral} />
+      {sameDay ? (
+        <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 10 }}>
+          {first}
+        </div>
+      ) : (
+        <div className="svc-heatmap-axis">
+          <span>vor {range}d · {first}</span>
+          <span>heute · {last}</span>
+        </div>
+      )}
+      <div className="svc-heatmap-legend">
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_OK }} />Operational (≥ 99.5%)</span>
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_WARN }} />Degraded (95–99.5%)</span>
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_BAD }} />Outage (&lt; 95%)</span>
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_NONE }} />Keine Daten</span>
+      </div>
+    </div>
+  )
+}
+
+function OverallBanner({ data }: { data: HealthStatusResponse }) {
+  const services = Object.values(data.services)
+  const downCount = services.filter(s => s.latest?.status === 'down').length
+  const slowCount = services.filter(s => s.latest?.status === 'slow').length
+
+  if (downCount > 0) {
+    return (
+      <div className="svc-banner svc-banner-bad">
+        <div className="svc-banner-icon">!</div>
+        <div>
+          <div className="svc-banner-title">Störung erkannt</div>
+          <div className="svc-banner-sub">{downCount} Service{downCount > 1 ? 's' : ''} offline</div>
+        </div>
+      </div>
+    )
+  }
+  if (slowCount > 0) {
+    return (
+      <div className="svc-banner svc-banner-warn">
+        <div className="svc-banner-icon">!</div>
+        <div>
+          <div className="svc-banner-title">Eingeschränkte Leistung</div>
+          <div className="svc-banner-sub">{slowCount} Service{slowCount > 1 ? 's' : ''} reagiert verzögert</div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="svc-banner svc-banner-ok">
+      <div className="svc-banner-icon">✓</div>
+      <div>
+        <div className="svc-banner-title">Alle Systeme betriebsbereit</div>
+        <div className="svc-banner-sub">Letzter Check vor wenigen Minuten · automatisches Refresh alle 60 Sek</div>
+      </div>
     </div>
   )
 }
@@ -229,16 +288,27 @@ export default function ServiceStatusScreen() {
     load(r)
   }
 
+  const headerMeta = useMemo(() => {
+    if (!history) return null
+    return `${history.days.length} Tag${history.days.length === 1 ? '' : 'e'} sichtbar`
+  }, [history])
+
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Service-Status</div>
           <div className="admin-page-subtitle">
-            Externes Monitoring via GitHub Actions — wird automatisch alle 60 Sek aktualisiert
+            Externes Monitoring via GitHub Actions
           </div>
         </div>
-        <button className="admin-btn-secondary" onClick={() => load()} disabled={loading}>
+        <button
+          className="svc-refresh"
+          onClick={() => load()}
+          disabled={loading}
+          data-loading={loading}
+        >
+          <span className="svc-refresh-icon">↻</span>
           {loading ? 'Lädt…' : 'Aktualisieren'}
         </button>
       </div>
@@ -249,10 +319,12 @@ export default function ServiceStatusScreen() {
         </div>
       )}
 
+      {data && <OverallBanner data={data} />}
+
       {data && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           gap: 16,
         }}>
           <StatusCard name="railway" data={data.services.railway} />
@@ -262,43 +334,41 @@ export default function ServiceStatusScreen() {
       )}
 
       {!data && !error && (
-        <div className="admin-loading">Lädt…</div>
+        <div className="admin-loading"><div className="kpi-admin-spinner" />Lädt…</div>
       )}
 
       {history && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Tages-Historie</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Uptime pro Tag. Tage älter als 30 Tage werden automatisch aggregiert, Rohdaten gelöscht.
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', letterSpacing: '-0.01em' }}>
+                Uptime-Verlauf
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                Ein Block = ein Tag · Hover für Details {headerMeta && `· ${headerMeta}`}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="svc-segmented">
               {HISTORY_RANGES.map(r => (
                 <button
                   key={r}
                   onClick={() => changeRange(r)}
-                  className={historyRange === r ? 'admin-btn' : 'admin-btn-secondary'}
-                  style={{ padding: '4px 10px', fontSize: 12 }}
+                  data-active={historyRange === r}
                 >
                   {r}d
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
-            <HistoryTable days={history.days} />
-          </div>
+          <Heatmap days={history.days} range={historyRange} />
         </div>
       )}
 
-      <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
         <strong style={{ color: 'var(--text)' }}>Wie das funktioniert:</strong> Drei GitHub-Actions-Workflows pingen
         Railway, Supabase und Mistral und schreiben jedes Resultat in eine Tabelle.
-        Die Karten oben zeigen den aktuellen Status + Uptime 24h/7d aus den Rohdaten.
-        Die Tages-Historie kombiniert frische Rohdaten (letzte 30 Tage) mit dem verdichteten Tages-Aggregat (älter).
-        GitHub-Cron läuft im Best-Effort-Modus — geringe Verzögerungen sind normal.
+        Die Karten zeigen den aktuellen Status, der Verlauf kombiniert Rohdaten (letzte 30 Tage)
+        mit Tages-Aggregat (älter). GitHub-Cron läuft Best-Effort — geringe Verzögerungen sind normal.
       </div>
     </div>
   )

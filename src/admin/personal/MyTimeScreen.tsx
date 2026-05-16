@@ -355,7 +355,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
 
   const reportCards: ActionCard[] = [
     {
-      label: 'Arbeitszeitbericht',
+      label: 'Monatsbericht',
       sub: 'Monatszeiten & Überstunden',
       icon: <IconReport />,
       iconClass: 'green',
