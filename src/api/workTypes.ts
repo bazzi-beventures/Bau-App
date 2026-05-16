@@ -1,9 +1,10 @@
 export const WORK_TYPES = [
-  { value: 'Neumontage', label: 'Neumontage' },
-  { value: 'Umbau',      label: 'Umbau / Ersatz' },
-  { value: 'Reparatur',  label: 'Reparatur' },
-  { value: 'Wartung',    label: 'Service / Wartung' },
-  { value: 'Demontage',  label: 'Demontage' },
+  { value: 'Neumontage',    label: 'Neumontage' },
+  { value: 'Wiedermontage', label: 'Wiedermontage' },
+  { value: 'Umbau',         label: 'Umbau / Ersatz' },
+  { value: 'Reparatur',     label: 'Reparatur' },
+  { value: 'Wartung',       label: 'Service / Wartung' },
+  { value: 'Demontage',     label: 'Demontage' },
 ] as const
 
 export type WorkType = typeof WORK_TYPES[number]['value']

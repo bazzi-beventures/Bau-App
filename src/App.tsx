@@ -11,11 +11,12 @@ import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 import ProjekteScreen from './screens/ProjekteScreen'
+import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import { applyTheme, loadTheme } from './theme'
 
-type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'admin' | 'absenzen'
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'projektEntwurf' | 'admin' | 'absenzen'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -286,6 +287,7 @@ export default function App() {
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
+        onNavProjektEntwurf={() => setScreen('projektEntwurf')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
@@ -361,6 +363,15 @@ export default function App() {
         }}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  } else if (screen === 'projektEntwurf' && user) {
+    if (user.role === 'user_light') { setScreen('home'); return null }
+    inner = (
+      <ProjektEntwurfScreen
+        logoUrl={logoUrl}
+        onNavHome={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )

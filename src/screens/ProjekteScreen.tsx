@@ -7,6 +7,7 @@ interface Kontakt {
   kommentar: string
   telefon: string
   email: string
+  is_site_contact?: boolean
 }
 
 interface EmbeddedCustomer {
@@ -46,8 +47,6 @@ interface Project {
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
-  local_contact_name: string | null
-  local_contact_phone: string | null
   start_date: string | null
   end_date: string | null
   start_time: string | null
@@ -287,16 +286,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <span className="projekte-detail-value">{selected.object_address}</span>
               </div>
             )}
-            {selected.local_contact_name && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Vor Ort</span>
-                <span className="projekte-detail-value">
-                  {selected.local_contact_name}
-                  {selected.local_contact_phone ? ` · ${selected.local_contact_phone}` : ''}
-                </span>
-              </div>
-            )}
-            {!selected.customer && !selected.object_address && !selected.local_contact_name && (
+            {!selected.customer && !selected.object_address && (
               <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
             )}
           </div>
@@ -312,14 +302,28 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             </div>
           )}
 
-          {/* Kontakte */}
+          {/* Kontakte — Baustellenkontakt zuerst */}
           {(selected.kontakte ?? []).length > 0 && (
             <div className="projekte-detail-card">
               <div className="projekte-detail-title">Kontakte</div>
-              {selected.kontakte.map((k, i) => (
-                <div key={i} className="projekte-kontakt-item">
+              {[...selected.kontakte]
+                .sort((a, b) => Number(!!b.is_site_contact) - Number(!!a.is_site_contact))
+                .map((k, i) => (
+                <div
+                  key={i}
+                  className="projekte-kontakt-item"
+                  style={k.is_site_contact ? { background: '#fff8e6', border: '1.5px solid #f5a623', borderRadius: 8, padding: 10, marginBottom: 8 } : undefined}
+                >
                   <div className="projekte-kontakt-item-header">
                     <span className="projekte-kontakt-item-name">{k.name}</span>
+                    {k.is_site_contact && (
+                      <span
+                        className="projekte-kontakt-item-rolle"
+                        style={{ background: '#f5a623', color: '#fff', fontWeight: 600 }}
+                      >
+                        ★ Vor Ort
+                      </span>
+                    )}
                     {k.kommentar && <span className="projekte-kontakt-item-rolle">{k.kommentar}</span>}
                   </div>
                   <div className="projekte-kontakt-item-links">

@@ -9,11 +9,12 @@ import { WORK_TYPES, workTypeLabel } from '../../../api/workTypes'
 const num = (v: unknown) => typeof v === 'number' ? v.toLocaleString('de-CH', { maximumFractionDigits: 1 }) : '—'
 
 const COLOR: Record<string, string> = {
-  Neumontage: '#15803d',
-  Umbau:      '#b45309',
-  Reparatur:  '#be123c',
-  Wartung:    '#0ea5e9',
-  Demontage:  '#6b7280',
+  Neumontage:    '#15803d',
+  Wiedermontage: '#84cc16',
+  Umbau:         '#b45309',
+  Reparatur:     '#be123c',
+  Wartung:       '#0ea5e9',
+  Demontage:     '#6b7280',
 }
 
 const COLUMNS: ColumnDef<KpiLeistungsartMonatRow>[] = [
@@ -61,7 +62,7 @@ export default function LeistungsartTab() {
 
   const chartData = useMemo(() => {
     const map = new Map<string, Record<string, number | string>>()
-    for (const m of months) map.set(m, { monat: m, Neumontage: 0, Umbau: 0, Reparatur: 0, Wartung: 0, Demontage: 0 })
+    for (const m of months) map.set(m, { monat: m, Neumontage: 0, Wiedermontage: 0, Umbau: 0, Reparatur: 0, Wartung: 0, Demontage: 0 })
     for (const r of filtered) {
       const row = map.get(r.monat)
       if (!row) continue

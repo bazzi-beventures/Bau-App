@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { apiUrl } from '../../../api/client'
 import { fmtCHF, fmtDate } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 
 export interface ProjectFile {
   id: string
@@ -32,6 +34,18 @@ export interface ProjectInvoice {
   created_at: string
   paid_at: string | null
   pdf_url: string | null
+  created_without_report?: boolean
+}
+
+export interface ProjectReport {
+  id: number
+  report_date: string
+  description: string | null
+  created_by: string | null
+  pdf_url: string | null
+  signature_timestamp: string | null
+  invoice_id: number | null
+  created_at: string
 }
 
 export interface ProjectApproval {
@@ -149,13 +163,18 @@ export function DocumentsTab({ files, uploading, fileInputRef, onUpload, onDelet
 
 interface QuotesTabProps {
   quotes: ProjectQuote[]
+  invoices: ProjectInvoice[]
   regeneratingQuoteId: number | null
   onShowCreateForm: () => void
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
 }
 
-export function QuotesTab({ quotes, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate }: QuotesTabProps) {
+  // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
+  // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
+  // markiert die zugehörige Offertengruppe mit einem Badge.
+  const hasWorkaroundInvoice = invoices.some(i => i.created_without_report)
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -172,10 +191,18 @@ export function QuotesTab({ quotes, regeneratingQuoteId, onShowCreateForm, onUpd
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Offerten.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {groupByParent(quotes).map(group => {
+          {groupByParent(quotes).map((group, groupIdx) => {
             const latest = group[0]
+            const showWorkaroundBadge = hasWorkaroundInvoice && groupIdx === 0
             return (
               <div key={latest.parent_id ?? latest.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
+                {showWorkaroundBadge && (
+                  <div style={{ marginBottom: 8, fontSize: 12 }}>
+                    <span className="admin-badge admin-badge-pending" title="Rechnung wurde direkt aus dieser Offerte erstellt, weil noch kein vom Kunden unterschriebener Arbeitsrapport vorliegt.">
+                      ⚠ Rechnung ohne Rapport erstellt
+                    </span>
+                  </div>
+                )}
                 {group.map((q, idx) => (
                   <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{q.version}</span>
@@ -184,7 +211,7 @@ export function QuotesTab({ quotes, regeneratingQuoteId, onShowCreateForm, onUpd
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(q.created_at)}</span>
                     <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
                     {q.pdf_url && (
-                      <a href={q.pdf_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                      <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
                     )}
                     {idx === 0 && (
                       <>
@@ -211,6 +238,62 @@ export function QuotesTab({ quotes, regeneratingQuoteId, onShowCreateForm, onUpd
   )
 }
 
+// ─── Reports Tab ───────────────────────────────────────────────
+
+interface ReportsTabProps {
+  reports: ProjectReport[]
+}
+
+export function ReportsTab({ reports }: ReportsTabProps) {
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div className="admin-section-title" style={{ margin: 0 }}>Rapporte</div>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+          {reports.length === 0 ? 'keine' : `${reports.length} Rapport${reports.length === 1 ? '' : 'e'}`}
+        </span>
+      </div>
+      {reports.length === 0 ? (
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Rapporte für dieses Projekt.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {reports.map(r => {
+            const signed = !!r.signature_timestamp
+            const billed = !!r.invoice_id
+            return (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 18 }}>📋</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(r.report_date)}</span>
+                    <span className={`admin-badge ${signed ? 'admin-badge-paid' : 'admin-badge-open'}`}>
+                      {signed ? 'Unterschrieben' : 'Pendent'}
+                    </span>
+                    {billed && (
+                      <span className="admin-badge admin-badge-closed">Abgerechnet</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                    {r.created_by ?? '—'}
+                    {r.description ? ` · ${r.description}` : ''}
+                  </div>
+                </div>
+                {r.pdf_url ? (
+                  <a href={apiUrl(`/pwa/admin/reports/${r.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">
+                    PDF
+                  </a>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Invoices Tab ──────────────────────────────────────────────
 
 interface InvoicesTabProps {
@@ -218,16 +301,18 @@ interface InvoicesTabProps {
   useAcceptedQuote: boolean
   generatingInvoice: boolean
   defaultEmail: string
+  hasSignedReport: boolean
   onUseAcceptedQuoteChange: (v: boolean) => void
   onGenerateInvoice: () => void
   onMarkPaid: (invoiceId: number) => void
   onSendInvoice: (invoiceId: number, recipientEmail: string) => Promise<boolean>
 }
 
-export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onSendInvoice }: InvoicesTabProps) {
+export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onSendInvoice }: InvoicesTabProps) {
   const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
+  const [confirmNoReport, setConfirmNoReport] = useState(false)
 
   async function handleSend() {
     if (!sendInvoice || !sendEmail) return
@@ -235,6 +320,19 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
     const ok = await onSendInvoice(sendInvoice.id, sendEmail)
     setSending(false)
     if (ok) setSendInvoice(null)
+  }
+
+  function handleGenerateClick() {
+    if (hasSignedReport) {
+      onGenerateInvoice()
+    } else {
+      setConfirmNoReport(true)
+    }
+  }
+
+  function handleConfirmNoReport() {
+    setConfirmNoReport(false)
+    onGenerateInvoice()
   }
 
   return (
@@ -250,12 +348,31 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
             type="button"
             className="admin-btn admin-btn-sm admin-btn-primary"
             disabled={generatingInvoice}
-            onClick={onGenerateInvoice}
+            onClick={handleGenerateClick}
           >
             {generatingInvoice ? 'Wird erstellt…' : '+ Rechnung generieren'}
           </button>
         </div>
       </div>
+      {!hasSignedReport && (
+        <div style={{
+          marginBottom: 14,
+          padding: '10px 14px',
+          borderRadius: 8,
+          background: 'var(--warning-bg, #fff4e5)',
+          border: '1px solid var(--warning, #f0ad4e)',
+          color: 'var(--warning-fg, #8a5a00)',
+          fontSize: 13,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>⚠️</span>
+          <span>
+            Kein unterzeichneter Rapport vorhanden — die Rechnung wird auf Basis der akzeptierten Offerte erstellt.
+          </span>
+        </div>
+      )}
       {invoices.length === 0 ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Rechnungen.</div>
       ) : (
@@ -272,7 +389,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(inv.created_at)}</span>
                     <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(inv.total_amount)}</span>
                     {inv.pdf_url && (
-                      <a href={inv.pdf_url} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                      <a href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
                     )}
                     {idx === 0 && (inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                       <>
@@ -291,6 +408,25 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
             )
           })}
         </div>
+      )}
+
+      {/* Dialog: Rechnung ohne unterschriebenen Rapport erstellen */}
+      {confirmNoReport && (
+        <ConfirmDialog
+          title="Rechnung ohne Arbeitsrapport erstellen?"
+          message={
+            <>
+              Es ist kein vom Kunden unterschriebener Rapport vorhanden.
+              Die Rechnung wird stattdessen aus der akzeptierten Offerte generiert.
+            </>
+          }
+          confirmLabel="Ohne Rapport erstellen"
+          busyLabel="Wird erstellt…"
+          busy={generatingInvoice}
+          variant="primary"
+          onCancel={() => setConfirmNoReport(false)}
+          onConfirm={handleConfirmNoReport}
+        />
       )}
 
       {/* Dialog: Rechnung senden */}

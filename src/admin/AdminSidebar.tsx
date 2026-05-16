@@ -20,6 +20,7 @@ interface Props {
     corrections?: number
     absences?: number
     invoices?: number
+    drafts?: number
   }
 }
 
@@ -51,6 +52,7 @@ function NavItem({ label, target, current, onNav, badge, icon }: NavItemProps) {
 export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, enabledModules, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const isManagement = role === 'management' || role === 'superadmin'
+  const isSuperadmin = role === 'superadmin'
   const has = (m: ModuleName) => enabledModules.includes(m)
 
   async function handleLogout() {
@@ -87,6 +89,7 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
         <div className="admin-nav-group-label">Operativ</div>
         <NavItem label="Projekte" target="projects" current={screen} onNav={onNav} icon={<IconFolder />} />
+        <NavItem label="Projekt-Entwürfe" target="project-drafts" current={screen} onNav={onNav} icon={<IconDocument />} badge={badges?.drafts} />
         {has('scheduling') && (
           <NavItem label="Einsatzplanung" target="project-schedule" current={screen} onNav={onNav} icon={<IconCalendar />} />
         )}
@@ -117,6 +120,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
             <div className="admin-nav-group-label">System</div>
             <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
             <NavItem label="Konfiguration" target="configuration" current={screen} onNav={onNav} icon={<IconSettings />} />
+            {isSuperadmin && (
+              <NavItem label="Service-Status" target="service-status" current={screen} onNav={onNav} icon={<IconDashboard />} />
+            )}
           </>
         )}
       </nav>

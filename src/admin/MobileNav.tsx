@@ -20,6 +20,7 @@ interface Props {
     corrections?: number
     absences?: number
     invoices?: number
+    drafts?: number
   }
 }
 
@@ -146,6 +147,12 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 )}
                 <button className={`admin-mobile-drawer-item${screen === 'staff' ? ' active' : ''}`} onClick={() => navigate('staff')}>
                   <IconUsers /><span>Mitarbeiter</span>
+                </button>
+                <button className={`admin-mobile-drawer-item${screen === 'project-drafts' ? ' active' : ''}`} onClick={() => navigate('project-drafts')}>
+                  <IconDocument /><span>Projekt-Entwürfe</span>
+                  {(badges?.drafts ?? 0) > 0 && (
+                    <span className="admin-mobile-drawer-item-badge">{badges!.drafts}</span>
+                  )}
                 </button>
                 {has('scheduling') && (
                   <button className={`admin-mobile-drawer-item${screen === 'project-schedule' ? ' active' : ''}`} onClick={() => navigate('project-schedule')}>

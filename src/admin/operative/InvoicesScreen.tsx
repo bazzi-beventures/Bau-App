@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { apiFetch, apiUrl } from '../../api/client'
 import { INVOICE_STATUS_LABELS as STATUS_LABELS, INVOICE_STATUS_BADGE as STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
@@ -232,7 +232,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {inv.pdf_url && (
                         <a
-                          href={inv.pdf_url}
+                          href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)}
                           target="_blank"
                           rel="noreferrer"
                           className="admin-btn admin-btn-secondary admin-btn-sm"
@@ -317,6 +317,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                   <input type="checkbox" checked={genUseQuote} onChange={e => setGenUseQuote(e.target.checked)} />
                   Offerten-Positionen verwenden (statt Ist-Daten)
                 </label>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, paddingLeft: 24 }}>
+                  Aktivieren, wenn noch kein unterschriebener Arbeitsrapport vorliegt — die Rechnung wird dann aus der Offerte erstellt.
+                </div>
               </div>
             )}
             <div className="admin-confirm-actions">

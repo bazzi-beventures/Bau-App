@@ -9,6 +9,7 @@ export type AdminScreen =
   | 'hr-reports'
   | 'vacation'
   | 'projects'
+  | 'project-drafts'
   | 'project-schedule'
   | 'customers'
   | 'quotes'
@@ -19,6 +20,7 @@ export type AdminScreen =
   | 'users'
   | 'kpis'
   | 'configuration'
+  | 'service-status'
 
 export interface AdminNavState {
   screen: AdminScreen

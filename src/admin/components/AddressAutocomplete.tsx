@@ -18,15 +18,29 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '')
 }
 
+function formatLabel(html: string): string {
+  const match = html.match(/<b>([\s\S]*?)<\/b>\s*([\s\S]*)/i)
+  if (match) {
+    const street = stripHtml(match[1]).replace(/\s+/g, ' ').trim()
+    const rest = stripHtml(match[2]).replace(/\s+/g, ' ').trim()
+    if (street && rest) return `${street}, ${rest}`
+    return street || rest
+  }
+  return stripHtml(html).replace(/\s+/g, ' ').trim()
+}
+
 export function AddressAutocomplete({ value, onChange, className }: Props) {
   const [suggestions, setSuggestions] = useState<SwisstopoResult[]>([])
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const userTypedRef = useRef(false)
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (!userTypedRef.current) return
 
     if (value.length < 3) {
       setSuggestions([])
@@ -65,7 +79,8 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
   }, [])
 
   function select(result: SwisstopoResult) {
-    onChange(stripHtml(result.attrs.label))
+    userTypedRef.current = false
+    onChange(formatLabel(result.attrs.label))
     setOpen(false)
     setSuggestions([])
   }
@@ -91,7 +106,7 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
       <input
         className={className}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => { userTypedRef.current = true; onChange(e.target.value) }}
         onKeyDown={handleKeyDown}
         autoComplete="off"
       />
@@ -126,7 +141,7 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
               }}
               onMouseEnter={() => setHighlighted(i)}
             >
-              {stripHtml(s.attrs.label)}
+              {formatLabel(s.attrs.label)}
             </li>
           ))}
         </ul>

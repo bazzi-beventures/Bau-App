@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { apiFetch, apiFormFetch } from '../../api/client'
+import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct } from './PdfExtractionReviewModal'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
@@ -22,6 +22,23 @@ interface Project {
   id: string
   name: string
   is_closed?: boolean
+  distance_km?: number | null
+}
+
+// Fahrspesen-Tabelle (Default — Mirror von db/invoices.py _DEFAULT_TRAVEL_COST_TABLE).
+// Wird nur zur Preview-Anzeige im Formular verwendet; verbindlich rechnet das Backend.
+const TRAVEL_COST_TABLE: [number, number][] = [
+  [1, 10], [5, 20], [8, 30], [11, 35], [14, 40],
+  [17, 45], [22, 50], [24, 55], [29, 60], [43, 70],
+  [Infinity, 75],
+]
+
+function computeTravelCost(km: number): number {
+  const kmCeil = Math.ceil(km)
+  for (const [threshold, price] of TRAVEL_COST_TABLE) {
+    if (kmCeil <= threshold) return price
+  }
+  return TRAVEL_COST_TABLE[TRAVEL_COST_TABLE.length - 1][1]
 }
 
 interface StaffRole {
@@ -67,7 +84,6 @@ interface ExtraProductRow {
   category?: string | null
 }
 interface ExtraChargeRow { description: string; total_price: string }
-interface TravelRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
 interface InstallationTemplate { id: string; label: string; default_fee: number; notes: string | null }
 
@@ -89,7 +105,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
   const [extraCharges, setExtraCharges] = useState<ExtraChargeRow[]>([])
-  const [travelRows, setTravelRows] = useState<TravelRow[]>([])
+  const [includeTravelCost, setIncludeTravelCost] = useState(true)
   const [installationRows, setInstallationRows] = useState<InstallationRow[]>([])
   const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
@@ -190,7 +206,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     const hasMaterial = materialRows.some(r => r.art_nr && parseNum(r.quantity) > 0)
     const hasExtra = extraProducts.some(r => r.description)
     const hasCharge = extraCharges.some(r => r.description)
-    const hasTravel = travelRows.some(r => parseNum(r.total_price) > 0)
+    const selectedProject = projects.find(p => p.name === projectName)
+    const projectDistanceKm = selectedProject?.distance_km ?? null
+    const hasTravel = includeTravelCost && projectDistanceKm !== null
     if (!hasLabor && !hasMaterial && !hasExtra && !hasCharge && !hasTravel) {
       setError('Mindestens eine Position erforderlich')
       return
@@ -210,12 +228,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           art_nr: r.art_nr,
           quantity: parseNum(r.quantity),
         })),
-        travel_items: travelRows.filter(r => parseNum(r.total_price) > 0).map(r => ({
-          description: r.description,
-          distance_km: 0,
-          unit_price: parseNum(r.total_price),
-          total_price: parseNum(r.total_price),
-        })),
+        travel_items: [],
+        include_travel_cost: includeTravelCost,
         extra_product_items: extraProducts.filter(r => r.description).map(r => {
           const qty = parseNum(r.quantity)
           const price = parseNum(r.unit_price)
@@ -378,13 +392,38 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         addLabel="+ Sonderaufwand"
       />
 
-      <DescPriceFieldset
-        title="Fahrtkosten"
-        rows={travelRows}
-        onChange={setTravelRows}
-        addLabel="+ Fahrtkosten"
-        defaultDescription="Fahrtpauschale"
-      />
+      {/* Fahrspesen (Auto aus Projekt-Distanz) */}
+      {(() => {
+        const selectedProject = projects.find(p => p.name === projectName)
+        const distanceKm = selectedProject?.distance_km ?? null
+        const hasDistance = distanceKm !== null && distanceKm !== undefined
+        const travelAmount = hasDistance ? computeTravelCost(Number(distanceKm)) : 0
+        return (
+          <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <legend style={{ fontWeight: 600, padding: '0 8px' }}>Fahrspesen</legend>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: hasDistance ? 'pointer' : 'not-allowed', opacity: hasDistance ? 1 : 0.6 }}>
+              <input
+                type="checkbox"
+                checked={includeTravelCost && hasDistance}
+                disabled={!hasDistance}
+                onChange={e => setIncludeTravelCost(e.target.checked)}
+              />
+              <span>
+                Fahrspesen einrechnen
+                {hasDistance ? (
+                  <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
+                    ({distanceKm} km → {fmtCHF(travelAmount)})
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
+                    — Distanz beim Projekt fehlt, bitte zuerst dort eintragen
+                  </span>
+                )}
+              </span>
+            </label>
+          </fieldset>
+        )
+      })()}
 
       {/* Installation */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -821,7 +860,7 @@ export default function QuotesScreen() {
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {q.pdf_url && (
                         <a
-                          href={q.pdf_url}
+                          href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)}
                           target="_blank"
                           rel="noreferrer"
                           className="admin-btn admin-btn-secondary admin-btn-sm"

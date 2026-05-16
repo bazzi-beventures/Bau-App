@@ -1,5 +1,10 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
+// Absolute URL für direkte Browser-Navigation (z.B. <a href> in neuem Tab).
+// Backend liegt auf anderer Origin als die PWA — relative Pfade würden auf
+// die PWA-Origin zeigen. Cookies werden trotzdem mitgesendet (SameSite=None).
+export const apiUrl = (path: string): string => `${BASE_URL}${path}`
+
 // Auth läuft ausschliesslich via httpOnly-Cookie (pwa_session). Kein Token in
 // localStorage → XSS kann ihn nicht stehlen. Cross-Origin (GitHub Pages →
 // Railway) funktioniert via SameSite=None; Secure Cookies + credentials:'include'.

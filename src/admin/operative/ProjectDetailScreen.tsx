@@ -10,8 +10,8 @@ import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../c
 import { fmtDate } from '../utils/format'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
-  DocumentsTab, QuotesTab, InvoicesTab, ApprovalsTab,
-  ProjectFile, ProjectQuote, ProjectInvoice, ProjectApproval,
+  DocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab,
+  ProjectFile, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval,
   formatDateTime,
 } from './projectDetail/tabs'
 
@@ -27,6 +27,7 @@ interface ProjectComment {
   author_name: string | null
   text: string
   created_at: string
+  updated_at?: string | null
 }
 
 interface Props {
@@ -41,8 +42,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [name, setName] = useState(project?.name ?? '')
   const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
   const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
-  const [localContactName, setLocalContactName] = useState(project?.local_contact_name ?? '')
-  const [localContactPhone, setLocalContactPhone] = useState(project?.local_contact_phone ?? '')
   const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
   const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
   const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
@@ -84,17 +83,23 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [comments, setComments] = useState<ProjectComment[]>([])
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editingCommentText, setEditingCommentText] = useState('')
+  const [savingCommentEdit, setSavingCommentEdit] = useState(false)
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null)
+  const [deletingComment, setDeletingComment] = useState(false)
 
   // Offerten & Rechnungen
   const [quotes, setQuotes] = useState<ProjectQuote[]>([])
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([])
+  const [reports, setReports] = useState<ProjectReport[]>([])
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
 
   // Tab-Auswahl
-  type ProjectTab = 'details' | 'documents' | 'quotes' | 'invoices' | 'approvals'
+  type ProjectTab = 'details' | 'documents' | 'quotes' | 'reports' | 'invoices' | 'approvals'
   const [activeTab, setActiveTab] = useState<ProjectTab>('details')
 
   // Bestellfreigaben
@@ -137,6 +142,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     apiFetch(`/pwa/admin/projects/${project.id}/comments`).then(d => setComments(d as ProjectComment[])).catch(() => {})
     reloadQuotes()
     reloadInvoices()
+    reloadReports()
     reloadApprovals()
   }, [project?.id])
 
@@ -221,6 +227,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     } catch { /* ignore */ }
   }
 
+  async function reloadReports() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/reports`) as ProjectReport[]
+      setReports(d)
+    } catch { /* ignore */ }
+  }
+
   async function handleRegenerateQuote(quoteId: number) {
     setRegeneratingQuoteId(quoteId)
     try {
@@ -236,14 +250,20 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   async function handleGenerateInvoice() {
     if (!project) return
+    // Workaround: Solange die Mitarbeiter-PWA nicht ausgerollt ist, fehlen
+    // unterschriebene Rapporte. In diesem Fall wird zwingend aus der Offerte
+    // gerechnet — das Backend setzt dann automatisch created_without_report.
+    const hasSigned = reports.some(r => r.signature_timestamp)
+    const useQuote = useAcceptedQuote || !hasSigned
     setGeneratingInvoice(true)
     try {
       await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
-        body: JSON.stringify({ project_name: project.name, use_quote: useAcceptedQuote }),
+        body: JSON.stringify({ project_name: project.name, use_quote: useQuote }),
       })
       showToast('Rechnung erstellt')
       await reloadInvoices()
+      await reloadReports()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler beim Erstellen')
     } finally {
@@ -298,8 +318,17 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     const c = customers.find(x => x.id === id)
     if (!c) return
     if (!objectAddress) setObjectAddress(c.object_address || c.billing_address || c.address || '')
-    if (!localContactName) setLocalContactName(c.local_contact_name ?? '')
-    if (!localContactPhone) setLocalContactPhone(c.local_contact_phone ?? '')
+    // Baustellenkontakt aus Kundenstamm seeden, falls noch keiner markiert ist
+    // und der Kunde einen Standardkontakt hat.
+    if ((c.local_contact_name || c.local_contact_phone) && !kontakte.some(k => k.is_site_contact)) {
+      setKontakte(prev => [...prev, {
+        name: c.local_contact_name ?? '',
+        kommentar: 'Baustellenkontakt',
+        telefon: c.local_contact_phone ?? '',
+        email: '',
+        is_site_contact: true,
+      }])
+    }
   }
 
   const selectedCustomer = customers.find(c => c.id === customerId) ?? null
@@ -320,6 +349,17 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   function removeKontakt(i: number) {
     setKontakte(prev => prev.filter((_, idx) => idx !== i))
   }
+  // Baustellenkontakt-Flag: mutually exclusive — Setzen entfernt das Flag bei
+  // allen anderen, erneutes Klicken hebt es auf.
+  function toggleSiteContact(i: number) {
+    setKontakte(prev => {
+      const wasSet = !!prev[i]?.is_site_contact
+      return prev.map((k, idx) => ({
+        ...k,
+        is_site_contact: idx === i ? !wasSet : false,
+      }))
+    })
+  }
 
   function toggleMonteur(id: string) {
     setMonteurIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -339,14 +379,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           name: name.trim(),
           customer_id: customerId || null,
           object_address: objectAddress || null,
-          local_contact_name: localContactName || null,
-          local_contact_phone: localContactPhone || null,
           art_der_arbeit: artDerArbeit || null,
           bemerkung: bemerkung || null,
           projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
           kontakte,
-          disposal_details: artDerArbeit === 'Demontage' && !disposalEmpty(disposal) ? disposal : null,
+          disposal_details: (artDerArbeit === 'Demontage' || artDerArbeit === 'Wiedermontage') && !disposalEmpty(disposal) ? disposal : null,
           wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
           wartung_last_at: wartungLastAt || null,
           wartung_next_due_at: wartungNextDueAt || null,
@@ -446,6 +484,50 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  function startEditComment(c: ProjectComment) {
+    setEditingCommentId(c.id)
+    setEditingCommentText(c.text)
+  }
+
+  function cancelEditComment() {
+    setEditingCommentId(null)
+    setEditingCommentText('')
+  }
+
+  async function handleSaveEditComment() {
+    if (!project || !editingCommentId || !editingCommentText.trim()) return
+    setSavingCommentEdit(true)
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/comments/${editingCommentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ text: editingCommentText.trim() }),
+      })
+      const updated = await apiFetch(`/pwa/admin/projects/${project.id}/comments`) as ProjectComment[]
+      setComments(updated)
+      cancelEditComment()
+    } catch {
+      setError('Fehler beim Aktualisieren des Kommentars')
+    } finally {
+      setSavingCommentEdit(false)
+    }
+  }
+
+  async function handleDeleteComment() {
+    if (!project || !confirmDeleteCommentId) return
+    setDeletingComment(true)
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/comments/${confirmDeleteCommentId}`, {
+        method: 'DELETE',
+      })
+      setComments(prev => prev.filter(c => c.id !== confirmDeleteCommentId))
+      setConfirmDeleteCommentId(null)
+    } catch {
+      setError('Fehler beim Löschen des Kommentars')
+    } finally {
+      setDeletingComment(false)
+    }
+  }
+
   return (
     <div className="admin-page">
       <div
@@ -486,6 +568,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <button type="button" className={`kpi-admin-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Projekt Details</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Dokumente</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => setActiveTab('quotes')}>Offerten</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>Rapporte</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>Rechnungen</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'approvals' ? 'active' : ''}`} onClick={() => setActiveTab('approvals')}>Visierung</button>
         </div>
@@ -564,16 +647,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Lokaler Kontakt — Name</label>
-                  <input className="admin-form-input" value={localContactName} onChange={e => setLocalContactName(e.target.value)} placeholder="z.B. Hauswart" />
-                </div>
-                <div className="admin-form-group">
-                  <label className="admin-form-label">Lokaler Kontakt — Telefon</label>
-                  <input className="admin-form-input" value={localContactPhone} onChange={e => setLocalContactPhone(e.target.value)} />
-                </div>
-              </div>
             </div>
           </div>
 
@@ -588,8 +661,28 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             {kontakte.length === 0 && (
               <div style={{ color: 'var(--muted)', fontSize: 13 }}>Keine Ansprechpersonen eingetragen.</div>
             )}
+            {kontakte.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+                Stern markiert den <strong>Baustellenkontakt</strong> — diese Person sieht der Monteur ganz oben und sie wird auf Offerte/Rechnung gedruckt.
+              </div>
+            )}
             {kontakte.map((k, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr 1fr 2fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleSiteContact(i)}
+                  title={k.is_site_contact ? 'Baustellenkontakt — klicken zum Aufheben' : 'Als Baustellenkontakt markieren'}
+                  style={{
+                    width: 36, height: 36, marginBottom: 1,
+                    borderRadius: 8, cursor: 'pointer',
+                    border: '1px solid', borderColor: k.is_site_contact ? 'var(--primary)' : 'var(--border)',
+                    background: k.is_site_contact ? 'var(--primary)' : 'transparent',
+                    color: k.is_site_contact ? '#fff' : 'var(--muted)',
+                    fontSize: 18, lineHeight: 1, padding: 0,
+                  }}
+                >
+                  {k.is_site_contact ? '★' : '☆'}
+                </button>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Name</label>
                   <input className="admin-form-input" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
@@ -613,8 +706,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             ))}
           </div>
 
-          {/* ── Entsorgung (nur bei Demontage) ────────────────── */}
-          {artDerArbeit === 'Demontage' && (
+          {/* ── Entsorgung (bei Demontage / Wiedermontage) ────── */}
+          {(artDerArbeit === 'Demontage' || artDerArbeit === 'Wiedermontage') && (
             <div className="admin-table-wrap" style={{ padding: 24 }}>
               <div className="admin-section-title">Entsorgung</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -782,11 +875,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       {!isNew && activeTab === 'quotes' && (
         <QuotesTab
           quotes={quotes}
+          invoices={invoices}
           regeneratingQuoteId={regeneratingQuoteId}
           onShowCreateForm={() => setShowQuoteForm(true)}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
         />
+      )}
+
+      {!isNew && activeTab === 'reports' && (
+        <ReportsTab reports={reports} />
       )}
 
       {!isNew && activeTab === 'invoices' && (
@@ -795,6 +893,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           useAcceptedQuote={useAcceptedQuote}
           generatingInvoice={generatingInvoice}
           defaultEmail={selectedCustomer?.email ?? project?.customer?.email ?? ''}
+          hasSignedReport={reports.some(r => r.signature_timestamp)}
           onUseAcceptedQuoteChange={setUseAcceptedQuote}
           onGenerateInvoice={handleGenerateInvoice}
           onMarkPaid={handleMarkInvoicePaid}
@@ -899,15 +998,63 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>Noch keine Kommentare.</div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            {comments.map(c => (
-              <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(c.created_at)}</span>
+            {comments.map(c => {
+              const isEditing = editingCommentId === c.id
+              return (
+                <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {formatDateTime(c.created_at)}
+                        {c.updated_at ? ' · bearbeitet' : ''}
+                      </span>
+                      {!isEditing && (
+                        <>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-secondary"
+                            onClick={() => startEditComment(c)}
+                          >Bearbeiten</button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-danger"
+                            onClick={() => setConfirmDeleteCommentId(c.id)}
+                          >Löschen</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <textarea
+                        className="admin-form-input"
+                        rows={2}
+                        value={editingCommentText}
+                        onChange={e => setEditingCommentText(e.target.value)}
+                        style={{ resize: 'vertical' }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-sm admin-btn-secondary"
+                          onClick={cancelEditComment}
+                          disabled={savingCommentEdit}
+                        >Abbrechen</button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-sm admin-btn-primary"
+                          onClick={handleSaveEditComment}
+                          disabled={savingCommentEdit || !editingCommentText.trim()}
+                        >{savingCommentEdit ? 'Speichern…' : 'Speichern'}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                  )}
                 </div>
-                <div style={{ fontSize: 13 }}>{c.text}</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -928,6 +1075,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </button>
           </div>
         </div>
+      )}
+
+      {confirmDeleteCommentId && (
+        <ConfirmDialog
+          title="Kommentar löschen?"
+          message={<>Der Kommentar wird dauerhaft entfernt.</>}
+          confirmLabel="Ja, löschen"
+          busyLabel="Löschen…"
+          busy={deletingComment}
+          variant="danger"
+          onCancel={() => setConfirmDeleteCommentId(null)}
+          onConfirm={handleDeleteComment}
+        />
       )}
 
       {/* ── Dialoge ──────────────────────────────────────────── */}

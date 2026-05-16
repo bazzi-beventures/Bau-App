@@ -11,6 +11,7 @@ interface Props {
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProjekte: () => void
+  onNavProjektEntwurf: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
   onSwitchToAdmin?: () => void
@@ -40,7 +41,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProjektEntwurf, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
   const has = (m: ModuleName) => enabledModules.includes(m)
@@ -169,7 +170,7 @@ export default function HomeScreen({ displayName, logoUrl, role, enabledModules,
         )}
 
         {!isLight && (
-          <div className="tile tile-amber" style={{ gridColumn: 'span 2' }} onClick={onNavProjekte}>
+          <div className="tile tile-amber" onClick={onNavProjekte}>
             <div className="tile-icon tile-icon-amber">
               <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -179,6 +180,28 @@ export default function HomeScreen({ displayName, logoUrl, role, enabledModules,
             <div>
               <div className="tile-label">Projekte</div>
               <div className="tile-desc">Auftraggeber, Termine &amp; Kontakte</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
+          </div>
+        )}
+
+        {!isLight && (
+          <div className="tile tile-amber" onClick={onNavProjektEntwurf}>
+            <div className="tile-icon tile-icon-amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="12" y1="18" x2="12" y2="12"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Projekt-Entwurf</div>
+              <div className="tile-desc">Neuer Auftrag beim Kunden erfassen</div>
             </div>
             <div className="tile-arrow">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">

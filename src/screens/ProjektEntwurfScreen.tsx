@@ -1,0 +1,323 @@
+import { useCallback, useEffect, useState } from 'react'
+import { ApiError, isOfflineError } from '../api/client'
+import { createProjectDraft, ProjectDraftPayload } from '../api/projectDrafts'
+
+const OFFLINE_QUEUE_KEY = 'projektEntwurf_offline_queue'
+
+interface QueuedDraft {
+  payload: ProjectDraftPayload
+  queued_at: string
+}
+
+function loadQueue(): QueuedDraft[] {
+  try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]') } catch { return [] }
+}
+
+function saveQueue(q: QueuedDraft[]) {
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q))
+}
+
+interface MaterialRow {
+  name: string
+  quantity: string
+}
+
+interface Props {
+  logoUrl?: string
+  onNavHome: () => void
+  onLoggedOut: () => void
+}
+
+const EMPTY_FORM: ProjectDraftPayload = {
+  customer_name: '',
+  customer_phone: '',
+  customer_email: '',
+  customer_address: '',
+  title: '',
+  description: '',
+  object_address: '',
+  materials: [],
+  notes: '',
+}
+
+export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }: Props) {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [objectAddress, setObjectAddress] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
+  const [notes, setNotes] = useState('')
+  const [materials, setMaterials] = useState<MaterialRow[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
+  const [queueSize, setQueueSize] = useState(() => loadQueue().length)
+  const [draining, setDraining] = useState(false)
+
+  const drainQueue = useCallback(async () => {
+    const q = loadQueue()
+    if (q.length === 0) return
+    setDraining(true)
+    const remaining: QueuedDraft[] = []
+    for (const item of q) {
+      try {
+        await createProjectDraft(item.payload)
+      } catch {
+        remaining.push(item)
+      }
+    }
+    saveQueue(remaining)
+    setQueueSize(remaining.length)
+    setDraining(false)
+    if (remaining.length === 0) {
+      setResult({ text: 'Offline-Entwürfe wurden gesendet.', isError: false })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (navigator.onLine) { drainQueue() }
+    const onOnline = () => { drainQueue() }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [drainQueue])
+
+  function resetForm() {
+    setTitle('')
+    setDescription('')
+    setObjectAddress('')
+    setCustomerName('')
+    setCustomerPhone('')
+    setCustomerEmail('')
+    setCustomerAddress('')
+    setNotes('')
+    setMaterials([])
+  }
+
+  function addMaterial() {
+    setMaterials(prev => [...prev, { name: '', quantity: '' }])
+  }
+  function updateMaterial(idx: number, patch: Partial<MaterialRow>) {
+    setMaterials(prev => prev.map((m, i) => i === idx ? { ...m, ...patch } : m))
+  }
+  function removeMaterial(idx: number) {
+    setMaterials(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const cleanTitle = title.trim()
+    const cleanCustomer = customerName.trim()
+    if (!cleanTitle || !cleanCustomer) {
+      setResult({ text: 'Bitte mindestens Titel und Kundenname ausfüllen.', isError: true })
+      return
+    }
+    const payload: ProjectDraftPayload = {
+      ...EMPTY_FORM,
+      title: cleanTitle,
+      description: description.trim() || null,
+      object_address: objectAddress.trim() || null,
+      customer_name: cleanCustomer,
+      customer_phone: customerPhone.trim() || null,
+      customer_email: customerEmail.trim() || null,
+      customer_address: customerAddress.trim() || null,
+      notes: notes.trim() || null,
+      materials: materials
+        .filter(m => m.name.trim())
+        .map(m => ({ name: m.name.trim(), quantity: m.quantity.trim() || null })),
+    }
+
+    setSubmitting(true)
+    setResult(null)
+    try {
+      await createProjectDraft(payload)
+      setResult({ text: 'Entwurf ans Büro gesendet. Der Projektleiter sieht ihn jetzt.', isError: false })
+      resetForm()
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      if (isOfflineError(err)) {
+        const q = loadQueue()
+        q.push({ payload, queued_at: new Date().toISOString() })
+        saveQueue(q)
+        setQueueSize(q.length)
+        setResult({ text: 'Offline gespeichert — wird automatisch gesendet sobald wieder Internet.', isError: false })
+        resetForm()
+      } else {
+        const msg = err instanceof Error ? err.message : 'Fehler beim Senden.'
+        setResult({ text: msg, isError: true })
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="app-screen">
+      <div className="inner-header">
+        <div className="back-btn" onClick={onNavHome}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </div>
+        <div className="inner-title">Projekt-Entwurf</div>
+        {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
+      </div>
+
+      <div className="context-banner context-banner-amber">
+        <div className="banner-tag banner-tag-amber">Vor Ort beim Kunden</div>
+        <div className="banner-text">Erfasse einen neuen Auftrag als Entwurf. Der Projektleiter wandelt ihn dann in ein Projekt um.</div>
+      </div>
+
+      {result && (
+        <div className={`action-result${result.isError ? ' action-result-error' : ''}`}>
+          {result.text}
+        </div>
+      )}
+
+      {queueSize > 0 && (
+        <div className="action-result" style={{ background: '#1e3a5f', color: '#93c5fd', borderLeft: '3px solid #3b82f6' }}>
+          {draining
+            ? `${queueSize} Entwurf${queueSize > 1 ? 'e werden' : ' wird'} synchronisiert…`
+            : `${queueSize} Entwurf${queueSize > 1 ? 'e' : ''} offline gespeichert – wird gesendet sobald Verbindung vorhanden.`}
+        </div>
+      )}
+
+      <form className="entwurf-form" onSubmit={handleSubmit} style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <section className="entwurf-section">
+          <div className="entwurf-section-title">Was ist zu tun?</div>
+          <label className="entwurf-label">
+            <span>Titel / Kurzbeschreibung *</span>
+            <input
+              type="text"
+              className="entwurf-input"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="z. B. Garagentor reparieren"
+              required
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>Details</span>
+            <textarea
+              className="entwurf-textarea"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={4}
+              placeholder="Was genau soll gemacht werden?"
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>Objekt-Adresse (wo gearbeitet wird)</span>
+            <input
+              type="text"
+              className="entwurf-input"
+              value={objectAddress}
+              onChange={e => setObjectAddress(e.target.value)}
+              placeholder="Strasse, PLZ Ort"
+            />
+          </label>
+        </section>
+
+        <section className="entwurf-section">
+          <div className="entwurf-section-title">Kunde</div>
+          <label className="entwurf-label">
+            <span>Name *</span>
+            <input
+              type="text"
+              className="entwurf-input"
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+              placeholder="Vor- und Nachname oder Firma"
+              required
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>Telefon</span>
+            <input
+              type="tel"
+              className="entwurf-input"
+              value={customerPhone}
+              onChange={e => setCustomerPhone(e.target.value)}
+              inputMode="tel"
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>E-Mail</span>
+            <input
+              type="email"
+              className="entwurf-input"
+              value={customerEmail}
+              onChange={e => setCustomerEmail(e.target.value)}
+              inputMode="email"
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>Adresse Kunde</span>
+            <input
+              type="text"
+              className="entwurf-input"
+              value={customerAddress}
+              onChange={e => setCustomerAddress(e.target.value)}
+              placeholder="Strasse, PLZ Ort"
+            />
+          </label>
+        </section>
+
+        <section className="entwurf-section">
+          <div className="entwurf-section-title">Materialien</div>
+          {materials.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>Noch keine Materialien hinzugefügt.</div>
+          )}
+          {materials.map((m, idx) => (
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 36px', gap: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                className="entwurf-input"
+                value={m.name}
+                onChange={e => updateMaterial(idx, { name: e.target.value })}
+                placeholder="Material"
+              />
+              <input
+                type="text"
+                className="entwurf-input"
+                value={m.quantity}
+                onChange={e => updateMaterial(idx, { quantity: e.target.value })}
+                placeholder="Menge"
+              />
+              <button
+                type="button"
+                className="entwurf-icon-btn"
+                onClick={() => removeMaterial(idx)}
+                aria-label="Material entfernen"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" className="entwurf-add-btn" onClick={addMaterial}>
+            + Material hinzufügen
+          </button>
+        </section>
+
+        <section className="entwurf-section">
+          <div className="entwurf-section-title">Sonstige Notizen</div>
+          <textarea
+            className="entwurf-textarea"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Anfahrt, Zugang, Termine, Sonderwünsche …"
+          />
+        </section>
+
+        <button
+          type="submit"
+          className="entwurf-submit-btn"
+          disabled={submitting}
+        >
+          {submitting ? 'Wird gesendet…' : 'Entwurf an Büro senden'}
+        </button>
+      </form>
+    </div>
+  )
+}

@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 6
+export const APP_DATA_VERSION = 8
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -22,6 +22,7 @@ function isKnownKey(k: string): boolean {
   // App-State
   if (k === 'my-time-stempel-state') return true
   if (k === 'zeit_offline_queue') return true
+  if (k === 'projektEntwurf_offline_queue') return true
   if (k === 'admin-theme') return true
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true
@@ -111,7 +112,31 @@ const migration_5_to_6: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6]
+// v6 → v7: Neuer localStorage-Key `projektEntwurf_offline_queue` für
+// offline gespeicherte Projekt-Entwürfe vom Mitarbeiter beim Kunden vor Ort.
+// Keine Migration nötig — Key existiert nur, wenn Mitarbeiter offline einen
+// Entwurf gespeichert hat. Tripwire für ältere Clients.
+const migration_6_to_7: Migration = {
+  from: 6,
+  to: 7,
+  run: () => {
+    // no-op
+  },
+}
+
+// v7 → v8: Project-Shape ändert sich — local_contact_name/local_contact_phone
+// fallen weg, Baustellenkontakt lebt jetzt als is_site_contact-Eintrag in
+// kontakte[] (siehe Migration 20260516d). Project-Listen sind nicht in
+// localStorage — no-op reicht als Tripwire für Fallback-Wipes älterer Clients.
+const migration_7_to_8: Migration = {
+  from: 7,
+  to: 8,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

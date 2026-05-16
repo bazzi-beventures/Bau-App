@@ -14,6 +14,7 @@ import CorrectionsScreen from './personal/CorrectionsScreen'
 import HrReportsScreen from './personal/HrReportsScreen'
 import VacationOverviewScreen from './personal/VacationOverviewScreen'
 import ProjectsScreen from './operative/ProjectsScreen'
+import ProjectDraftsScreen from './operative/ProjectDraftsScreen'
 import ProjectScheduleScreen from './operative/ProjectScheduleScreen'
 import CustomersScreen from './operative/CustomersScreen'
 import MaterialsScreen from './operative/MaterialsScreen'
@@ -22,6 +23,7 @@ import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
+import ServiceStatusScreen from './system/ServiceStatusScreen'
 import KpiScreen from './kpis/KpiScreen'
 import ConfigurationScreen from './configuration/ConfigurationScreen'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
@@ -66,6 +68,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'hr-reports': 'HR-Berichte',
   'vacation': 'Ferien',
   'projects': 'Projekte',
+  'project-drafts': 'Projekt-Entwürfe',
   'project-schedule': 'Einsatzplanung',
   'customers': 'Kundenstamm',
   'quotes': 'Offerten',
@@ -76,6 +79,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
   'configuration': 'Konfiguration',
+  'service-status': 'Service-Status',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
@@ -102,6 +106,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     corrections: dashboard?.pending_corrections ?? 0,
     absences: dashboard?.pending_absences ?? 0,
     invoices: dashboard?.open_invoices ?? 0,
+    drafts: dashboard?.pending_drafts ?? 0,
   }
 
   const isManagement = user.role === 'management' || user.role === 'superadmin'
@@ -111,8 +116,13 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     <RequireModule module={mod} enabledModules={enabledModules}>{el}</RequireModule>
   )
 
+  const isSuperadmin = user.role === 'superadmin'
+
   function renderScreen() {
     if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
+      return <ComingSoon title="Kein Zugriff" />
+    }
+    if (screen === 'service-status' && !isSuperadmin) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
@@ -124,6 +134,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'hr-reports':   return guard('hr', <HrReportsScreen />)
       case 'vacation':     return guard('hr', <VacationOverviewScreen />)
       case 'projects':     return <ProjectsScreen openNew={detailId === 'new'} onConsumedNew={clearDetail} />
+      case 'project-drafts': return <ProjectDraftsScreen onBadgeChange={loadDashboard} />
       case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={nav} />)
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return guard('quotes', <QuotesScreen />)
@@ -134,6 +145,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'users':        return <UsersScreen />
       case 'kpis':         return guard('kpis', <KpiScreen />)
       case 'configuration': return <ConfigurationScreen userRole={user.role} />
+      case 'service-status': return <ServiceStatusScreen />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }

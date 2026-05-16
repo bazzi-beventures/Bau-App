@@ -2,6 +2,208 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { CompanySearch } from '../components/CompanySearch'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { formatDateTime } from './projectDetail/tabs'
+
+interface CustomerComment {
+  id: string
+  author_name: string | null
+  text: string
+  created_at: string
+  updated_at?: string | null
+}
+
+function CustomerComments({ customerId }: { customerId: string }) {
+  const [comments, setComments] = useState<CustomerComment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newComment, setNewComment] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await apiFetch(`/pwa/admin/customers/${customerId}/comments`) as CustomerComment[]
+      setComments(data)
+    } catch {
+      setComments([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [customerId])
+
+  async function handleAdd() {
+    if (!newComment.trim()) return
+    setAdding(true); setError('')
+    try {
+      await apiFetch(`/pwa/admin/customers/${customerId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ text: newComment.trim() }),
+      })
+      setNewComment('')
+      await load()
+    } catch {
+      setError('Fehler beim Speichern des Kommentars')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  function startEdit(c: CustomerComment) {
+    setEditingId(c.id)
+    setEditingText(c.text)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditingText('')
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editingText.trim()) return
+    setSavingEdit(true); setError('')
+    try {
+      await apiFetch(`/pwa/admin/customers/${customerId}/comments/${editingId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ text: editingText.trim() }),
+      })
+      cancelEdit()
+      await load()
+    } catch {
+      setError('Fehler beim Aktualisieren des Kommentars')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmDeleteId) return
+    setDeleting(true); setError('')
+    try {
+      await apiFetch(`/pwa/admin/customers/${customerId}/comments/${confirmDeleteId}`, {
+        method: 'DELETE',
+      })
+      setComments(prev => prev.filter(c => c.id !== confirmDeleteId))
+      setConfirmDeleteId(null)
+    } catch {
+      setError('Fehler beim Löschen des Kommentars')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="admin-form-group">
+      <label className="admin-form-label">Kommentare</label>
+      {error && <div className="admin-form-error" style={{ marginBottom: 8 }}>{error}</div>}
+      {loading ? (
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Laden…</div>
+      ) : (
+        <>
+          {comments.length === 0 && (
+            <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 10 }}>Noch keine Kommentare.</div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+            {comments.map(c => {
+              const isEditing = editingId === c.id
+              return (
+                <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {formatDateTime(c.created_at)}
+                        {c.updated_at ? ' · bearbeitet' : ''}
+                      </span>
+                      {!isEditing && (
+                        <>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-secondary"
+                            onClick={() => startEdit(c)}
+                          >Bearbeiten</button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-danger"
+                            onClick={() => setConfirmDeleteId(c.id)}
+                          >Löschen</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <textarea
+                        className="admin-form-input"
+                        rows={2}
+                        value={editingText}
+                        onChange={e => setEditingText(e.target.value)}
+                        style={{ resize: 'vertical' }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-sm admin-btn-secondary"
+                          onClick={cancelEdit}
+                          disabled={savingEdit}
+                        >Abbrechen</button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-sm admin-btn-primary"
+                          onClick={handleSaveEdit}
+                          disabled={savingEdit || !editingText.trim()}
+                        >{savingEdit ? 'Speichern…' : 'Speichern'}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="admin-form-input"
+              style={{ flex: 1 }}
+              placeholder="Kommentar hinzufügen…"
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAdd() } }}
+            />
+            <button
+              type="button"
+              className="admin-btn admin-btn-primary"
+              disabled={adding || !newComment.trim()}
+              onClick={handleAdd}
+            >
+              {adding ? '…' : 'Senden'}
+            </button>
+          </div>
+        </>
+      )}
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="Kommentar löschen?"
+          message={<>Der Kommentar wird dauerhaft entfernt.</>}
+          confirmLabel="Ja, löschen"
+          busyLabel="Löschen…"
+          busy={deleting}
+          variant="danger"
+          onCancel={() => setConfirmDeleteId(null)}
+          onConfirm={handleDelete}
+        />
+      )}
+    </div>
+  )
+}
 
 export interface Customer {
   id: string
@@ -170,6 +372,9 @@ function CustomerForm({
             style={{ resize: 'vertical' }}
           />
         </div>
+
+        {!isNew && initial && <CustomerComments customerId={initial.id} />}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button type="button" className="admin-btn admin-btn-secondary" onClick={onCancel}>Abbrechen</button>
           <button type="submit" className="admin-btn admin-btn-primary" disabled={saving || !name.trim()}>

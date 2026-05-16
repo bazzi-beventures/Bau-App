@@ -62,6 +62,9 @@ function IconCalendarAlert() {
 function IconApproval() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0 0 10 1.944 11.954 11.954 0 0 0 17.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 0 0-1.414-1.414L9 10.586 7.707 9.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4z" clipRule="evenodd"/></svg>
 }
+function IconDocument() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 0 1 2-2h4.586A2 2 0 0 1 12 2.586L15.414 6A2 2 0 0 1 16 7.414V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4zm2 6a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1zm1 3a1 1 0 1 0 0 2h4a1 1 0 1 0 0-2H7z" clipRule="evenodd"/></svg>
+}
 
 function fmtCHF(amount: number) {
   return amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -226,13 +229,15 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontWeight: 600 }}>{inv.invoice_number}</div>
-                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{inv.project_name}</div>
-                      {inv.project_id && (
-                        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', fontFamily: 'monospace', marginTop: 2 }}>
-                          Projekt-ID: {inv.project_id}
+                      <div style={{ fontSize: 14, color: 'var(--color-text-primary)', fontWeight: 500, marginTop: 2 }}>
+                        {inv.project_id_text ? `${inv.project_id_text} · ` : ''}{inv.project_name || '—'}
+                      </div>
+                      {inv.customer_name && (
+                        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                          Kunde: {inv.customer_name}
                         </div>
                       )}
-                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
                         Gesendet: {fmtDate(inv.sent_at)} ({daysSince(inv.sent_at)} Tage offen)
                         {inv.due_date ? ` · Fällig: ${fmtDate(inv.due_date)}` : ''}
                         {' · CHF '}{fmtCHF(inv.total_amount)}
@@ -685,6 +690,14 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
             colorClass="red"
             onClick={() => setShowOverdueProjectsModal(true)}
             icon={<IconCalendarAlert />}
+            badge
+          />
+          <KpiCard
+            label="Projekt-Entwürfe"
+            value={dashboard?.pending_drafts ?? null}
+            colorClass="orange"
+            onClick={() => onNav('project-drafts')}
+            icon={<IconDocument />}
             badge
           />
         </div>

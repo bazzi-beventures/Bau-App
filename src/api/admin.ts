@@ -13,6 +13,7 @@ export interface AdminDashboard {
   invoices_pending_action: number
   pending_approvals: number
   projects_overdue: number
+  pending_drafts: number
 }
 
 export interface OverdueProject {
@@ -64,6 +65,8 @@ export interface PendingActionInvoice {
   invoice_number: string
   project_id: string | null
   project_name: string
+  project_id_text: string | null
+  customer_name: string | null
   total_amount: number
   sent_at: string | null
   due_date: string | null
@@ -253,8 +256,6 @@ export interface Project {
     email: string | null
   } | null
   object_address: string | null
-  local_contact_name: string | null
-  local_contact_phone: string | null
   is_closed: boolean
   created_at: string
   start_date: string | null

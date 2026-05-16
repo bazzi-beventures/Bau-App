@@ -8,6 +8,7 @@ export interface Kontakt {
   kommentar: string
   telefon: string
   email: string
+  is_site_contact?: boolean
 }
 
 export interface DisposalDetails {
@@ -63,8 +64,6 @@ export interface Project {
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
-  local_contact_name: string | null
-  local_contact_phone: string | null
   art_der_arbeit: string | null
   projektleiter_id: string | null
   monteur_ids: string[]
