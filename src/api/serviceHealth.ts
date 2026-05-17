@@ -9,6 +9,7 @@ export interface LatestCheck {
   response_ms: number | null
   http_status: number | null
   error: string | null
+  is_stale?: boolean  // true wenn checked_at älter als ~10min — Probe-Cron tot
 }
 
 export interface UptimeStats {

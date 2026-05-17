@@ -84,9 +84,13 @@ function weightedAvg(days: HistoryDay[], pick: (d: HistoryDay) => DayUptime | nu
 }
 
 function StatusCard({ name, data }: { name: ServiceName; data: ServiceHealth }) {
+  const stale = data.latest?.is_stale === true
   const status = data.latest?.status
-  const badge = statusBadge(status)
-  const dot = dotColor(status, data.uptime_24h.uptime_pct)
+  const badge = stale
+    ? { text: 'Probe stale', bg: '#e5e7eb', fg: '#374151' }
+    : statusBadge(status)
+  // Bei stale: grauer Punkt — wir können dem letzten Status nicht mehr trauen.
+  const dot = stale ? '#9ca3af' : dotColor(status, data.uptime_24h.uptime_pct)
   const pct = data.uptime_24h.checks > 0 ? data.uptime_24h.uptime_pct : null
 
   return (
@@ -220,9 +224,23 @@ function Heatmap({ days, range }: { days: HistoryDay[]; range: HistoryRange }) {
 
 function OverallBanner({ data }: { data: HealthStatusResponse }) {
   const services = Object.values(data.services)
-  const downCount = services.filter(s => s.latest?.status === 'down').length
-  const slowCount = services.filter(s => s.latest?.status === 'slow').length
+  const staleCount = services.filter(s => s.latest?.is_stale === true).length
+  const downCount = services.filter(s => s.latest?.status === 'down' && !s.latest?.is_stale).length
+  const slowCount = services.filter(s => s.latest?.status === 'slow' && !s.latest?.is_stale).length
 
+  // Stale geht vor down/slow: wenn der Probe nicht läuft, sind die Status-Werte
+  // veraltet und nicht verlässlich — kein Sinn "down" zu melden.
+  if (staleCount > 0) {
+    return (
+      <div className="svc-banner svc-banner-warn">
+        <div className="svc-banner-icon">!</div>
+        <div>
+          <div className="svc-banner-title">Probe-Cron ausgefallen</div>
+          <div className="svc-banner-sub">Letzter Check vor &gt;10 Min — Service-Status nicht aktuell. Railway-Cron prüfen.</div>
+        </div>
+      </div>
+    )
+  }
   if (downCount > 0) {
     return (
       <div className="svc-banner svc-banner-bad">
