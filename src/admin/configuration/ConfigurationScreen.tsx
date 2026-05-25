@@ -26,6 +26,7 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   ai:               { label: 'AI-Funktionen',     desc: 'Mistral-Chat, Voxtral-Voice, KPI-Insights', category: 'ki' },
   help_bot:         { label: 'Hilfe-Bot',         desc: 'In-App-Hilfe per Chat über die Bedien-Handbücher', category: 'ki' },
   // Benachrichtigungen — Mail
+  hr_weekly_report: { label: 'Wochen-HR-Übersicht', desc: 'Wöchentliches HR-Journal per Mail am Montag (benötigt HR). Journal & Überstunden-Salden werden weiterhin erstellt — nur die Mail entfällt.', category: 'notifications', channel: 'mail' },
   violation_emails: { label: 'ArG-Verstoss-Mails', desc: 'Wöchentliche Verstoss-E-Mails an die Admins (benötigt ArG-Compliance)', category: 'notifications', channel: 'mail' },
   kpis_email:       { label: 'KPI-Analyse-Mail',  desc: 'Wöchentliche KI-Kennzahlen-Analyse per Mail am Montag (benötigt Kennzahlen)', category: 'notifications', channel: 'mail' },
   // Benachrichtigungen — Push
@@ -78,7 +79,7 @@ interface ConfigProps {
 
 export default function ConfigurationScreen({ userRole }: ConfigProps) {
   const isSuperadmin = userRole === 'superadmin'
-  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules'>('weekly-plan')
+  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications'>('weekly-plan')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -116,11 +117,20 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
             Module
           </button>
         )}
+        {isSuperadmin && (
+          <button
+            className={`admin-btn ${tab === 'notifications' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setTab('notifications')}
+          >
+            Benachrichtigungen
+          </button>
+        )}
       </div>
 
       {tab === 'weekly-plan' && <WeeklyPlanTab onToast={showToast} />}
       {tab === 'year-end' && <YearEndTab onToast={showToast} />}
-      {tab === 'modules' && isSuperadmin && <ModulesTab onToast={showToast} />}
+      {tab === 'modules' && isSuperadmin && <ModulesTab onToast={showToast} view="modules" />}
+      {tab === 'notifications' && isSuperadmin && <ModulesTab onToast={showToast} view="notifications" />}
 
       {toast && (
         <div className="admin-toast-container">
@@ -513,7 +523,7 @@ function YearEndTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
   )
 }
 
-function ModulesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+function ModulesTab({ onToast, view }: { onToast: (msg: string, type: 'success' | 'error') => void; view: 'modules' | 'notifications' }) {
   const [data, setData] = useState<TenantModulesResponse | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -611,17 +621,31 @@ function ModulesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
     )
   }
 
+  const visibleCategories = view === 'notifications'
+    ? CATEGORY_ORDER.filter(c => c === 'notifications')
+    : CATEGORY_ORDER.filter(c => c !== 'notifications')
+
   return (
     <div className="admin-table-wrap" style={{ padding: 24, maxWidth: 760 }}>
       <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-        Schalte Endpunkt-Features pro Mandant ein oder aus. Stammdaten (Kunden, Projekte, Material, Lieferanten,
-        Preisregeln) bleiben immer verfügbar — sie sind Voraussetzung für mehrere Module.
-        Abhängige Module (z. B. <code>arg_compliance</code>) lassen sich nur mit ihren Voraussetzungen aktivieren.
-        Benachrichtigungen sind nach Kanal (Mail / Push) gruppiert und einzeln schaltbar.
+        {view === 'notifications' ? (
+          <>
+            Steuere die automatischen Benachrichtigungen pro Mandant, gruppiert nach Kanal (Mail / Push).
+            Manche benötigen ein zugehöriges Modul (z. B. die KPI-Analyse-Mail braucht <code>Kennzahlen</code>);
+            fehlt eine Voraussetzung, aktiviere sie zuerst im Tab <strong>Module</strong>.
+          </>
+        ) : (
+          <>
+            Schalte Endpunkt-Features pro Mandant ein oder aus. Stammdaten (Kunden, Projekte, Material, Lieferanten,
+            Preisregeln) bleiben immer verfügbar — sie sind Voraussetzung für mehrere Module.
+            Abhängige Module (z. B. <code>arg_compliance</code>) lassen sich nur mit ihren Voraussetzungen aktivieren.
+            Benachrichtigungen findest du im eigenen Tab <strong>Benachrichtigungen</strong>.
+          </>
+        )}
       </div>
 
       <div style={{ display: 'grid', gap: 20, marginBottom: 20 }}>
-        {CATEGORY_ORDER.map(cat => {
+        {visibleCategories.map(cat => {
           const mods = data.known_modules.filter(m => (MODULE_LABELS[m]?.category ?? 'other') === cat)
           if (mods.length === 0) return null
           return (

@@ -13,6 +13,19 @@ function urlBase64ToBytes(base64String: string): ArrayBuffer {
   return buf
 }
 
+// Byte-Vergleich zweier applicationServerKeys (aktueller vs. der, mit dem die
+// bestehende Subscription erstellt wurde). null/undefined gilt als "passt nicht".
+function sameKey(a: ArrayBuffer | null | undefined, b: ArrayBuffer): boolean {
+  if (!a) return false
+  const av = new Uint8Array(a)
+  const bv = new Uint8Array(b)
+  if (av.length !== bv.length) return false
+  for (let i = 0; i < av.length; i++) {
+    if (av[i] !== bv[i]) return false
+  }
+  return true
+}
+
 export function pushSupported(): boolean {
   return (
     'serviceWorker' in navigator &&
@@ -49,11 +62,26 @@ export async function enablePush(): Promise<void> {
     throw new Error('Benachrichtigungen wurden nicht erlaubt.')
   }
   const reg = await navigator.serviceWorker.ready
+  const wantedKey = urlBase64ToBytes(public_key)
   let sub = await reg.pushManager.getSubscription()
+
+  // Nach einem VAPID-Key-Wechsel ist eine bestehende Subscription noch an den
+  // alten Key gebunden — der Push-Dienst lehnt den Versand dann dauerhaft mit 403
+  // ab. In dem Fall die alte Subscription serverseitig + lokal verwerfen und mit
+  // dem aktuellen Key frisch registrieren.
+  if (sub && !sameKey(sub.options.applicationServerKey, wantedKey)) {
+    await apiFetch('/pwa/push/unsubscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    }).catch(() => {})
+    await sub.unsubscribe().catch(() => {})
+    sub = null
+  }
+
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToBytes(public_key),
+      applicationServerKey: wantedKey,
     })
   }
   const json = sub.toJSON()

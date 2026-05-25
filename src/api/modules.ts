@@ -14,6 +14,7 @@ export type ModuleName =
   | 'ai'
   | 'help_bot'
   | 'clock_in_reminder'
+  | 'hr_weekly_report'
 
 export function hasModule(user: UserInfo | null, name: ModuleName): boolean {
   if (!user) return false
