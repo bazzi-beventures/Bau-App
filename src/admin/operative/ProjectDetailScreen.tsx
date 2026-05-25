@@ -97,6 +97,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
+  const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
+  const [sendEmail, setSendEmail] = useState('')
+  const [sendingQuote, setSendingQuote] = useState(false)
 
   // Tab-Auswahl
   type ProjectTab = 'details' | 'documents' | 'quotes' | 'reports' | 'invoices' | 'approvals'
@@ -280,6 +283,29 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       await reloadQuotes()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
+
+  function handleOpenSendQuote(q: ProjectQuote) {
+    setSendEmail(q.customer_email || '')
+    setSendQuote(q)
+  }
+
+  async function handleSendQuote() {
+    if (!sendQuote || !sendEmail) return
+    setSendingQuote(true)
+    try {
+      await apiFetch('/pwa/admin/quotes/send', {
+        method: 'POST',
+        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail }),
+      })
+      showToast(`Offerte an ${sendEmail} gesendet`)
+      setSendQuote(null)
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen')
+    } finally {
+      setSendingQuote(false)
     }
   }
 
@@ -545,8 +571,13 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <div>
           <div className="admin-page-title">{isNew ? 'Neues Projekt' : project.name}</div>
           <div className="admin-page-subtitle" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {isNew ? 'Projekt anlegen' : (
+            {isNew ? 'Projektnummer wird nach dem Speichern automatisch vergeben' : (
               <>
+                {project?.project_id_text && (
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                    Projekt-Nr. {project.project_id_text}
+                  </span>
+                )}
                 <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`} style={{ fontSize: 12 }}>
                   {PROJECT_STATUS_LABELS[effectiveStatus]}
                 </span>
@@ -880,6 +911,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onShowCreateForm={() => setShowQuoteForm(true)}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
+          onSend={handleOpenSendQuote}
         />
       )}
 
@@ -1137,6 +1169,38 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmReopen(false)}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleReopen} disabled={reopening}>
                 {reopening ? 'Wird geöffnet…' : 'Wiedereröffnen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sendQuote && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Offerte senden</div>
+            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+              {sendQuote.quote_number}<br />
+              {sendQuote.status === 'gesendet' && (
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                  Wurde bereits versendet — erneuter Versand erzeugt neue Annahme-/Ablehnen-Links.
+                </span>
+              )}
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label">Empfänger E-Mail</label>
+              <input
+                className="admin-form-input"
+                type="email"
+                value={sendEmail}
+                onChange={e => setSendEmail(e.target.value)}
+                placeholder="kunde@example.com"
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sendingQuote}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sendingQuote}>
+                {sendingQuote ? 'Wird gesendet…' : 'Offerte senden'}
               </button>
             </div>
           </div>

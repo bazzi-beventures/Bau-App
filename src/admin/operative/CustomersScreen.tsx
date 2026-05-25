@@ -211,6 +211,7 @@ export interface Customer {
   company: string | null
   email: string | null
   phone: string | null
+  phone_landline: string | null
   address: string | null
   billing_name: string | null
   billing_address: string | null
@@ -235,6 +236,7 @@ function CustomerForm({
   const [company, setCompany] = useState(initial?.company ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
+  const [phoneLandline, setPhoneLandline] = useState(initial?.phone_landline ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
   const initialBillingDiffers = !!(initial?.billing_name || initial?.billing_address)
   const [billingDiffers, setBillingDiffers] = useState(initialBillingDiffers)
@@ -262,6 +264,7 @@ function CustomerForm({
           company: company.trim() || null,
           email: email || null,
           phone: phone || null,
+          phone_landline: phoneLandline || null,
           address: address || null,
           billing_name: billingDiffers ? (billingName.trim() || null) : null,
           billing_address: billingDiffers ? (billingAddress || null) : null,
@@ -281,7 +284,19 @@ function CustomerForm({
 
   return (
     <div className="admin-table-wrap" style={{ padding: 24, marginBottom: 20 }}>
-      <div className="admin-section-title">{isNew ? 'Neuer Kunde' : 'Kunde bearbeiten'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <button
+          type="button"
+          className="admin-btn admin-btn-secondary admin-btn-sm"
+          onClick={onCancel}
+          title="Zurück zur Übersicht"
+        >
+          ← Zurück
+        </button>
+        <div className="admin-section-title" style={{ margin: 0 }}>
+          {isNew ? 'Neuer Kunde' : 'Kunde bearbeiten'}
+        </div>
+      </div>
       {error && <div className="admin-form-error">{error}</div>}
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
         <div className="admin-form-group">
@@ -290,7 +305,7 @@ function CustomerForm({
             onSelect={result => {
               if (result.name) setCompany(result.name)
               if (result.address) setAddress(result.address)
-              if (result.phone) setPhone(result.phone)
+              if (result.phone) setPhoneLandline(result.phone)
               if (result.email) setEmail(result.email)
             }}
           />
@@ -305,14 +320,18 @@ function CustomerForm({
             <input className="admin-form-input" value={company} onChange={e => setCompany(e.target.value)} />
           </div>
         </div>
+        <div className="admin-form-group">
+          <label className="admin-form-label">E-Mail</label>
+          <input className="admin-form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div className="admin-form-group">
-            <label className="admin-form-label">E-Mail</label>
-            <input className="admin-form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            <label className="admin-form-label">Mobil</label>
+            <input className="admin-form-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="079 123 45 67" />
           </div>
           <div className="admin-form-group">
-            <label className="admin-form-label">Telefon</label>
-            <input className="admin-form-input" value={phone} onChange={e => setPhone(e.target.value)} />
+            <label className="admin-form-label">Festnetz</label>
+            <input className="admin-form-input" value={phoneLandline} onChange={e => setPhoneLandline(e.target.value)} placeholder="044 123 45 67" />
           </div>
         </div>
         <div className="admin-form-group">
@@ -435,6 +454,8 @@ export default function CustomersScreen() {
       c.name.toLowerCase().includes(q) ||
       (c.company ?? '').toLowerCase().includes(q) ||
       (c.email ?? '').toLowerCase().includes(q) ||
+      (c.phone ?? '').toLowerCase().includes(q) ||
+      (c.phone_landline ?? '').toLowerCase().includes(q) ||
       (c.address ?? '').toLowerCase().includes(q) ||
       (c.billing_address ?? '').toLowerCase().includes(q) ||
       (c.object_address ?? '').toLowerCase().includes(q)
@@ -493,7 +514,8 @@ export default function CustomersScreen() {
                 <th>Name</th>
                 <th>Firma</th>
                 <th>E-Mail</th>
-                <th>Telefon</th>
+                <th>Mobil</th>
+                <th>Festnetz</th>
                 <th>Rechnungsadresse</th>
                 <th>Objektadresse (Default)</th>
                 <th></th>
@@ -506,6 +528,7 @@ export default function CustomersScreen() {
                   <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
+                  <td style={{ color: 'var(--muted)' }}>{c.phone_landline ?? '—'}</td>
                   <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>
                   <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.object_address ?? '—'}</td>
                   <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

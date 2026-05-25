@@ -48,6 +48,9 @@ export default defineConfig(({ command }) => ({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // Eigener Push-Handler (public/push-sw.js) — wird in den generierten
+        // Workbox-SW eingebunden, ohne die Caching-Strategie unten zu ersetzen.
+        importScripts: ['push-sw.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {

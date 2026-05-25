@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { logout } from '../api/auth'
 import { Theme, loadTheme, applyTheme, toggleTheme } from '../theme'
+import { PushState, getPushState, enablePush, disablePush } from '../api/push'
 
 interface Props {
   displayName: string
@@ -21,8 +22,25 @@ function roleLabel(role: string): string {
   }
 }
 
+function pushLabel(state: PushState | 'loading', busy: boolean): string {
+  if (busy) return 'Wird gespeichert…'
+  switch (state) {
+    case 'loading': return 'Wird geprüft…'
+    case 'subscribed': return 'Ein'
+    case 'unsubscribed': return 'Aus'
+    case 'denied': return 'Im Browser blockiert'
+    case 'unsupported': return 'Auf diesem Gerät nicht verfügbar'
+  }
+}
+
 export default function ProfileScreen({ displayName, email, role, tenantName, logoUrl, onBack, onLoggedOut }: Props) {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
+  const [pushState, setPushState] = useState<PushState | 'loading'>('loading')
+  const [pushBusy, setPushBusy] = useState(false)
+
+  useEffect(() => {
+    getPushState().then(setPushState).catch(() => setPushState('unsupported'))
+  }, [])
 
   async function handleLogout() {
     await logout().catch(() => {})
@@ -33,6 +51,26 @@ export default function ProfileScreen({ displayName, email, role, tenantName, lo
     const next = toggleTheme(theme)
     setTheme(next)
     applyTheme(next)
+  }
+
+  async function handleTogglePush() {
+    // Nur die echten Umschalt-Zustände sind klickbar.
+    if (pushBusy || (pushState !== 'subscribed' && pushState !== 'unsubscribed')) return
+    setPushBusy(true)
+    try {
+      if (pushState === 'subscribed') {
+        await disablePush()
+        setPushState('unsubscribed')
+      } else {
+        await enablePush()
+        setPushState('subscribed')
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Benachrichtigungen konnten nicht geändert werden.')
+      setPushState(await getPushState().catch(() => 'unsupported'))
+    } finally {
+      setPushBusy(false)
+    }
   }
 
   return (
@@ -122,6 +160,27 @@ export default function ProfileScreen({ displayName, email, role, tenantName, lo
           <div className="menu-text">
             <div className="menu-sub">Darstellung</div>
             <div className="menu-label">{theme === 'dark' ? 'Dunkel' : 'Hell'}</div>
+          </div>
+        </div>
+
+        {/* Push-Benachrichtigungen */}
+        <div
+          className="menu-item"
+          onClick={handleTogglePush}
+          style={{
+            cursor: pushState === 'subscribed' || pushState === 'unsubscribed' ? 'pointer' : 'default',
+            opacity: pushState === 'denied' || pushState === 'unsupported' ? 0.6 : 1,
+          }}
+        >
+          <div className="menu-icon menu-icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </div>
+          <div className="menu-text">
+            <div className="menu-sub">Benachrichtigungen</div>
+            <div className="menu-label">{pushLabel(pushState, pushBusy)}</div>
           </div>
         </div>
 

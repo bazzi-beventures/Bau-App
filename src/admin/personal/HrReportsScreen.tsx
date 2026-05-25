@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import MultiDropdown from '../kpis/components/MultiDropdown'
 import '../kpis/kpi-dashboard.css'
 
@@ -120,31 +121,33 @@ export default function HrReportsScreen() {
     else localStorage.removeItem(LS_SHOW_MANAGEMENT)
   }
 
-  async function load() {
-    setLoading(true)
+  // background=true → getakteter Live-Refresh: keinen Spinner zeigen und bei
+  // einem Fehler die bisherigen Daten stehen lassen (sonst flackert die Liste).
+  async function load(background = false) {
+    if (!background) setLoading(true)
     try {
       const result = await apiFetch(
         `/pwa/admin/hr/timesheet?date_from=${dateFrom}&date_to=${dateTo}`
       ) as TimesheetData
       setData(result)
     } catch {
-      setData(null)
+      if (!background) setData(null)
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }
 
-  async function loadViolations() {
-    setViolationsLoading(true)
+  async function loadViolations(background = false) {
+    if (!background) setViolationsLoading(true)
     try {
       const result = await apiFetch(
         `/pwa/admin/hr/violations?date_from=${dateFrom}&date_to=${dateTo}`
       ) as DbViolation[]
       setViolations(result)
     } catch {
-      setViolations([])
+      if (!background) setViolations([])
     } finally {
-      setViolationsLoading(false)
+      if (!background) setViolationsLoading(false)
     }
   }
 
@@ -161,7 +164,13 @@ export default function HrReportsScreen() {
     }
   }
 
-  useEffect(() => { load(); loadViolations() }, [])
+  // Initialer Load + Live-Refresh alle 15 s. So sieht die GF neu eingestempelte
+  // Mitarbeiter ohne manuelles Neuladen. Der Poll nutzt jeweils den aktuell
+  // eingestellten Zeitraum (dateFrom/dateTo) über die aktuelle Closure.
+  useVisibilityPolling(({ background }) => {
+    load(background)
+    loadViolations(background)
+  }, 15_000)
 
   async function handleExport() {
     setExporting(true)

@@ -122,19 +122,22 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
           {drafts.map(d => (
             <div
               key={d.id}
-              className="admin-list-item"
+              className="admin-list-item clickable"
+              role="button"
+              tabIndex={0}
               onClick={() => setSelected(d)}
-              style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(d) } }}
+              style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{d.title}</div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                     Kunde: {d.customer_name}
                     {d.customer_phone ? ` · ${d.customer_phone}` : ''}
                   </div>
                   {d.object_address && (
-                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {d.object_address}
                     </div>
                   )}
@@ -143,8 +146,8 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
                   {STATUS_LABEL[d.status]}
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                {d.created_by_name ?? '—'} · {fmtDate(d.created_at)}
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Erfasst von <strong style={{ color: 'var(--text)' }}>{d.created_by_name ?? '—'}</strong> · {fmtDate(d.created_at)}
               </div>
             </div>
           ))}

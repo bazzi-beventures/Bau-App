@@ -46,3 +46,6 @@ export function IconSettings() {
 export function IconAddressBook() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 0 0-1 1v1H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V3a1 1 0 0 0-1-1H9zm0 2h2v1a1 1 0 0 0 1 1h1v8H7V6h1a1 1 0 0 0 1-1V4zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5a3 3 0 0 1 6 0H7z"/></svg>
 }
+export function IconHelp() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM8.94 6.94a1.5 1.5 0 0 1 2.12 0c.59.59.59 1.54 0 2.12L10 10.12V11a1 1 0 1 1-2 0v-1.5c0-.27.11-.52.29-.71L9.65 7.7a.5.5 0 0 0-.7-.7l-.3.3a1 1 0 1 1-1.42-1.42l.3-.3zM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" clipRule="evenodd"/></svg>
+}

@@ -61,7 +61,7 @@ function timeAgo(iso: string | undefined | null): string {
 
 function cellColor(uptime: DayUptime | null): string {
   if (!uptime || uptime.checks === 0) return COLOR_NONE
-  if (uptime.uptime_pct >= 99.5) return COLOR_OK
+  if (uptime.uptime_pct >= 99) return COLOR_OK
   if (uptime.uptime_pct >= 95) return COLOR_WARN
   return COLOR_BAD
 }
@@ -69,6 +69,14 @@ function cellColor(uptime: DayUptime | null): string {
 function formatDay(day: string): string {
   const [, m, d] = day.split('-')
   return `${d}.${m}.`
+}
+
+// Ganze Tage zwischen `day` (YYYY-MM-DD, UTC) und heute. 0 = heute, negativ = Zukunft.
+function daysAgo(day: string): number {
+  const then = new Date(`${day}T00:00:00Z`).getTime()
+  const now = new Date()
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return Math.round((todayUtc - then) / 86_400_000)
 }
 
 function weightedAvg(days: HistoryDay[], pick: (d: HistoryDay) => DayUptime | null): number | null {
@@ -185,7 +193,7 @@ function HeatmapRow({
   )
 }
 
-function Heatmap({ days, range }: { days: HistoryDay[]; range: HistoryRange }) {
+function Heatmap({ days }: { days: HistoryDay[] }) {
   if (days.length === 0) {
     return (
       <div className="svc-heatmap" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 36 }}>
@@ -193,28 +201,37 @@ function Heatmap({ days, range }: { days: HistoryDay[]; range: HistoryRange }) {
       </div>
     )
   }
-  const first = formatDay(days[0].day)
-  const last = formatDay(days[days.length - 1].day)
-  const sameDay = days.length === 1
+  // Backend liefert DESC (neuester zuerst). Die Zeitachse läuft links→rechts = alt→neu,
+  // also chronologisch aufsteigend sortieren — sonst stehen die Labels am falschen Ende.
+  const ordered = [...days].sort((a, b) => a.day.localeCompare(b.day))
+  const oldest = ordered[0].day
+  const newest = ordered[ordered.length - 1].day
+  const sameDay = ordered.length === 1
+
+  // Labels aus den echten Daten ableiten — nicht aus der angefragten Spanne. "heute"
+  // nur wenn der jüngste Tag wirklich heute ist (sonst läuft der Probe-Cron nicht mehr).
+  const agoNew = daysAgo(newest)
+  const leftLabel = `vor ${daysAgo(oldest)}d · ${formatDay(oldest)}`
+  const rightLabel = `${agoNew <= 0 ? 'heute' : `vor ${agoNew}d`} · ${formatDay(newest)}`
 
   return (
     <div className="svc-heatmap">
-      <HeatmapRow name="railway" days={days} pick={d => d.railway} />
-      <HeatmapRow name="supabase" days={days} pick={d => d.supabase} />
-      <HeatmapRow name="mistral" days={days} pick={d => d.mistral} />
+      <HeatmapRow name="railway" days={ordered} pick={d => d.railway} />
+      <HeatmapRow name="supabase" days={ordered} pick={d => d.supabase} />
+      <HeatmapRow name="mistral" days={ordered} pick={d => d.mistral} />
       {sameDay ? (
         <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 10 }}>
-          {first}
+          {formatDay(newest)}
         </div>
       ) : (
         <div className="svc-heatmap-axis">
-          <span>vor {range}d · {first}</span>
-          <span>heute · {last}</span>
+          <span>{leftLabel}</span>
+          <span>{rightLabel}</span>
         </div>
       )}
       <div className="svc-heatmap-legend">
-        <span><span className="svc-legend-swatch" style={{ background: COLOR_OK }} />Operational (≥ 99.5%)</span>
-        <span><span className="svc-legend-swatch" style={{ background: COLOR_WARN }} />Degraded (95–99.5%)</span>
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_OK }} />Operational (≥ 99%)</span>
+        <span><span className="svc-legend-swatch" style={{ background: COLOR_WARN }} />Degraded (95–99%)</span>
         <span><span className="svc-legend-swatch" style={{ background: COLOR_BAD }} />Outage (&lt; 95%)</span>
         <span><span className="svc-legend-swatch" style={{ background: COLOR_NONE }} />Keine Daten</span>
       </div>
@@ -378,7 +395,7 @@ export default function ServiceStatusScreen() {
               ))}
             </div>
           </div>
-          <Heatmap days={history.days} range={historyRange} />
+          <Heatmap days={history.days} />
         </div>
       )}
 

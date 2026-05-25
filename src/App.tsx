@@ -14,9 +14,10 @@ import ProjekteScreen from './screens/ProjekteScreen'
 import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
+import HelpBot from './shared/HelpBot'
 import { applyTheme, loadTheme } from './theme'
 
-type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'projektEntwurf' | 'admin' | 'absenzen'
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'projektEntwurf' | 'admin' | 'absenzen' | 'help'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -82,6 +83,7 @@ export default function App() {
   const [rapportInitialMessage, setRapportInitialMessage] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
+  const [pushMsg, setPushMsg] = useState<{ title: string; body: string } | null>(null)
   const [authExpiredAt, setAuthExpiredAt] = useState<number | null>(null)
   const screenRef = useRef(screen)
 
@@ -104,6 +106,31 @@ export default function App() {
     const onUpdate = () => setSwUpdateReady(true)
     window.addEventListener('sw-update-ready', onUpdate)
     return () => window.removeEventListener('sw-update-ready', onUpdate)
+  }, [])
+
+  // Push-Nachricht vom Service Worker → In-App-Banner (App war offen oder im
+  // Hintergrund). Der SW postet {type:'push', title, body, url}.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'push') {
+        setPushMsg({ title: e.data.title || 'Mitteilung', body: e.data.body || '' })
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [])
+
+  // Cold-Start: App wurde durch Antippen einer Benachrichtigung geöffnet,
+  // die Nachricht steckt im URL-Hash (#notif=...). Anzeigen und Hash entfernen.
+  useEffect(() => {
+    const m = window.location.hash.match(/notif=([^&]+)/)
+    if (!m) return
+    try {
+      const p = JSON.parse(decodeURIComponent(m[1]))
+      setPushMsg({ title: p.title || 'Mitteilung', body: p.body || '' })
+    } catch { /* ignore */ }
+    history.replaceState(null, '', window.location.pathname + window.location.search)
   }, [])
 
   useEffect(() => {
@@ -228,11 +255,49 @@ export default function App() {
     </div>
   ) : null
 
+  const pushBanner = pushMsg ? (
+    <div style={{
+      position: 'fixed',
+      top: (isOffline ? 32 : 0) + (authExpiredAt !== null ? 40 : 0) + 8,
+      left: '50%', transform: 'translateX(-50%)',
+      width: 'calc(100% - 24px)', maxWidth: 448, zIndex: 9999,
+      background: 'var(--accent-blue, #1e3a5f)', color: '#fff',
+      borderRadius: 12, padding: '12px 14px',
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+    }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" style={{ flexShrink: 0, marginTop: 1 }}>
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{pushMsg.title}</div>
+        {pushMsg.body && (
+          <div style={{ fontSize: '0.85rem', marginTop: 2, opacity: 0.95, wordBreak: 'break-word' }}>
+            {pushMsg.body}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => setPushMsg(null)}
+        aria-label="Schliessen"
+        style={{
+          background: 'transparent', border: 'none', color: '#fff',
+          fontSize: '1.3rem', lineHeight: 1, cursor: 'pointer',
+          padding: '0 2px', flexShrink: 0, opacity: 0.85,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  ) : null
+
   if (screen === 'loading') {
     return (
       <>
         {offlineBanner}
         {authExpiredBanner}
+        {pushBanner}
         <div className="loading-screen">
           <div className="loading-logo">
             <LogoSvg />
@@ -289,9 +354,17 @@ export default function App() {
         onNavProjekte={() => setScreen('projekte')}
         onNavProjektEntwurf={() => setScreen('projektEntwurf')}
         onNavProfile={() => setScreen('profile')}
+        onNavHelp={() => setScreen('help')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
+    )
+  } else if (screen === 'help' && user) {
+    if (!user.enabled_modules?.includes('help_bot')) { setScreen('home'); return null }
+    inner = (
+      <div className="app-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <HelpBot header={{ title: 'Hilfe', onBack: () => setScreen('home') }} />
+      </div>
     )
   } else if (screen === 'profile' && user) {
     inner = (
@@ -405,6 +478,7 @@ export default function App() {
     <>
       {offlineBanner}
       {authExpiredBanner}
+      {pushBanner}
       {updateBanner}
       {inner}
     </>

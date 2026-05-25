@@ -168,9 +168,10 @@ interface QuotesTabProps {
   onShowCreateForm: () => void
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
+  onSend: (quote: ProjectQuote) => void
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate, onSend }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
@@ -215,6 +216,14 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateF
                     )}
                     {idx === 0 && (
                       <>
+                        {['entwurf', 'gesendet'].includes(q.status) && (
+                          <button
+                            className="admin-btn admin-btn-primary admin-btn-sm"
+                            onClick={() => onSend(q)}
+                          >
+                            {q.status === 'gesendet' ? 'Erneut senden' : 'Senden'}
+                          </button>
+                        )}
                         {q.status === 'entwurf' && (
                           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onUpdateStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
                         )}

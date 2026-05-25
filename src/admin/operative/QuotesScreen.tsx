@@ -688,12 +688,24 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
 
 // ─── Main Screen ────────────────────────────────────────────
 
-export default function QuotesScreen() {
+interface QuotesScreenProps {
+  initialStatus?: string | null
+  onConsumed?: () => void
+}
+
+export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreenProps = {}) {
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilters, setStatusFilters] = useState<Set<string>>(
-    () => new Set(['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage'])
-  )
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(() => {
+    if (initialStatus && ['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage', 'archiviert'].includes(initialStatus)) {
+      return new Set([initialStatus])
+    }
+    return new Set(['entwurf', 'gesendet', 'akzeptiert', 'abgelehnt', 'absage'])
+  })
+
+  useEffect(() => {
+    if (initialStatus && onConsumed) onConsumed()
+  }, [])
   const [search, setSearch] = useState('')
   const [acting, setActing] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)

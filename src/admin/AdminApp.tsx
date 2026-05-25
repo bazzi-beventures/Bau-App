@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { UserInfo } from '../api/auth'
 import { getAdminDashboard, AdminDashboard } from '../api/admin'
 import AdminSidebar from './AdminSidebar'
@@ -24,8 +24,10 @@ import PricingRulesScreen from './operative/PricingRulesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import UsersScreen from './system/UsersScreen'
 import ServiceStatusScreen from './system/ServiceStatusScreen'
+import PushTestScreen from './system/PushTestScreen'
 import KpiScreen from './kpis/KpiScreen'
 import ConfigurationScreen from './configuration/ConfigurationScreen'
+import HelpBot from '../shared/HelpBot'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
 import './tokens.css'
 import './admin.css'
@@ -80,10 +82,12 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'kpis': 'Kennzahlen',
   'configuration': 'Konfiguration',
   'service-status': 'Service-Status',
+  'push-test': 'Push-Test',
+  'help': 'Hilfe-Bot',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
-  const { screen, detailId, nav, clearDetail } = useAdminNav()
+  const { screen, detailId, resetTick, nav, clearDetail } = useAdminNav()
   const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
@@ -122,7 +126,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
-    if (screen === 'service-status' && !isSuperadmin) {
+    if ((screen === 'service-status' || screen === 'push-test') && !isSuperadmin) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
@@ -137,7 +141,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'project-drafts': return <ProjectDraftsScreen onBadgeChange={loadDashboard} />
       case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={nav} />)
       case 'customers':    return <CustomersScreen />
-      case 'quotes':       return guard('quotes', <QuotesScreen />)
+      case 'quotes':       return guard('quotes', <QuotesScreen initialStatus={detailId} onConsumed={clearDetail} />)
       case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
       case 'suppliers':    return <SuppliersScreen />
       case 'materials':    return <MaterialsScreen />
@@ -146,6 +150,8 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'kpis':         return guard('kpis', <KpiScreen />)
       case 'configuration': return <ConfigurationScreen userRole={user.role} />
       case 'service-status': return <ServiceStatusScreen />
+      case 'push-test':    return <PushTestScreen />
+      case 'help':         return guard('help_bot', <HelpBot maxWidth={760} showReindex />)
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
@@ -176,7 +182,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
                 )}
               </button>
             </div>
-            {renderScreen()}
+            <Fragment key={`${screen}:${resetTick}`}>{renderScreen()}</Fragment>
           </div>
         </main>
         <MobileNav
@@ -236,7 +242,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
               />
             )}
           </div>
-          {renderScreen()}
+          <Fragment key={`${screen}:${resetTick}`}>{renderScreen()}</Fragment>
         </div>
       </main>
     </div>

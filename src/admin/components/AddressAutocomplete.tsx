@@ -19,14 +19,17 @@ function stripHtml(html: string): string {
 }
 
 function formatLabel(html: string): string {
-  const match = html.match(/<b>([\s\S]*?)<\/b>\s*([\s\S]*)/i)
+  const clean = (s: string) => stripHtml(s).replace(/\s+/g, ' ').trim()
+  // Swisstopo-Adressen kommen als "Strasse Nr <b>PLZ Ort</b>":
+  // Strasse steht VOR dem <b>, PLZ+Ort stehen DARIN.
+  const match = html.match(/^([\s\S]*?)<b>([\s\S]*?)<\/b>([\s\S]*)$/i)
   if (match) {
-    const street = stripHtml(match[1]).replace(/\s+/g, ' ').trim()
-    const rest = stripHtml(match[2]).replace(/\s+/g, ' ').trim()
-    if (street && rest) return `${street}, ${rest}`
-    return street || rest
+    const before = clean(match[1])
+    const bold = clean(match[2])
+    const after = clean(match[3])
+    if (before && bold && !after) return `${before}, ${bold}`
   }
-  return stripHtml(html).replace(/\s+/g, ' ').trim()
+  return clean(html)
 }
 
 export function AddressAutocomplete({ value, onChange, className }: Props) {
