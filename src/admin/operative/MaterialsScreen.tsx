@@ -14,8 +14,9 @@ interface Material {
   supplier_id: string | null
   category: string | null
   unit: string | null
-  unit_price: number | null
-  cost_price: number | null
+  unit_price: number | null   // manueller VK-Override (0/leer = automatisch)
+  cost_price: number | null   // EK (Einkaufspreis)
+  calc_vk: number | null      // berechneter VK (EK x Aufschlag bzw. Override)
   is_active: boolean
   inventory: { quantity: number; min_quantity: number | null }[]
 }
@@ -104,6 +105,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
   const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
   const [unit, setUnit] = useState(material?.unit ?? '')
   const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
+  const [costPrice, setCostPrice] = useState(material?.cost_price?.toString() ?? '')
   const [supplierId, setSupplierId] = useState(material?.supplier_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -123,7 +125,8 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
           name: name.trim(),
           category: category || null,
           unit: unit || null,
-          unit_price: unitPrice ? parseFloat(unitPrice) : null,
+          unit_price: unitPrice ? parseFloat(unitPrice) : 0,
+          cost_price: costPrice ? parseFloat(costPrice) : null,
           supplier_id: supplierId || null,
         }),
       })
@@ -179,16 +182,24 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="admin-form-group">
-              <label className="admin-form-label">VK-Preis (CHF)</label>
-              <input className="admin-form-input" type="number" step="0.01" min="0" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} />
+              <label className="admin-form-label">EK-Preis (CHF)</label>
+              <input className="admin-form-input" type="number" step="0.01" min="0" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="Einkaufspreis" />
             </div>
             <div className="admin-form-group">
-              <label className="admin-form-label">Lieferant</label>
-              <select className="admin-form-select" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
-                <option value="">— Kein —</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <label className="admin-form-label">VK-Preis (manuell)</label>
+              <input className="admin-form-input" type="number" step="0.01" min="0" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="leer = automatisch" />
+              <div className="admin-form-hint">
+                Leer = VK wird bei Offerte/Rechnung aus EK × Lieferanten-Aufschlag berechnet
+                {material?.calc_vk != null && !unitPrice ? ` (aktuell CHF ${material.calc_vk.toFixed(2)})` : ''}
+              </div>
             </div>
+          </div>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Lieferant</label>
+            <select className="admin-form-select" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
+              <option value="">— Kein —</option>
+              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
         </form>
         <div className="admin-modal-footer">
@@ -202,7 +213,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
   )
 }
 
-type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'unit_price' | 'stock'
+type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'cost_price' | 'unit_price' | 'stock'
 type SortDir = 'asc' | 'desc'
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -270,7 +281,8 @@ export default function MaterialsScreen() {
       case 'name':     aVal = a.name; bVal = b.name; break
       case 'category': aVal = a.category ?? ''; bVal = b.category ?? ''; break
       case 'unit':     aVal = a.unit ?? ''; bVal = b.unit ?? ''; break
-      case 'unit_price': aVal = a.unit_price ?? -1; bVal = b.unit_price ?? -1; break
+      case 'cost_price': aVal = a.cost_price ?? -1; bVal = b.cost_price ?? -1; break
+      case 'unit_price': aVal = a.calc_vk ?? -1; bVal = b.calc_vk ?? -1; break
       case 'stock':    aVal = a.inventory[0]?.quantity ?? -1; bVal = b.inventory[0]?.quantity ?? -1; break
     }
     if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -325,6 +337,9 @@ export default function MaterialsScreen() {
                 <th style={thStyle} onClick={() => toggleSort('unit')}>
                   Einheit <SortIcon active={sortKey === 'unit'} dir={sortDir} />
                 </th>
+                <th style={thStyle} onClick={() => toggleSort('cost_price')}>
+                  EK-Preis <SortIcon active={sortKey === 'cost_price'} dir={sortDir} />
+                </th>
                 <th style={thStyle} onClick={() => toggleSort('unit_price')}>
                   VK-Preis <SortIcon active={sortKey === 'unit_price'} dir={sortDir} />
                 </th>
@@ -336,7 +351,7 @@ export default function MaterialsScreen() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="admin-table-empty">Keine Materialien gefunden.</td></tr>
+                <tr><td colSpan={8} className="admin-table-empty">Keine Materialien gefunden.</td></tr>
               ) : filtered.map(m => {
                 const stock = m.inventory[0]?.quantity ?? null
                 const minStock = m.inventory[0]?.min_quantity ?? null
@@ -348,7 +363,13 @@ export default function MaterialsScreen() {
                     <td><strong>{m.name}</strong>{supplierName ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{supplierName}</span> : null}</td>
                     <td style={{ color: 'var(--muted)' }}>{m.category || '—'}</td>
                     <td>{m.unit || '—'}</td>
-                    <td>{m.unit_price != null ? `CHF ${m.unit_price.toFixed(2)}` : '—'}</td>
+                    <td>{m.cost_price != null ? `CHF ${m.cost_price.toFixed(2)}` : '—'}</td>
+                    <td>
+                      {m.calc_vk != null && m.calc_vk > 0 ? `CHF ${m.calc_vk.toFixed(2)}` : '—'}
+                      {m.unit_price != null && m.unit_price > 0 && (
+                        <span style={{ color: 'var(--muted)', marginLeft: 4, fontSize: 11 }} title="Manueller VK-Override">✎</span>
+                      )}
+                    </td>
                     <td>
                       {stock !== null
                         ? <span style={{ color: stockLow ? '#ef4444' : 'inherit', fontWeight: stockLow ? 700 : undefined }}>{stock} {m.unit || ''}</span>

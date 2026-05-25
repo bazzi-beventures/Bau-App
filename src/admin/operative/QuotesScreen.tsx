@@ -66,6 +66,7 @@ interface Material {
   art_nr: string
   name: string
   unit_price: number
+  calc_vk?: number | null
   unit: string
   category?: string
 }
@@ -345,7 +346,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
               <option value="">Material wählen…</option>
               {materials.map(m => (
                 <option key={m.art_nr} value={m.art_nr}>
-                  {m.art_nr} — {m.name} ({fmtCHF(m.unit_price)}/{m.unit})
+                  {m.art_nr} — {m.name} ({fmtCHF(m.calc_vk ?? m.unit_price)}/{m.unit})
                 </option>
               ))}
             </select>

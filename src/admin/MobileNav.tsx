@@ -194,6 +194,9 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>
+                <button className={`admin-mobile-drawer-item${screen === 'material-import' ? ' active' : ''}`} onClick={() => navigate('material-import')}>
+                  <IconDocument /><span>Material-Import</span>
+                </button>
                 {isManagement && (
                   <button className={`admin-mobile-drawer-item${screen === 'pricing-rules' ? ' active' : ''}`} onClick={() => navigate('pricing-rules')}>
                     <IconTag /><span>Lieferantenpreise</span>

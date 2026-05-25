@@ -22,6 +22,7 @@ import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
+import ImportScreen from './system/ImportScreen'
 import UsersScreen from './system/UsersScreen'
 import ServiceStatusScreen from './system/ServiceStatusScreen'
 import PushTestScreen from './system/PushTestScreen'
@@ -77,6 +78,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'invoices': 'Rechnungen',
   'suppliers': 'Lieferanten',
   'materials': 'Material / Lager',
+  'material-import': 'Material-Import',
   'pricing-rules': 'Preisregeln',
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
@@ -145,6 +147,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
       case 'suppliers':    return <SuppliersScreen />
       case 'materials':    return <MaterialsScreen />
+      case 'material-import': return <ImportScreen />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'users':        return <UsersScreen />
       case 'kpis':         return guard('kpis', <KpiScreen />)
