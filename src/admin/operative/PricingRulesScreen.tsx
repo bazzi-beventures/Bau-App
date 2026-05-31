@@ -23,9 +23,11 @@ interface EditState {
 export default function PricingRulesScreen() {
   const [rules, setRules] = useState<PricingRule[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<PricingRule | 'new' | null>(null)
   const [form, setForm] = useState<EditState>({ supplier_name: '', category: '', markup_pct: '' })
+  const [customCategory, setCustomCategory] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
@@ -33,12 +35,16 @@ export default function PricingRulesScreen() {
   async function load() {
     setLoading(true)
     try {
-      const [rulesData, suppliersData] = await Promise.all([
+      const [rulesData, suppliersData, materialsData] = await Promise.all([
         apiFetch('/pwa/admin/pricing-rules') as Promise<PricingRule[]>,
         apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
+        apiFetch('/pwa/admin/materials') as Promise<{ category: string | null }[]>,
       ])
       setRules(rulesData)
       setSuppliers(suppliersData)
+      setCategories(
+        Array.from(new Set(materialsData.map(m => m.category).filter(Boolean))).sort() as string[]
+      )
     } finally {
       setLoading(false)
     }
@@ -48,16 +54,19 @@ export default function PricingRulesScreen() {
 
   function openNew() {
     setForm({ supplier_name: '', category: '', markup_pct: '' })
+    setCustomCategory(false)
     setEditing('new')
     setError('')
   }
 
   function openEdit(r: PricingRule) {
+    const cat = r.category ?? ''
     setForm({
       supplier_name: r.suppliers?.name ?? '',
-      category: r.category ?? '',
+      category: cat,
       markup_pct: r.markup_pct.toString(),
     })
+    setCustomCategory(!!cat && !categories.includes(cat))
     setEditing(r)
     setError('')
   }
@@ -193,12 +202,34 @@ export default function PricingRulesScreen() {
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kategorie (leer = alle)</label>
-                <input
-                  className="admin-form-input"
-                  value={form.category}
-                  onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  placeholder="z.B. Befestigung"
-                />
+                {customCategory ? (
+                  <input
+                    className="admin-form-input"
+                    value={form.category}
+                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                    placeholder="Neue Kategorie…"
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    className="admin-form-input"
+                    value={form.category}
+                    onChange={e => {
+                      if (e.target.value === '__new__') {
+                        setCustomCategory(true)
+                        setForm(f => ({ ...f, category: '' }))
+                      } else {
+                        setForm(f => ({ ...f, category: e.target.value }))
+                      }
+                    }}
+                  >
+                    <option value="">— Alle Kategorien —</option>
+                    {categories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="__new__">+ Neue Kategorie…</option>
+                  </select>
+                )}
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Aufschlag % *</label>

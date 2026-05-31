@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
@@ -115,11 +115,6 @@ export function projectBillingAddress(p: { customer?: EmbeddedCustomer | null })
 }
 type SortDir = 'asc' | 'desc'
 
-const STATUS_ORDER: Record<ProjectStatus, number> = {
-  offen: 0,
-  abgeschlossen: 1,
-}
-
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
     <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 11 }}>
@@ -133,13 +128,28 @@ interface ProjectsScreenProps {
   onConsumedNew?: () => void
 }
 
+interface ProjectsListResponse {
+  rows: Project[]
+  total: number
+  open_count: number
+  closed_count: number
+  page: number
+  page_size: number
+}
+
+const PAGE_SIZE = 50
+
 export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScreenProps = {}) {
-  const [projects, setProjects] = useState<Project[]>([])
+  const [data, setData] = useState<ProjectsListResponse>({
+    rows: [], total: 0, open_count: 0, closed_count: 0, page: 1, page_size: PAGE_SIZE,
+  })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
   const [sortKey, setSortKey] = useState<ProjectSortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -150,49 +160,44 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
     }
   }, [openNew, onConsumedNew])
 
-  async function load() {
+  // Suche: 300ms Debounce, damit nicht jeder Tastendruck einen Roundtrip ausloest.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Filter/Suche/Sort aendern → zurueck auf Seite 1.
+  useEffect(() => { setPage(1) }, [showClosed, debouncedSearch, sortKey, sortDir])
+
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      setProjects(await apiFetch('/pwa/admin/projects') as Project[])
+      const params = new URLSearchParams({
+        status: showClosed ? 'all' : 'open',
+        sort: sortKey,
+        dir: sortDir,
+        page: String(page),
+        page_size: String(PAGE_SIZE),
+      })
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      const res = await apiFetch(`/pwa/admin/projects/list?${params.toString()}`) as ProjectsListResponse
+      setData(res)
     } finally {
       setLoading(false)
     }
-  }
+  }, [showClosed, debouncedSearch, sortKey, sortDir, page])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   function toggleSort(key: ProjectSortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const filtered = projects.filter(p => {
-    const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
-    if (!showClosed && effectiveStatus === 'abgeschlossen') return false
-    const q = search.toLowerCase()
-    return p.name.toLowerCase().includes(q)
-      || projectCustomerName(p).toLowerCase().includes(q)
-      || (p.project_id_text || '').toLowerCase().includes(q)
-  }).sort((a, b) => {
-    const sA: ProjectStatus = a.status ?? (a.is_closed ? 'abgeschlossen' : 'offen')
-    const sB: ProjectStatus = b.status ?? (b.is_closed ? 'abgeschlossen' : 'offen')
-    let aVal: string | number
-    let bVal: string | number
-    switch (sortKey) {
-      case 'project_id_text': aVal = a.project_id_text || ''; bVal = b.project_id_text || ''; break
-      case 'name':          aVal = a.name; bVal = b.name; break
-      case 'customer_name': aVal = projectCustomerName(a); bVal = projectCustomerName(b); break
-      case 'status':        aVal = STATUS_ORDER[sA]; bVal = STATUS_ORDER[sB]; break
-      case 'created_at':    aVal = a.created_at; bVal = b.created_at; break
-    }
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-    }
-    return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
-  })
-
-  const open = filtered.filter(p => (p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')) !== 'abgeschlossen').length
-  const closed = filtered.filter(p => (p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')) === 'abgeschlossen').length
+  const { rows, total, open_count, closed_count } = data
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 
@@ -211,7 +216,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Projekte</div>
-          <div className="admin-page-subtitle">{open} offen{showClosed ? `, ${closed} geschlossen` : ''}</div>
+          <div className="admin-page-subtitle">{open_count} offen, {closed_count} geschlossen</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -263,9 +268,9 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr><td colSpan={7} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
-              ) : filtered.map(p => {
+              ) : rows.map(p => {
                 const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
                 return (
                   <tr key={p.id} onClick={() => setSelected(p)}>
@@ -305,6 +310,33 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
               })}
             </tbody>
           </table>
+        )}
+
+        {total > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+              {rangeStart}–{rangeEnd} von {total}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                ← Zurück
+              </button>
+              <span style={{ fontSize: 13, color: 'var(--muted)', minWidth: 90, textAlign: 'center' }}>
+                Seite {page} / {totalPages}
+              </span>
+              <button
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              >
+                Weiter →
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

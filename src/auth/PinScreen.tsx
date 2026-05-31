@@ -74,7 +74,7 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
             type="text"
             value={username}
             onChange={e => setUsername(e.target.value.toLowerCase())}
-            placeholder="ghtluba"
+            placeholder="benutzername"
             autoComplete="username"
             required
             style={{

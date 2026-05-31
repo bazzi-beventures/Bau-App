@@ -5,9 +5,17 @@ import { BerichtType } from './BerichtScreen'
 
 const OFFLINE_QUEUE_KEY = 'zeit_offline_queue'
 
+// Nach so vielen fehlgeschlagenen Drain-Versuchen gilt die Queue als verklemmt.
+// Schützt vor dem Bevenetures-Szenario: alte SW-Installation hängt auf alter
+// Origin, Backend blockt sie per CORS, Browser ist online, jede Drain-Runde
+// scheitert — ohne Cap würde die Queue ewig wachsen und der User würde es nie
+// bemerken.
+const MAX_DRAIN_ATTEMPTS = 10
+
 interface QueuedAction {
   action: ZeitAction
   recorded_at: string
+  attempts?: number
 }
 
 function loadQueue(): QueuedAction[] {
@@ -107,6 +115,9 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
   const [reportLoading] = useState(false)
   const [queueSize, setQueueSize] = useState(() => loadQueue().length)
   const [draining, setDraining] = useState(false)
+  const [queueStuck, setQueueStuck] = useState(() =>
+    loadQueue().some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS),
+  )
 
   const drainQueue = useCallback(async () => {
     const q = loadQueue()
@@ -117,11 +128,12 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
       try {
         await zeitAction(item.action, { recorded_at: item.recorded_at })
       } catch {
-        remaining.push(item)
+        remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
       }
     }
     saveQueue(remaining)
     setQueueSize(remaining.length)
+    setQueueStuck(remaining.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
     setDraining(false)
     if (remaining.length === 0) {
       setResult({ text: 'Offline-Aktionen wurden erfolgreich synchronisiert.', isError: false })
@@ -247,11 +259,16 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
       )}
 
       {/* Offline queue banner */}
-      {queueSize > 0 && (
+      {queueSize > 0 && !queueStuck && (
         <div className="action-result" style={{ background: '#1e3a5f', color: '#93c5fd', borderLeft: '3px solid #3b82f6' }}>
           {draining
             ? `${queueSize} Aktion${queueSize > 1 ? 'en' : ''} wird synchronisiert…`
             : `${queueSize} Aktion${queueSize > 1 ? 'en' : ''} offline gespeichert – wird gesendet sobald Verbindung vorhanden.`}
+        </div>
+      )}
+      {queueStuck && (
+        <div className="action-result action-result-error">
+          {queueSize} Aktion{queueSize > 1 ? 'en' : ''} können nicht gesendet werden. Bitte App deinstallieren und neu installieren — danach beim Vorgesetzten melden, damit die fehlenden Stempel manuell nachgetragen werden.
         </div>
       )}
 

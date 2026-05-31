@@ -16,9 +16,21 @@ export class ApiError extends Error {
   }
 }
 
-// status 0 = Netzwerkfehler (kein Internet, DNS, Timeout)
+// status 0 = fetch ist mit TypeError abgebrochen. Das passiert bei echtem
+// Verbindungsabbruch (kein Internet, DNS, Timeout) — aber auch bei CORS-Block,
+// Cert-Fehler, Mixed-Content oder einem Backend, das diesen Origin nicht mehr
+// akzeptiert. Beim Bevenetures-Domain-Wechsel hat genau das die App auf alten
+// Installationen in eine Endlos-Offline-Queue geschoben (Origin gewechselt,
+// Backend hat alten Origin geblockt, Browser war online, App hielt sich für
+// offline und queuete jede Aktion).
+//
+// Daher: nur als "offline" zählen, wenn der Browser selbst sagt, dass er
+// offline ist. Sonst echten Fehler nach oben durchreichen.
 export const isOfflineError = (e: unknown): boolean =>
-  e instanceof ApiError && e.status === 0
+  e instanceof ApiError &&
+  e.status === 0 &&
+  typeof navigator !== 'undefined' &&
+  navigator.onLine === false
 
 let sessionExpiredHandled = false
 

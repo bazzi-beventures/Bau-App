@@ -15,6 +15,7 @@ interface Quote {
   status: string
   created_at: string
   pdf_url: string | null
+  xlsx_url: string | null
   reminder_sent_at: string | null
 }
 
@@ -880,6 +881,17 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                           onClick={e => e.stopPropagation()}
                         >
                           PDF
+                        </a>
+                      )}
+                      {q.xlsx_url && (
+                        <a
+                          href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          XLSX
                         </a>
                       )}
                       {['entwurf', 'gesendet'].includes(q.status) && (

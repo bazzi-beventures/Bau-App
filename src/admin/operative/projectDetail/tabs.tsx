@@ -21,6 +21,7 @@ export interface ProjectQuote {
   status: string
   created_at: string
   pdf_url: string | null
+  xlsx_url: string | null
   customer_email: string | null
 }
 
@@ -213,6 +214,9 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateF
                     <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
                     {q.pdf_url && (
                       <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                    )}
+                    {q.xlsx_url && (
+                      <a href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">XLSX</a>
                     )}
                     {idx === 0 && (
                       <>

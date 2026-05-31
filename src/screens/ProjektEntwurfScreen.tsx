@@ -4,9 +4,13 @@ import { createProjectDraft, ProjectDraftPayload } from '../api/projectDrafts'
 
 const OFFLINE_QUEUE_KEY = 'projektEntwurf_offline_queue'
 
+// Siehe ArbeitsZeitScreen für die Begründung (Bevenetures-Origin-Wechsel).
+const MAX_DRAIN_ATTEMPTS = 10
+
 interface QueuedDraft {
   payload: ProjectDraftPayload
   queued_at: string
+  attempts?: number
 }
 
 function loadQueue(): QueuedDraft[] {
@@ -54,6 +58,9 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
   const [queueSize, setQueueSize] = useState(() => loadQueue().length)
   const [draining, setDraining] = useState(false)
+  const [queueStuck, setQueueStuck] = useState(() =>
+    loadQueue().some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS),
+  )
 
   const drainQueue = useCallback(async () => {
     const q = loadQueue()
@@ -64,11 +71,12 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
       try {
         await createProjectDraft(item.payload)
       } catch {
-        remaining.push(item)
+        remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
       }
     }
     saveQueue(remaining)
     setQueueSize(remaining.length)
+    setQueueStuck(remaining.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
     setDraining(false)
     if (remaining.length === 0) {
       setResult({ text: 'Offline-Entwürfe wurden gesendet.', isError: false })
@@ -174,11 +182,16 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
         </div>
       )}
 
-      {queueSize > 0 && (
+      {queueSize > 0 && !queueStuck && (
         <div className="action-result" style={{ background: '#1e3a5f', color: '#93c5fd', borderLeft: '3px solid #3b82f6' }}>
           {draining
             ? `${queueSize} Entwurf${queueSize > 1 ? 'e werden' : ' wird'} synchronisiert…`
             : `${queueSize} Entwurf${queueSize > 1 ? 'e' : ''} offline gespeichert – wird gesendet sobald Verbindung vorhanden.`}
+        </div>
+      )}
+      {queueStuck && (
+        <div className="action-result action-result-error">
+          {queueSize} Entwurf{queueSize > 1 ? 'e können' : ' kann'} nicht gesendet werden. Bitte App deinstallieren und neu installieren — Entwürfe danach erneut erfassen.
         </div>
       )}
 
