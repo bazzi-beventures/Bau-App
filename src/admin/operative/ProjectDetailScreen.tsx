@@ -10,9 +10,9 @@ import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../c
 import { fmtDate } from '../utils/format'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
-  DocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab,
-  ProjectFile, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval,
-  formatDateTime,
+  DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab,
+  ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval,
+  CATEGORY_LABELS, formatDateTime,
 } from './projectDetail/tabs'
 
 interface StaffMember {
@@ -77,7 +77,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // Dateien
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadCategory, setUploadCategory] = useState<ProjectFileCategory | null>(null)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const uploadDialogFileRef = useRef<HTMLInputElement>(null)
 
   // Kommentare
   const [comments, setComments] = useState<ProjectComment[]>([])
@@ -102,7 +104,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [sendingQuote, setSendingQuote] = useState(false)
 
   // Tab-Auswahl
-  type ProjectTab = 'details' | 'documents' | 'quotes' | 'reports' | 'invoices' | 'approvals'
+  type ProjectTab = 'details' | 'documents' | 'supplier' | 'quotes' | 'reports' | 'invoices' | 'approvals'
   const [activeTab, setActiveTab] = useState<ProjectTab>('details')
 
   // Bestellfreigaben
@@ -463,22 +465,33 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!project || !e.target.files?.length) return
-    const file = e.target.files[0]
+  function openUploadDialog(category: ProjectFileCategory) {
+    setUploadFile(null)
+    setUploadCategory(category)
+  }
+
+  function closeUploadDialog() {
+    setUploadCategory(null)
+    setUploadFile(null)
+    if (uploadDialogFileRef.current) uploadDialogFileRef.current.value = ''
+  }
+
+  async function handleConfirmUpload() {
+    if (!project || !uploadFile || !uploadCategory) return
     const form = new FormData()
-    form.append('file', file)
+    form.append('file', uploadFile)
+    form.append('category', uploadCategory)
     setUploading(true)
     try {
       await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form)
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[]
       setFiles(updated)
       showToast('Datei hochgeladen')
+      closeUploadDialog()
     } catch {
       setError('Fehler beim Hochladen')
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -598,6 +611,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Projekt Details</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Dokumente</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'supplier' ? 'active' : ''}`} onClick={() => setActiveTab('supplier')}>Lieferantendokumente</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => setActiveTab('quotes')}>Offerten</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>Rapporte</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>Rechnungen</button>
@@ -897,8 +911,18 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <DocumentsTab
           files={files}
           uploading={uploading}
-          fileInputRef={fileInputRef}
-          onUpload={handleUpload}
+          uploadingCategory={uploadCategory}
+          onRequestUpload={openUploadDialog}
+          onDelete={handleDeleteFile}
+        />
+      )}
+
+      {!isNew && activeTab === 'supplier' && (
+        <SupplierDocumentsTab
+          files={files}
+          uploading={uploading}
+          uploadingCategory={uploadCategory}
+          onRequestUpload={openUploadDialog}
           onDelete={handleDeleteFile}
         />
       )}
@@ -1201,6 +1225,57 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sendingQuote}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sendingQuote}>
                 {sendingQuote ? 'Wird gesendet…' : 'Offerte senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uploadCategory && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 480 }}>
+            <div className="admin-confirm-title">Hochladen zu</div>
+            <div style={{ marginTop: 10, marginBottom: 6 }}>
+              <span
+                className="admin-badge"
+                style={{
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  fontSize: 13,
+                  padding: '6px 12px',
+                  fontWeight: 600,
+                }}
+              >
+                {CATEGORY_LABELS[uploadCategory]}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Datei (PDF oder Bild) *</label>
+                <input
+                  ref={uploadDialogFileRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            </div>
+            <div className="admin-confirm-actions">
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                onClick={closeUploadDialog}
+                disabled={uploading}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-primary"
+                onClick={handleConfirmUpload}
+                disabled={uploading || !uploadFile}
+              >
+                {uploading ? 'Wird hochgeladen…' : 'Hochladen'}
               </button>
             </div>
           </div>

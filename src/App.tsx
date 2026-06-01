@@ -208,7 +208,7 @@ export default function App() {
 
   const offlineBanner = isOffline ? (
     <div style={{
-      position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', top: 'env(safe-area-inset-top, 0px)', left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 480, zIndex: 9999,
       background: '#f59e0b', color: '#1a1a1a',
       textAlign: 'center', padding: '6px 12px',
@@ -220,7 +220,9 @@ export default function App() {
 
   const authExpiredBanner = authExpiredAt !== null ? (
     <div style={{
-      position: 'fixed', top: isOffline ? 32 : 0, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed',
+      top: `calc(${isOffline ? 32 : 0}px + env(safe-area-inset-top, 0px))`,
+      left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 480, zIndex: 9999,
       background: 'var(--accent-blue, #1e3a5f)', color: '#fff',
       textAlign: 'center', padding: '8px 12px',
@@ -233,7 +235,9 @@ export default function App() {
 
   const updateBanner = swUpdateReady ? (
     <div style={{
-      position: 'fixed', bottom: 64, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed',
+      bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+      left: '50%', transform: 'translateX(-50%)',
       width: 'calc(100% - 32px)', maxWidth: 448, zIndex: 9998,
       background: '#1e3a5f', color: '#fff',
       borderRadius: 10, padding: '10px 16px',
@@ -258,7 +262,7 @@ export default function App() {
   const pushBanner = pushMsg ? (
     <div style={{
       position: 'fixed',
-      top: (isOffline ? 32 : 0) + (authExpiredAt !== null ? 40 : 0) + 8,
+      top: `calc(${(isOffline ? 32 : 0) + (authExpiredAt !== null ? 40 : 0) + 8}px + env(safe-area-inset-top, 0px))`,
       left: '50%', transform: 'translateX(-50%)',
       width: 'calc(100% - 24px)', maxWidth: 448, zIndex: 9999,
       background: 'var(--accent-blue, #1e3a5f)', color: '#fff',
@@ -362,7 +366,7 @@ export default function App() {
   } else if (screen === 'help' && user) {
     if (!user.enabled_modules?.includes('help_bot')) { setScreen('home'); return null }
     inner = (
-      <div className="app-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div className="app-screen" style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
         <HelpBot header={{ title: 'Hilfe', onBack: () => setScreen('home') }} />
       </div>
     )
@@ -384,6 +388,7 @@ export default function App() {
     inner = (
       <ChatScreen
         displayName={user.display_name}
+        user={user}
         logoUrl={logoUrl}
         activeNav="rapport"
         initialMessage={rapportInitialMessage}

@@ -4,6 +4,7 @@ import { upsertProject, updateProjectSchedule } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
 import ProjectScheduleCalendar, { shiftProjectDates } from './ProjectScheduleCalendar'
+import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 
 interface StaffLite {
   id: string
@@ -81,6 +82,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [visibleWeekIso, setVisibleWeekIso] = useState<string>('')
   const [visibleStaffIds, setVisibleStaffIds] = useState<string[] | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
 
   // Picker-State
   const [pickerSearch, setPickerSearch] = useState('')
@@ -245,6 +247,18 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const projektleiterOptions = useMemo(() => staff.filter(s => s.projektleiter), [staff])
   const monteurOptions = staff
   const staffLite = useMemo(() => staff.map(s => ({ id: s.id, name: s.name })), [staff])
+  const projektleiterFilterOptions = useMemo(
+    () => projektleiterOptions
+      .map(s => ({ id: s.id, name: s.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [projektleiterOptions],
+  )
+  const calendarProjects = useMemo(
+    () => projektleiterFilter
+      ? projects.filter(p => p.projektleiter_id === projektleiterFilter)
+      : projects,
+    [projects, projektleiterFilter],
+  )
 
   // Picker-Suche: Filter über Name + Kundenname
   const filteredProjects = useMemo(() => {
@@ -301,10 +315,15 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         <div>
           <div className="admin-page-title">Einsatzplanung</div>
           <div className="admin-page-subtitle">
-            {projects.filter(p => p.start_date).length} geplante Einsätze · {projects.filter(p => !p.start_date).length} ohne Termin
+            {calendarProjects.filter(p => p.start_date).length} geplante Einsätze · {calendarProjects.filter(p => !p.start_date).length} ohne Termin
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ProjektleiterFilter
+            options={projektleiterFilterOptions}
+            value={projektleiterFilter}
+            onChange={setProjektleiterFilter}
+          />
           <button
             className="admin-btn admin-btn-primary"
             onClick={exportSchedulePdf}
@@ -336,7 +355,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       <div className={`project-schedule-layout${panelOpen ? '' : ' panel-collapsed'}`}>
         <div className="project-schedule-calendar">
           <ProjectScheduleCalendar
-            projects={projects}
+            projects={calendarProjects}
             staff={staffLite}
             loading={loading}
             canton={canton}

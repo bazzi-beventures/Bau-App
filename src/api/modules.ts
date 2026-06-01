@@ -20,3 +20,23 @@ export function hasModule(user: UserInfo | null, name: ModuleName): boolean {
   if (!user) return false
   return user.enabled_modules?.includes(name) ?? false
 }
+
+// ─── Feature-Flags (konfigurierbare Workflow-Bausteine) ─────────────
+
+export interface KleinmaterialPromptConfig {
+  enabled: boolean
+  presets_chf: number[]
+  scope: 'per_auftrag' | 'per_position'
+}
+
+export function getFeature<T = Record<string, unknown>>(
+  user: UserInfo | null,
+  key: string,
+): T | null {
+  const cfg = user?.feature_flags?.[key]
+  return cfg ? (cfg as T) : null
+}
+
+export function isFeatureEnabled(user: UserInfo | null, key: string): boolean {
+  return !!getFeature(user, key)?.enabled
+}

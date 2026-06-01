@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
+import { UserInfo } from '../api/auth'
+import { getFeature, KleinmaterialPromptConfig } from '../api/modules'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
+import KleinmaterialPrompt from './KleinmaterialPrompt'
 
 interface Message {
   id: number
@@ -17,6 +20,7 @@ interface Message {
 
 interface Props {
   displayName: string
+  user: UserInfo
   logoUrl?: string
   activeNav: 'rapport' | 'arbeitszeit'
   initialMessage?: string | null
@@ -35,7 +39,10 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, logoUrl, activeNav, initialMessage, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+  const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
+  const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
+  const [kleinmaterialDone, setKleinmaterialDone] = useState<Set<number>>(new Set())
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -343,8 +350,27 @@ export default function ChatScreen({ displayName, logoUrl, activeNav, initialMes
           </div>
         )}
 
-        {/* Inline signature pad — shown after report is saved */}
-        {pendingSignReportId !== null && (
+        {/* Klein-/Schmiermaterial-Abfrage — vor der Unterschrift, sofern Feature aktiv */}
+        {pendingSignReportId !== null
+          && kleinmaterialEnabled
+          && kleinmaterialCfg
+          && !kleinmaterialDone.has(pendingSignReportId) && (
+          <KleinmaterialPrompt
+            reportId={pendingSignReportId}
+            config={kleinmaterialCfg}
+            onDone={() => {
+              setKleinmaterialDone(prev => {
+                const next = new Set(prev)
+                next.add(pendingSignReportId)
+                return next
+              })
+            }}
+          />
+        )}
+
+        {/* Inline signature pad — shown after report is saved (und nach Kleinmaterial-Abfrage falls aktiv) */}
+        {pendingSignReportId !== null
+          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId)) && (
           <SignaturePad
             reportId={pendingSignReportId}
             onDone={() => {

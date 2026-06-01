@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
+import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 
 export interface Kontakt {
   name: string
@@ -152,6 +153,22 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
+  const [projektleiterOptions, setProjektleiterOptions] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    apiFetch('/pwa/admin/staff')
+      .then(res => {
+        const staff = res as { id: string; name: string; projektleiter: boolean }[]
+        setProjektleiterOptions(
+          staff
+            .filter(s => s.projektleiter)
+            .map(s => ({ id: s.id, name: s.name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        )
+      })
+      .catch(() => setProjektleiterOptions([]))
+  }, [])
 
   useEffect(() => {
     if (openNew) {
@@ -167,7 +184,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   }, [search])
 
   // Filter/Suche/Sort aendern → zurueck auf Seite 1.
-  useEffect(() => { setPage(1) }, [showClosed, debouncedSearch, sortKey, sortDir])
+  useEffect(() => { setPage(1) }, [showClosed, debouncedSearch, sortKey, sortDir, projektleiterFilter])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -180,12 +197,13 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
         page_size: String(PAGE_SIZE),
       })
       if (debouncedSearch) params.set('search', debouncedSearch)
+      if (projektleiterFilter) params.set('projektleiter_id', projektleiterFilter)
       const res = await apiFetch(`/pwa/admin/projects/list?${params.toString()}`) as ProjectsListResponse
       setData(res)
     } finally {
       setLoading(false)
     }
-  }, [showClosed, debouncedSearch, sortKey, sortDir, page])
+  }, [showClosed, debouncedSearch, sortKey, sortDir, page, projektleiterFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -239,6 +257,11 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
             placeholder="Projekt-ID, Name oder Kunde suchen…"
             value={search}
             onChange={e => setSearch(e.target.value)}
+          />
+          <ProjektleiterFilter
+            options={projektleiterOptions}
+            value={projektleiterFilter}
+            onChange={setProjektleiterFilter}
           />
         </div>
 

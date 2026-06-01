@@ -463,7 +463,7 @@ export default function CustomersScreen() {
   })
 
   return (
-    <div className="admin-page">
+    <div className="admin-page admin-page-wide">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Kundenstamm</div>

@@ -4,13 +4,32 @@ import { fmtCHF, fmtDate } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 
+export type ProjectFileCategory =
+  | 'fotos'
+  | 'masse'
+  | 'sonstiges'
+  | 'bestellungen'
+  | 'auftragsbestaetigung'
+
 export interface ProjectFile {
   id: string
   filename: string
   file_url: string | null
   mime_type: string | null
+  category: ProjectFileCategory | null
   created_at: string
 }
+
+const PROJECT_DOC_SECTIONS: { key: ProjectFileCategory; title: string; legacyFallback?: boolean }[] = [
+  { key: 'fotos', title: 'Fotos' },
+  { key: 'masse', title: 'Masse' },
+  { key: 'sonstiges', title: 'Sonstiges', legacyFallback: true },
+]
+
+const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
+  { key: 'bestellungen', title: 'Bestellungen' },
+  { key: 'auftragsbestaetigung', title: 'Auftragsbestätigung' },
+]
 
 export interface ProjectQuote {
   id: number
@@ -101,61 +120,134 @@ export function formatDateTime(iso: string): string {
 
 // ─── Documents Tab ─────────────────────────────────────────────
 
-interface DocumentsTabProps {
+export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
+  fotos: 'Fotos',
+  masse: 'Masse',
+  sonstiges: 'Sonstiges',
+  bestellungen: 'Bestellungen',
+  auftragsbestaetigung: 'Auftragsbestätigung',
+}
+
+interface FileSectionsProps {
   files: ProjectFile[]
+  sections: { key: ProjectFileCategory; title: string; legacyFallback?: boolean }[]
   uploading: boolean
-  fileInputRef: React.RefObject<HTMLInputElement>
-  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  uploadingCategory: ProjectFileCategory | null
+  onRequestUpload: (category: ProjectFileCategory) => void
   onDelete: (fileId: string) => void
 }
 
-export function DocumentsTab({ files, uploading, fileInputRef, onUpload, onDelete }: DocumentsTabProps) {
+function FileSections({ files, sections, uploading, uploadingCategory, onRequestUpload, onDelete }: FileSectionsProps) {
+  const allowedKeys = new Set(sections.map(s => s.key))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {sections.map(section => {
+        const items = files.filter(f => {
+          if (f.category === section.key) return true
+          if (section.legacyFallback && (f.category == null || !allowedKeys.has(f.category))) return true
+          return false
+        })
+        const isUploadingHere = uploading && uploadingCategory === section.key
+        return (
+          <div key={section.key}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--muted)',
+                padding: '6px 10px',
+                background: 'var(--surface-2)',
+                borderLeft: '3px solid var(--primary)',
+                borderRadius: 4,
+                marginBottom: 8,
+              }}
+            >
+              <span>{section.title}</span>
+              <span style={{ color: 'var(--muted)', fontWeight: 500 }}>· {items.length}</span>
+              <button
+                type="button"
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+                style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0 }}
+                disabled={uploading}
+                onClick={() => onRequestUpload(section.key)}
+              >
+                {isUploadingHere ? 'Wird hochgeladen…' : '+ Hochladen'}
+              </button>
+            </div>
+            {items.length === 0 ? (
+              <div style={{ color: 'var(--muted)', fontSize: 12, padding: '4px 12px' }}>—</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {items.map(f => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {f.file_url
+                        ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
+                        : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
+                      }
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-sm admin-btn-danger"
+                      onClick={() => onDelete(f.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+interface DocumentsTabProps {
+  files: ProjectFile[]
+  uploading: boolean
+  uploadingCategory: ProjectFileCategory | null
+  onRequestUpload: (category: ProjectFileCategory) => void
+  onDelete: (fileId: string) => void
+}
+
+export function DocumentsTab({ files, uploading, uploadingCategory, onRequestUpload, onDelete }: DocumentsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div className="admin-section-title" style={{ margin: 0 }}>Dokumente & Fotos</div>
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,application/pdf"
-            style={{ display: 'none' }}
-            onChange={onUpload}
-          />
-          <button
-            type="button"
-            className="admin-btn admin-btn-sm admin-btn-secondary"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? 'Wird hochgeladen…' : '+ Datei hochladen'}
-          </button>
-        </div>
-      </div>
-      {files.length === 0 && (
-        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Dateien hochgeladen.</div>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {files.map(f => (
-          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {f.file_url
-                ? <a href={f.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
-                : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
-              }
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
-            </div>
-            <button
-              type="button"
-              className="admin-btn admin-btn-sm admin-btn-danger"
-              onClick={() => onDelete(f.id)}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
+      <div className="admin-section-title" style={{ marginBottom: 14 }}>Dokumente & Fotos</div>
+      <FileSections
+        files={files}
+        sections={PROJECT_DOC_SECTIONS}
+        uploading={uploading}
+        uploadingCategory={uploadingCategory}
+        onRequestUpload={onRequestUpload}
+        onDelete={onDelete}
+      />
+    </div>
+  )
+}
+
+export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onRequestUpload, onDelete }: DocumentsTabProps) {
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24 }}>
+      <div className="admin-section-title" style={{ marginBottom: 14 }}>Lieferantendokumente</div>
+      <FileSections
+        files={files}
+        sections={SUPPLIER_DOC_SECTIONS}
+        uploading={uploading}
+        uploadingCategory={uploadingCategory}
+        onRequestUpload={onRequestUpload}
+        onDelete={onDelete}
+      />
     </div>
   )
 }

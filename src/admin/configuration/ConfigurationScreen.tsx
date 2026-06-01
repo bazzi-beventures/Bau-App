@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
-import { getTenantModules, updateTenantModules, TenantModulesResponse } from '../../api/admin'
+import {
+  getTenantModules, updateTenantModules, TenantModulesResponse,
+  getTenantFeatures, updateTenantFeature,
+  TenantFeaturesResponse, FeatureRegistryEntry, FeatureFieldSchema,
+} from '../../api/admin'
 
 // Modul-Kategorien für die gruppierte Darstellung im Module-Tab.
 // 'notifications' wird zusätzlich nach Kanal (Mail/Push) unterteilt.
@@ -79,7 +83,7 @@ interface ConfigProps {
 
 export default function ConfigurationScreen({ userRole }: ConfigProps) {
   const isSuperadmin = userRole === 'superadmin'
-  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications'>('weekly-plan')
+  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows'>('weekly-plan')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -125,12 +129,21 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
             Benachrichtigungen
           </button>
         )}
+        {isSuperadmin && (
+          <button
+            className={`admin-btn ${tab === 'workflows' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setTab('workflows')}
+          >
+            Workflows
+          </button>
+        )}
       </div>
 
       {tab === 'weekly-plan' && <WeeklyPlanTab onToast={showToast} />}
       {tab === 'year-end' && <YearEndTab onToast={showToast} />}
       {tab === 'modules' && isSuperadmin && <ModulesTab onToast={showToast} view="modules" />}
       {tab === 'notifications' && isSuperadmin && <ModulesTab onToast={showToast} view="notifications" />}
+      {tab === 'workflows' && isSuperadmin && <WorkflowsTab onToast={showToast} />}
 
       {toast && (
         <div className="admin-toast-container">
@@ -714,4 +727,274 @@ function setEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false
   for (const v of a) if (!b.has(v)) return false
   return true
+}
+
+// ─── Workflows-Tab: konfigurierbare Feature-Flags pro Tenant ─────────────────
+
+function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [data, setData] = useState<TenantFeaturesResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [draft, setDraft] = useState<Record<string, Record<string, unknown>>>({})
+  const [savingKey, setSavingKey] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const result = await getTenantFeatures()
+      setData(result)
+      setDraft({ ...result.effective })
+    } catch {
+      onToast('Laden fehlgeschlagen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  if (loading || !data) {
+    return <div className="admin-loading"><div className="admin-spinner" /> Workflows werden geladen…</div>
+  }
+
+  function setField(featureKey: string, fieldKey: string, value: unknown) {
+    setDraft(prev => ({
+      ...prev,
+      [featureKey]: { ...(prev[featureKey] ?? {}), [fieldKey]: value },
+    }))
+  }
+
+  function isDirty(featureKey: string): boolean {
+    const eff = data?.effective[featureKey] ?? {}
+    const d = draft[featureKey] ?? {}
+    const keys = new Set([...Object.keys(eff), ...Object.keys(d)])
+    for (const k of keys) {
+      if (JSON.stringify(eff[k]) !== JSON.stringify(d[k])) return true
+    }
+    return false
+  }
+
+  async function save(entry: FeatureRegistryEntry) {
+    const value = draft[entry.key]
+    setSavingKey(entry.key)
+    try {
+      const res = await updateTenantFeature(entry.key, value)
+      setData(prev => prev ? {
+        ...prev,
+        overrides: { ...prev.overrides, [entry.key]: value },
+        effective: { ...prev.effective, [entry.key]: res.effective },
+      } : prev)
+      setDraft(prev => ({ ...prev, [entry.key]: res.effective }))
+      onToast(`${entry.label} gespeichert`, 'success')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Speichern fehlgeschlagen'
+      onToast(msg, 'error')
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  function reset(featureKey: string) {
+    setDraft(prev => ({ ...prev, [featureKey]: { ...(data?.effective[featureKey] ?? {}) } }))
+  }
+
+  // gruppiere Einträge nach category in der Reihenfolge data.categories
+  const byCategory = new Map<string, FeatureRegistryEntry[]>()
+  for (const cat of data.categories) byCategory.set(cat, [])
+  for (const entry of data.registry) {
+    if (!byCategory.has(entry.category)) byCategory.set(entry.category, [])
+    byCategory.get(entry.category)!.push(entry)
+  }
+
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24, maxWidth: 880 }}>
+      <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+        Konfigurierbare Workflow-Bausteine pro Mandant. Module sind binär (an/aus) — Workflows
+        haben zusätzlich Parameter (z. B. Pauschalbeträge, Erfassungs-Scope).
+        Jeder Eintrag wird einzeln gespeichert.
+      </div>
+
+      {Array.from(byCategory.entries()).map(([cat, entries]) => {
+        if (entries.length === 0) return null
+        return (
+          <div key={cat} style={{ marginBottom: 24 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+              textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
+            }}>
+              {cat}
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {entries.map(entry => {
+                const current = draft[entry.key] ?? {}
+                const enabled = !!current.enabled
+                const dirty = isDirty(entry.key)
+                return (
+                  <div
+                    key={entry.key}
+                    style={{
+                      padding: 16, borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      background: enabled ? 'rgba(34,197,94,0.06)' : 'transparent',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>
+                          {entry.label}{' '}
+                          <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--muted)' }}>
+                            ({entry.key})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+                          {entry.description}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {entry.schema.map(field => (
+                        <FeatureField
+                          key={field.key}
+                          field={field}
+                          value={current[field.key]}
+                          onChange={v => setField(entry.key, field.key, v)}
+                          disabled={field.key !== 'enabled' && !enabled}
+                        />
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <button
+                        className="admin-btn admin-btn-primary"
+                        onClick={() => save(entry)}
+                        disabled={!dirty || savingKey === entry.key}
+                        style={{ fontSize: 12 }}
+                      >
+                        {savingKey === entry.key ? 'Speichern…' : 'Speichern'}
+                      </button>
+                      <button
+                        className="admin-btn admin-btn-secondary"
+                        onClick={() => reset(entry.key)}
+                        disabled={!dirty || savingKey === entry.key}
+                        style={{ fontSize: 12 }}
+                      >
+                        Verwerfen
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FeatureField({
+  field, value, onChange, disabled,
+}: {
+  field: FeatureFieldSchema
+  value: unknown
+  onChange: (v: unknown) => void
+  disabled?: boolean
+}) {
+  if (field.type === 'bool') {
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={e => onChange(e.target.checked)}
+        />
+        <span>{field.label}</span>
+      </label>
+    )
+  }
+  if (field.type === 'number') {
+    return (
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label className="admin-form-label">{field.label}</label>
+        <input
+          type="number"
+          className="admin-form-input"
+          value={typeof value === 'number' ? value : ''}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+          disabled={disabled}
+          onChange={e => onChange(parseFloat(e.target.value) || 0)}
+          style={{ width: 160 }}
+        />
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
+    )
+  }
+  if (field.type === 'select') {
+    return (
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label className="admin-form-label">{field.label}</label>
+        <select
+          className="admin-form-input"
+          value={typeof value === 'string' ? value : ''}
+          disabled={disabled}
+          onChange={e => onChange(e.target.value)}
+        >
+          {(field.options ?? []).map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
+    )
+  }
+  if (field.type === 'number_list') {
+    const arr = Array.isArray(value) ? (value as number[]) : []
+    return (
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label className="admin-form-label">{field.label}</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {arr.map((n, i) => (
+            <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                type="number"
+                className="admin-form-input"
+                value={n}
+                min={field.min}
+                max={field.max}
+                disabled={disabled}
+                onChange={e => {
+                  const next = [...arr]
+                  next[i] = parseFloat(e.target.value) || 0
+                  onChange(next)
+                }}
+                style={{ width: 90 }}
+              />
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                disabled={disabled}
+                onClick={() => onChange(arr.filter((_, j) => j !== i))}
+                style={{ fontSize: 11, padding: '2px 6px' }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            disabled={disabled}
+            onClick={() => onChange([...arr, field.min ?? 0])}
+            style={{ fontSize: 11, padding: '4px 10px' }}
+          >
+            + Wert
+          </button>
+        </div>
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
+    )
+  }
+  return null
 }

@@ -5,6 +5,7 @@ import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct 
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
+import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
 
 interface Quote {
@@ -17,6 +18,12 @@ interface Quote {
   pdf_url: string | null
   xlsx_url: string | null
   reminder_sent_at: string | null
+  projektleiter_id: string | null
+}
+
+interface ProjektleiterOption {
+  id: string
+  name: string
 }
 
 interface Project {
@@ -709,6 +716,8 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     if (initialStatus && onConsumed) onConsumed()
   }, [])
   const [search, setSearch] = useState('')
+  const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
+  const [projektleiterOptions, setProjektleiterOptions] = useState<ProjektleiterOption[]>([])
   const [acting, setActing] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -728,6 +737,20 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    apiFetch('/pwa/admin/staff')
+      .then(res => {
+        const staff = res as { id: string; name: string; projektleiter: boolean }[]
+        setProjektleiterOptions(
+          staff
+            .filter(s => s.projektleiter)
+            .map(s => ({ id: s.id, name: s.name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        )
+      })
+      .catch(() => setProjektleiterOptions([]))
+  }, [])
 
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
@@ -783,7 +806,8 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     const matchStatus = statusFilters.has(q.status)
     const matchSearch = q.project_name.toLowerCase().includes(search.toLowerCase()) ||
       q.quote_number.toLowerCase().includes(search.toLowerCase())
-    return matchStatus && matchSearch
+    const matchPl = !projektleiterFilter || q.projektleiter_id === projektleiterFilter
+    return matchStatus && matchSearch && matchPl
   })
 
   if (showCreate) {
@@ -828,6 +852,11 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
             placeholder="Projekt oder Offerten-Nr. suchen…"
             value={search}
             onChange={e => setSearch(e.target.value)}
+          />
+          <ProjektleiterFilter
+            options={projektleiterOptions}
+            value={projektleiterFilter}
+            onChange={setProjektleiterFilter}
           />
           <StatusFilterPopover
             allStatuses={ALL_STATUSES}

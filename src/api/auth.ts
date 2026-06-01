@@ -12,6 +12,7 @@ export interface UserInfo {
   consent_version: string | null
   consent_required: boolean
   enabled_modules: string[]
+  feature_flags?: Record<string, Record<string, unknown>>
 }
 
 export async function lookupUser(tenantSlug: string, displayName: string): Promise<{ authorized_user_id: string; display_name: string }> {

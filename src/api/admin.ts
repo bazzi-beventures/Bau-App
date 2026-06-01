@@ -369,3 +369,48 @@ export async function updateTenantModules(modules: string[]): Promise<{ enabled_
     body: JSON.stringify({ enabled_modules: modules }),
   }) as Promise<{ enabled_modules: string[] }>
 }
+
+// ─── Tenant Feature-Flags (Workflows) ───────────────────────
+
+export type FeatureFieldType = 'bool' | 'number' | 'select' | 'number_list'
+
+export interface FeatureFieldSchema {
+  key: string
+  label: string
+  type: FeatureFieldType
+  help?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label: string }[]
+}
+
+export interface FeatureRegistryEntry {
+  key: string
+  label: string
+  description: string
+  category: string
+  default: Record<string, unknown>
+  schema: FeatureFieldSchema[]
+}
+
+export interface TenantFeaturesResponse {
+  registry: FeatureRegistryEntry[]
+  categories: string[]
+  overrides: Record<string, Record<string, unknown>>
+  effective: Record<string, Record<string, unknown>>
+}
+
+export async function getTenantFeatures(): Promise<TenantFeaturesResponse> {
+  return apiFetch('/pwa/admin/tenant/features') as Promise<TenantFeaturesResponse>
+}
+
+export async function updateTenantFeature(
+  featureKey: string,
+  value: Record<string, unknown>,
+): Promise<{ feature_key: string; effective: Record<string, unknown> }> {
+  return apiFetch('/pwa/admin/tenant/features', {
+    method: 'PATCH',
+    body: JSON.stringify({ feature_key: featureKey, value }),
+  }) as Promise<{ feature_key: string; effective: Record<string, unknown> }>
+}

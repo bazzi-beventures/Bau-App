@@ -4,8 +4,8 @@
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  width: 100vw;
-  max-width: 100vw;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   background: var(--bg, #0d2233);
 }
@@ -197,7 +197,7 @@
   border-top: 1px solid #1c3e60;
   z-index: 61;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  max-height: 70vh;
+  max-height: 70dvh;
   display: flex;
   flex-direction: column;
   animation: adminMobileDrawerUp 0.22s ease;
@@ -381,8 +381,37 @@
     display: none;
   }
 
+  /* Mobile-Topbar traegt schon den Screen-Titel. Den .admin-page-title
+     deshalb verkleinern (Detail-Screens wie StaffDetail brauchen ihn
+     fuer den Entity-Namen, deshalb nicht ganz ausblenden). */
+  .admin-page-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .admin-page-header {
+    margin-bottom: var(--s-3);
+  }
+  .admin-page {
+    padding: var(--s-4);
+  }
+
+  /* Bottom-Tab-Labels: 10px ist auf schmalen iPhones (375px) zu gross,
+     "Korrekturen"/"Dashboard" werden abgeschnitten. */
+  .admin-mobile-tab-label {
+    font-size: 9px;
+    letter-spacing: -0.01em;
+  }
+
   .admin-table-wrap {
     overflow-x: auto;
+  }
+
+  /* Sticky-Thead, damit Spaltenkoepfe beim Scrollen einer langen
+     Tabelle sichtbar bleiben. */
+  .admin-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
 
   /* ─── Absence Calendar mobile fixes ─────────────────────── */
