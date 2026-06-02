@@ -31,6 +31,14 @@ const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'auftragsbestaetigung', title: 'Auftragsbestätigung' },
 ]
 
+// Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der
+// "Sonstiges"-Sektion darf NUR echte Altlasten (null / unbekannte Kategorie)
+// auffangen – sonst würden Lieferanten-Dateien (z.B. auftragsbestaetigung)
+// zusätzlich unter "Sonstiges" doppelt erscheinen.
+const ALL_CATEGORY_KEYS = new Set<ProjectFileCategory>(
+  [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS].map(s => s.key),
+)
+
 export interface ProjectQuote {
   id: number
   parent_id: number | null
@@ -138,14 +146,15 @@ interface FileSectionsProps {
 }
 
 function FileSections({ files, sections, uploading, uploadingCategory, onRequestUpload, onDelete }: FileSectionsProps) {
-  const allowedKeys = new Set(sections.map(s => s.key))
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {sections.map(section => {
         const items = files.filter(f => {
           if (f.category === section.key) return true
-          if (section.legacyFallback && (f.category == null || !allowedKeys.has(f.category))) return true
+          // Fallback nur für echte Altlasten: null oder eine Kategorie, die in
+          // KEINEM Tab vorkommt. Bekannte Fremd-Kategorien (z.B. auftragsbestaetigung)
+          // bleiben in ihrer eigenen Sektion und tauchen hier nicht auf.
+          if (section.legacyFallback && (f.category == null || !ALL_CATEGORY_KEYS.has(f.category))) return true
           return false
         })
         const isUploadingHere = uploading && uploadingCategory === section.key

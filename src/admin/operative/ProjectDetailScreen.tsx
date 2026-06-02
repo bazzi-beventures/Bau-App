@@ -80,6 +80,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [uploadCategory, setUploadCategory] = useState<ProjectFileCategory | null>(null)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const uploadDialogFileRef = useRef<HTMLInputElement>(null)
+  const [confirmDeleteFileId, setConfirmDeleteFileId] = useState<string | null>(null)
+  const [deletingFile, setDeletingFile] = useState(false)
 
   // Kommentare
   const [comments, setComments] = useState<ProjectComment[]>([])
@@ -495,13 +497,17 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
-  async function handleDeleteFile(fileId: string) {
-    if (!project) return
+  async function handleDeleteFile() {
+    if (!project || !confirmDeleteFileId) return
+    setDeletingFile(true)
     try {
-      await apiFetch(`/pwa/admin/projects/${project.id}/files/${fileId}`, { method: 'DELETE' })
-      setFiles(prev => prev.filter(f => f.id !== fileId))
+      await apiFetch(`/pwa/admin/projects/${project.id}/files/${confirmDeleteFileId}`, { method: 'DELETE' })
+      setFiles(prev => prev.filter(f => f.id !== confirmDeleteFileId))
+      setConfirmDeleteFileId(null)
     } catch {
       setError('Fehler beim Löschen')
+    } finally {
+      setDeletingFile(false)
     }
   }
 
@@ -913,7 +919,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           uploading={uploading}
           uploadingCategory={uploadCategory}
           onRequestUpload={openUploadDialog}
-          onDelete={handleDeleteFile}
+          onDelete={setConfirmDeleteFileId}
         />
       )}
 
@@ -923,7 +929,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           uploading={uploading}
           uploadingCategory={uploadCategory}
           onRequestUpload={openUploadDialog}
-          onDelete={handleDeleteFile}
+          onDelete={setConfirmDeleteFileId}
         />
       )}
 
@@ -1131,6 +1137,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </button>
           </div>
         </div>
+      )}
+
+      {confirmDeleteFileId && (
+        <ConfirmDialog
+          title="Dokument löschen?"
+          message={<>«{files.find(f => f.id === confirmDeleteFileId)?.filename ?? 'Diese Datei'}» wird dauerhaft entfernt.</>}
+          confirmLabel="Ja, löschen"
+          busyLabel="Löschen…"
+          busy={deletingFile}
+          variant="danger"
+          onCancel={() => setConfirmDeleteFileId(null)}
+          onConfirm={handleDeleteFile}
+        />
       )}
 
       {confirmDeleteCommentId && (
