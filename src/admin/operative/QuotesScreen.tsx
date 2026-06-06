@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
-import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct } from './PdfExtractionReviewModal'
+import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct, ConfirmedPosition } from './PdfExtractionReviewModal'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
+import { getMe } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 
 interface Quote {
   id: number
@@ -65,6 +67,7 @@ interface QuoteDetail {
   extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   extra_charge_items: { description: string; total_price: number }[]
   installation_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  special_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   labor_discount_pct: number
   material_discount_pct: number
   notes: string | null
@@ -91,10 +94,34 @@ interface ExtraProductRow {
   margin_factor?: number
   supplier_id?: string | null
   category?: string | null
+  positions?: ConfirmedPosition[]  // Stobag: Auswahl-Breakdown der Produktzeile (Metadaten)
 }
 interface ExtraChargeRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
 interface InstallationTemplate { id: string; label: string; default_fee: number; notes: string | null }
+type SpecialMode = 'pauschal' | 'stunden'
+interface SpecialPositionTemplate { id: string; label: string; pricing_mode: SpecialMode; default_fee: number; default_hours: number | null; notes: string | null }
+// Sonderpositionen (Demontage/Entsorgung): pauschal → unit_price = Fixbetrag;
+// stunden → unit_price = Stundenansatz, hours = Stundenzahl.
+interface SpecialRow { description: string; mode: SpecialMode; unit_price: string; hours: string }
+
+// Baut aus einer SpecialRow die Backend-Position {description, quantity, unit, unit_price, total_price}.
+function buildSpecialItem(r: SpecialRow) {
+  if (r.mode === 'stunden') {
+    const h = parseNum(r.hours)
+    const rate = parseNum(r.unit_price)
+    return { description: r.description, quantity: h, unit: 'h', unit_price: rate, total_price: round2(h * rate) }
+  }
+  const p = parseNum(r.unit_price)
+  return { description: r.description, quantity: 1, unit: 'Pau', unit_price: p, total_price: p }
+}
+
+function specialRowValid(r: SpecialRow): boolean {
+  if (!r.description) return false
+  return r.mode === 'stunden'
+    ? parseNum(r.hours) > 0 && parseNum(r.unit_price) > 0
+    : parseNum(r.unit_price) > 0
+}
 
 const STATUS_LABELS = QUOTE_STATUS_LABELS
 const STATUS_BADGE = QUOTE_STATUS_BADGE
@@ -117,6 +144,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [includeTravelCost, setIncludeTravelCost] = useState(true)
   const [installationRows, setInstallationRows] = useState<InstallationRow[]>([])
   const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
+  const [specialEnabled, setSpecialEnabled] = useState(false)
+  const [specialTemplates, setSpecialTemplates] = useState<SpecialPositionTemplate[]>([])
+  const [specialRows, setSpecialRows] = useState<SpecialRow[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
   const [notes, setNotes] = useState('')
@@ -138,6 +168,14 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       setMaterials(m)
       setInstallationTemplates(t)
     })
+    // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
+    getMe().then(me => {
+      if (!isFeatureEnabled(me, 'sonderpositionen')) return
+      setSpecialEnabled(true)
+      apiFetch('/pwa/admin/special-position-templates')
+        .then(t => setSpecialTemplates(t as SpecialPositionTemplate[]))
+        .catch(() => {})
+    }).catch(() => {})
   }, [])
 
   // ── Labor helpers ──
@@ -169,6 +207,20 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     setInstallationRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
   }
   function removeInstallation(i: number) { setInstallationRows(r => r.filter((_, j) => j !== i)) }
+
+  // ── Special position helpers ──
+  function addSpecialFromTemplate(tpl: SpecialPositionTemplate) {
+    setSpecialRows(r => [...r, {
+      description: tpl.label,
+      mode: tpl.pricing_mode,
+      unit_price: String(tpl.default_fee),
+      hours: tpl.default_hours != null ? String(tpl.default_hours) : '',
+    }])
+  }
+  function updateSpecial(i: number, patch: Partial<SpecialRow>) {
+    setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
+  }
+  function removeSpecial(i: number) { setSpecialRows(r => r.filter((_, j) => j !== i)) }
 
   // ── PDF Upload ──
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -203,6 +255,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       margin_factor: c.margin_factor,
       supplier_id: c.supplier_id,
       category: c.category,
+      positions: c.positions,
     }))
     setExtraProducts(prev => [...prev, ...rows])
     setPdfReview(null)
@@ -218,7 +271,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     const selectedProject = projects.find(p => p.name === projectName)
     const projectDistanceKm = selectedProject?.distance_km ?? null
     const hasTravel = includeTravelCost && projectDistanceKm !== null
-    if (!hasLabor && !hasMaterial && !hasExtra && !hasCharge && !hasTravel) {
+    const hasSpecial = specialRows.some(specialRowValid)
+    if (!hasLabor && !hasMaterial && !hasExtra && !hasCharge && !hasTravel && !hasSpecial) {
       setError('Mindestens eine Position erforderlich')
       return
     }
@@ -253,6 +307,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           if (r.margin_factor !== undefined) item.margin_factor = r.margin_factor
           if (r.supplier_id) item.supplier_id = r.supplier_id
           if (r.category) item.category = r.category
+          if (r.positions) item.positions = r.positions
           return item
         }),
         extra_charge_items: extraCharges.filter(r => r.description && parseNum(r.total_price) > 0).map(r => ({
@@ -266,6 +321,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           unit_price: parseNum(r.unit_price),
           total_price: parseNum(r.unit_price),
         })),
+        special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
@@ -454,6 +510,39 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         </div>
       </fieldset>
 
+      {/* Sonderpositionen (Demontage / Entsorgung) — tenant-spezifisch via Feature-Flag */}
+      {specialEnabled && (
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderpositionen</legend>
+          {specialRows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={e => updateSpecial(i, { description: e.target.value })} />
+              <select className="admin-form-select" style={{ flex: 1, minWidth: 120 }} value={row.mode} onChange={e => updateSpecial(i, { mode: e.target.value as SpecialMode })}>
+                <option value="pauschal">Pauschale</option>
+                <option value="stunden">Stundenansatz</option>
+              </select>
+              {row.mode === 'stunden' ? (
+                <>
+                  <input className="admin-form-input" style={{ flex: 1, minWidth: 70 }} placeholder="Stunden" value={row.hours} onChange={e => updateSpecial(i, { hours: e.target.value })} />
+                  <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="CHF/h" value={row.unit_price} onChange={e => updateSpecial(i, { unit_price: e.target.value })} />
+                </>
+              ) : (
+                <input className="admin-form-input" style={{ flex: 1, minWidth: 90 }} placeholder="Betrag CHF" value={row.unit_price} onChange={e => updateSpecial(i, { unit_price: e.target.value })} />
+              )}
+              <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeSpecial(i)} title="Entfernen">✕</button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {specialTemplates.map(tpl => (
+              <button key={tpl.id} className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => addSpecialFromTemplate(tpl)} title={tpl.notes ?? undefined}>
+                + {tpl.label} ({tpl.pricing_mode === 'stunden' ? `CHF ${tpl.default_fee}/h` : `CHF ${tpl.default_fee}`})
+              </button>
+            ))}
+            <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setSpecialRows(r => [...r, { description: '', mode: 'pauschal', unit_price: '', hours: '' }])}>+ Manuell</button>
+          </div>
+        </fieldset>
+      )}
+
       <DiscountsFieldset
         laborDiscount={laborDiscount}
         materialDiscount={materialDiscount}
@@ -508,6 +597,16 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
     quote.installation_items.map(i => ({ description: i.description, unit_price: String(i.unit_price) }))
   )
   const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
+  const [specialEnabled, setSpecialEnabled] = useState(false)
+  const [specialTemplates, setSpecialTemplates] = useState<SpecialPositionTemplate[]>([])
+  const [specialRows, setSpecialRows] = useState<SpecialRow[]>(() =>
+    (quote.special_items || []).map(i => ({
+      description: i.description,
+      mode: i.unit === 'h' ? 'stunden' : 'pauschal',
+      unit_price: String(i.unit_price),
+      hours: i.unit === 'h' ? String(i.quantity) : '',
+    }))
+  )
   const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
   const [notes, setNotes] = useState(quote.notes || '')
@@ -519,6 +618,14 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
       apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>,
       apiFetch('/pwa/admin/installation-templates') as Promise<InstallationTemplate[]>,
     ]).then(([r, t]) => { setRoles(r); setInstallationTemplates(t) })
+    // Sonderpositionen-Sektion nur wenn Feature für den Tenant aktiv.
+    getMe().then(me => {
+      if (!isFeatureEnabled(me, 'sonderpositionen')) return
+      setSpecialEnabled(true)
+      apiFetch('/pwa/admin/special-position-templates')
+        .then(t => setSpecialTemplates(t as SpecialPositionTemplate[]))
+        .catch(() => {})
+    }).catch(() => {})
   }, [])
 
   async function handleSave() {
@@ -544,6 +651,7 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
         installation_items: installationRows
           .filter(r => r.description && parseNum(r.unit_price) > 0)
           .map(r => ({ description: r.description, quantity: 1, unit: 'Pau', unit_price: parseNum(r.unit_price), total_price: parseNum(r.unit_price) })),
+        special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
@@ -671,6 +779,50 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setInstallationRows(r => [...r, { description: '', unit_price: '' }])}>+ Manuell</button>
         </div>
       </fieldset>
+
+      {/* Sonderpositionen (Demontage / Entsorgung) — rendert wenn Feature aktiv oder bereits Positionen vorhanden */}
+      {(specialEnabled || specialRows.length > 0) && (
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderpositionen</legend>
+          {specialRows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
+                onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+              <select className="admin-form-select" style={{ flex: 1, minWidth: 120 }} value={row.mode}
+                onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, mode: e.target.value as SpecialMode } : r))}>
+                <option value="pauschal">Pauschale</option>
+                <option value="stunden">Stundenansatz</option>
+              </select>
+              {row.mode === 'stunden' ? (
+                <>
+                  <input className="admin-form-input" style={{ flex: 1, minWidth: 70 }} placeholder="Stunden" value={row.hours}
+                    onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, hours: e.target.value } : r))} />
+                  <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="CHF/h" value={row.unit_price}
+                    onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+                </>
+              ) : (
+                <input className="admin-form-input" style={{ flex: 1, minWidth: 90 }} placeholder="Betrag CHF" value={row.unit_price}
+                  onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+              )}
+              <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setSpecialRows(r => r.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {specialTemplates.map(tpl => (
+              <button key={tpl.id} className="admin-btn admin-btn-secondary admin-btn-sm" title={tpl.notes ?? undefined}
+                onClick={() => setSpecialRows(r => [...r, {
+                  description: tpl.label,
+                  mode: tpl.pricing_mode,
+                  unit_price: String(tpl.default_fee),
+                  hours: tpl.default_hours != null ? String(tpl.default_hours) : '',
+                }])}>
+                + {tpl.label} ({tpl.pricing_mode === 'stunden' ? `CHF ${tpl.default_fee}/h` : `CHF ${tpl.default_fee}`})
+              </button>
+            ))}
+            <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setSpecialRows(r => [...r, { description: '', mode: 'pauschal', unit_price: '', hours: '' }])}>+ Manuell</button>
+          </div>
+        </fieldset>
+      )}
 
       <DiscountsFieldset
         laborDiscount={laborDiscount}

@@ -46,6 +46,7 @@ export interface TenantInfo {
   brand_color: string
   brand_color_dark: string
   logo_url: string
+  logo_url_dark: string
   canton: string
 }
 

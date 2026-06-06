@@ -68,7 +68,8 @@
 }
 
 :root[data-theme="light"] .admin-content-logo {
-  filter: brightness(0) saturate(100%) invert(44%) sepia(47%) saturate(720%) hue-rotate(168deg) brightness(88%) contrast(88%);
+  /* Kein Recolor-Filter — Tenant-Logo ist Vollfarb mit eigenem Hintergrund,
+     sonst wird die ganze Box einfarbig eingefärbt. Siehe .header-logo. */
   opacity: 1;
 }
 

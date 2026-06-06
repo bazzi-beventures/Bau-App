@@ -239,7 +239,9 @@ input, textarea { font-family: var(--font); color: var(--text); }
 }
 
 :root[data-theme="light"] .header-logo {
-  filter: brightness(0) saturate(100%) invert(44%) sepia(47%) saturate(720%) hue-rotate(168deg) brightness(88%) contrast(88%);
+  /* Kein Recolor-Filter: Tenant-Logos sind Vollfarb-Grafiken mit eigenem
+     Hintergrund. brightness(0)+hue-rotate würde die ganze Logo-Box (inkl.
+     Hintergrund) zu einem einfarbigen Block einfärben. Echtes Logo zeigen. */
   opacity: 1;
 }
 

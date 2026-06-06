@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getMe, getTenantInfo, TenantInfo, UserInfo } from './api/auth'
-import { ApiError, resetSessionExpiredFlag } from './api/client'
+import { ApiError, apiUrl, resetSessionExpiredFlag } from './api/client'
 import { SK } from './api/storageKeys'
 import PinScreen from './auth/PinScreen'
 import LoginScreen from './auth/LoginScreen'
@@ -15,7 +15,7 @@ import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import HelpBot from './shared/HelpBot'
-import { applyTheme, loadTheme } from './theme'
+import { applyTheme, loadTheme, useTheme } from './theme'
 
 type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'projektEntwurf' | 'admin' | 'absenzen' | 'help'
 
@@ -77,6 +77,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [user, setUser] = useState<UserInfo | null>(null)
   const [logoUrl, setLogoUrl] = useState('')
+  const [logoUrlDark, setLogoUrlDark] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
@@ -86,6 +87,10 @@ export default function App() {
   const [pushMsg, setPushMsg] = useState<{ title: string; body: string } | null>(null)
   const [authExpiredAt, setAuthExpiredAt] = useState<number | null>(null)
   const screenRef = useRef(screen)
+  const theme = useTheme()
+  // Im Dark-Theme die weiße Logo-Variante nutzen, falls vorhanden — sonst das
+  // helle Standard-Logo. Reagiert über useTheme() automatisch auf Toggles.
+  const effectiveLogo = theme === 'dark' && logoUrlDark ? logoUrlDark : logoUrl
 
   useEffect(() => {
     applyTheme(loadTheme())
@@ -183,7 +188,11 @@ export default function App() {
     try {
       const info = await getTenantInfo(slug)
       applyTenantBranding(info)
-      setLogoUrl(info.logo_url)
+      // logo_url ist ein relativer Proxy-Pfad (/pwa/tenant-logo?...). Das Backend
+      // liegt auf anderer Origin als die PWA → absolut machen, damit <img src>
+      // aufs Backend zeigt und nicht auf die PWA-Origin.
+      setLogoUrl(info.logo_url ? apiUrl(info.logo_url) : '')
+      setLogoUrlDark(info.logo_url_dark ? apiUrl(info.logo_url_dark) : '')
       setTenantName(info.name)
       setCanton(info.canton || 'ZH')
     } catch (err) {
@@ -317,7 +326,7 @@ export default function App() {
   if (screen === 'pin') {
     inner = (
       <PinScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onLoggedIn={() => {
           resetSessionExpiredFlag()
           setAuthExpiredAt(null)
@@ -328,7 +337,7 @@ export default function App() {
   } else if (screen === 'login') {
     inner = (
       <LoginScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onLoggedIn={() => {
           resetSessionExpiredFlag()
           setAuthExpiredAt(null)
@@ -339,7 +348,7 @@ export default function App() {
   } else if (screen === 'consent' && user) {
     inner = (
       <ConsentScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         displayName={user.display_name}
         onAccepted={() => {
           getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('home'))
@@ -350,7 +359,7 @@ export default function App() {
     inner = (
       <HomeScreen
         displayName={user.display_name}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         role={user.role}
         enabledModules={user.enabled_modules ?? []}
         onNavRapport={() => setScreen('rapport')}
@@ -377,7 +386,7 @@ export default function App() {
         email={user.email}
         role={user.role}
         tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onBack={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
@@ -389,7 +398,7 @@ export default function App() {
       <ChatScreen
         displayName={user.display_name}
         user={user}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         activeNav="rapport"
         initialMessage={rapportInitialMessage}
         onInitialMessageConsumed={() => setRapportInitialMessage(null)}
@@ -405,7 +414,7 @@ export default function App() {
     inner = (
       <ArbeitsZeitScreen
         displayName={user.display_name}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         role={user.role}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
@@ -420,7 +429,7 @@ export default function App() {
     if (!user.enabled_modules?.includes('hr')) { setScreen('home'); return null }
     inner = (
       <AbsenzenScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
@@ -432,7 +441,7 @@ export default function App() {
     if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ProjekteScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onStartRapport={(projectName) => {
@@ -448,7 +457,7 @@ export default function App() {
     if (user.role === 'user_light') { setScreen('home'); return null }
     inner = (
       <ProjektEntwurfScreen
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onNavHome={() => setScreen('home')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
@@ -458,7 +467,7 @@ export default function App() {
     inner = (
       <BerichtScreen
         berichtType={berichtType}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
@@ -470,7 +479,7 @@ export default function App() {
     inner = (
       <AdminApp
         user={user}
-        logoUrl={logoUrl}
+        logoUrl={effectiveLogo}
         tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
         canton={canton}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}

@@ -46,7 +46,7 @@ export default function HomeScreen({ displayName, logoUrl, role, enabledModules,
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
   const has = (m: ModuleName) => enabledModules.includes(m)
-  const showRapport = !isLight && has('ai')        // Rapport-Workflow läuft über Mistral-Chat
+  const showRapport = false                        // Rapporte-Kachel ausgeblendet (Workflow läuft über Mistral-Chat)
   const showArbeitszeit = has('timekeeping')
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
