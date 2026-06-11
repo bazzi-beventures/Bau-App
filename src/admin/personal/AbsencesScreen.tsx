@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAdminAbsences, approveAbsence, rejectAbsence, Absence } from '../../api/admin'
 import AbsenceCalendar from './AbsenceCalendar'
+import { countWorkdays } from '../utils/calendarHelpers'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
@@ -13,9 +14,9 @@ function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function dayCount(start: string, end: string) {
-  const d = (new Date(end).getTime() - new Date(start).getTime()) / 86400000 + 1
-  return d > 1 ? `${d} Tage` : '1 Tag'
+function dayCount(start: string, end: string, canton: string) {
+  const d = countWorkdays(start, end, canton)
+  return d === 1 ? '1 Tag' : `${d} Tage`
 }
 
 type TabType = 'requested' | 'approved' | 'rejected' | 'calendar'
@@ -149,7 +150,7 @@ export default function AbsencesScreen({ onBadgeChange, canton = 'ZH' }: { onBad
                     <td>{TYPE_LABELS[a.absence_type] ?? a.absence_type}</td>
                     <td>{fmt(a.start_date)}</td>
                     <td>{fmt(a.end_date)}</td>
-                    <td style={{ color: 'var(--muted)' }}>{dayCount(a.start_date, a.end_date)}</td>
+                    <td style={{ color: 'var(--muted)' }}>{dayCount(a.start_date, a.end_date, canton)}</td>
                     <td>
                       <span className={
                         a.status === 'approved' ? 'admin-badge admin-badge-approved' :

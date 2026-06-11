@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { fetchMyAbsences, createAbsenceRequest, fetchVacationEntitlement, UserAbsence, AbsenceCreatePayload, VacationEntitlement } from '../api/chat'
 import { ApiError } from '../api/client'
+import { countWorkdays } from '../admin/utils/calendarHelpers'
 
 interface Props {
   logoUrl?: string
+  canton?: string
   onBack: () => void
   onNavHome: () => void
   onNavRapport: () => void
@@ -33,14 +35,14 @@ function fmtDate(iso: string): string {
   }
 }
 
-function dayCount(start: string, end: string): string {
-  const d = (new Date(end).getTime() - new Date(start).getTime()) / 86400000 + 1
-  return d > 1 ? `${Math.round(d)} Tage` : '1 Tag'
+function dayCount(start: string, end: string, canton: string): string {
+  const d = countWorkdays(start, end, canton)
+  return d === 1 ? '1 Tag' : `${d} Tage`
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
+export default function AbsenzenScreen({ logoUrl, canton = 'ZH', onBack, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
   const [absences, setAbsences] = useState<UserAbsence[]>([])
   const [entitlement, setEntitlement] = useState<VacationEntitlement | null>(null)
   const [loading, setLoading] = useState(true)
@@ -272,7 +274,7 @@ export default function AbsenzenScreen({ logoUrl, onBack, onNavHome, onNavRappor
                     <td>{TYPE_LABELS[a.type] ?? a.type}</td>
                     <td className="bericht-mono">{fmtDate(a.date_start)}</td>
                     <td className="bericht-mono">{fmtDate(a.date_end)}</td>
-                    <td className="bericht-muted">{dayCount(a.date_start, a.date_end)}</td>
+                    <td className="bericht-muted">{dayCount(a.date_start, a.date_end, canton)}</td>
                     <td>
                       <span className={
                         a.status === 'approved' ? 'bericht-positive' :

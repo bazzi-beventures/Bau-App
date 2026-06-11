@@ -79,6 +79,27 @@ export function getSwissHolidays(year: number, canton: string): Map<string, stri
   return holidays
 }
 
+// Zählt Arbeitstage (Mo–Fr) zwischen zwei ISO-Daten (inkl.), abzüglich kantonaler
+// Feiertage. Spiegelt die Backend-Logik (workdays.count_workdays), damit die
+// angezeigte Tage-Zahl mit dem Ferien-Saldo übereinstimmt.
+export function countWorkdays(startISO: string, endISO: string, canton: string): number {
+  const start = parseDateStr(startISO)
+  const end = parseDateStr(endISO)
+  if (end < start) return 0
+
+  const holidays = new Map<string, string>()
+  for (let y = start.getFullYear(); y <= end.getFullYear(); y++) {
+    for (const key of getSwissHolidays(y, canton).keys()) holidays.set(key, '')
+  }
+
+  let count = 0
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const dow = d.getDay() // 0 = So, 6 = Sa
+    if (dow >= 1 && dow <= 5 && !holidays.has(toDateStr(d))) count++
+  }
+  return count
+}
+
 // ─── Wochen- / Monatsraster ───────────────────────────────────────────────────
 
 export function getWeekDays(date: Date): Date[] {

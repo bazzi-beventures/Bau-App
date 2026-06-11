@@ -430,6 +430,7 @@ export default function App() {
     inner = (
       <AbsenzenScreen
         logoUrl={effectiveLogo}
+        canton={canton}
         onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
