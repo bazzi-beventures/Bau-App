@@ -10,6 +10,18 @@ import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
+// Standard-Bemerkungen, die beim Erstellen einer Offerte vorausgefüllt werden.
+// Vorerst genau EINE Version (per Checkbox an-/abwählbar). Spätere Varianten
+// (z. B. "Fundament wird gegossen") kommen separat. Echte Zeilenumbrüche (\n) —
+// das PDF rendert sie via nl2br als <br>.
+const STANDARD_NOTES = `Preise inkl. Montage und Transport.
+Lieferfrist nach Absprache, nach def. Massaufnahme.
+
+Diese Offerte basiert auf vorläufigen Richtmassen und steht unter dem Vorbehalt der abschliessenden Massaufnahme vor Ort. Allfällige Abweichungen können zu Anpassungen in Preis und Ausführung führen.
+
+Diese Offerte ist ab Ausstellungsdatum während 2 Monaten gültig.
+Nach Ablauf dieser Frist behalten wir uns vor, Preise und Konditionen neu zu prüfen und anzupassen.`
+
 interface Quote {
   id: number
   quote_number: string
@@ -149,7 +161,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [specialRows, setSpecialRows] = useState<SpecialRow[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(STANDARD_NOTES)
+  const [useStandardNotes, setUseStandardNotes] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -553,7 +566,19 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
         <label className="admin-form-label">Bemerkungen</label>
-        <textarea className="admin-form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen zur Offerte…" />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 'normal', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={useStandardNotes}
+            onChange={e => {
+              const on = e.target.checked
+              setUseStandardNotes(on)
+              setNotes(on ? STANDARD_NOTES : '')
+            }}
+          />
+          <span>Standard-Bemerkungen verwenden</span>
+        </label>
+        <textarea className="admin-form-input" rows={8} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen zur Offerte…" />
       </div>
 
       {/* Actions */}
