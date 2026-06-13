@@ -177,7 +177,11 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         positions: (p.positions ?? []).map(pos => ({
           label: pos.label,
           ek_price: String(pos.ek_price ?? 0),
-          selected: true,
+          // Minus-Positionen sind Lieferanten-/Einkaufsrabatte des Tenants (z. B. „WebShop Rabatt",
+          // „Tuch Preis-Gruppe 1") — sie gehören dem Tenant, nicht dem Kunden. Darum standardmässig
+          // abgewählt: sonst landen sie in der Produktkopf-Zeile und erzeugen einen Phantom-Minusbetrag.
+          // Bei Bedarf kann der Admin sie pro Position manuell wieder anhaken.
+          selected: (pos.ek_price ?? 0) >= 0,
           separate: false,
         })),
       }
@@ -293,7 +297,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                 {/* Positionsliste (nur Stobag o.ä.): an-/abwählbar, optional separat ausweisen */}
                 {hasPositions && (
                   <div style={{ marginBottom: 10 }}>
-                    <label style={LABEL_STYLE}>Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile</label>
+                    <label style={LABEL_STYLE}>Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile · Lieferanten-Rabatte (Minus) sind standardmässig abgewählt</label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {row.positions.map((p, k) => (
                         <div

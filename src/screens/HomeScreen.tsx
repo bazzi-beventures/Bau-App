@@ -11,6 +11,7 @@ interface Props {
   onNavRapport: () => void
   onNavArbeitszeit: () => void
   onNavProjekte: () => void
+  onNavOfferten: () => void
   onNavProjektEntwurf: () => void
   onNavProfile: () => void
   onNavHelp: () => void
@@ -42,7 +43,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavProjektEntwurf, onNavProfile, onNavHelp, onLoggedOut, onSwitchToAdmin }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavOfferten, onNavProjektEntwurf, onNavProfile, onNavHelp, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
   const has = (m: ModuleName) => enabledModules.includes(m)
@@ -195,6 +196,29 @@ export default function HomeScreen({ displayName, logoUrl, role, enabledModules,
             <div>
               <div className="tile-label">Projekte</div>
               <div className="tile-desc">Auftraggeber, Termine &amp; Kontakte</div>
+            </div>
+            <div className="tile-arrow">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 8h10M9 4l4 4-4 4"/>
+              </svg>
+            </div>
+          </div>
+        )}
+
+        {!isLight && has('quotes') && (
+          <div className="tile tile-blue" onClick={onNavOfferten}>
+            <div className="tile-icon tile-icon-blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" strokeWidth="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
+            <div>
+              <div className="tile-label">Offerten</div>
+              <div className="tile-desc">Angebote zu deinen Projekten als PDF</div>
             </div>
             <div className="tile-arrow">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">

@@ -162,6 +162,13 @@ export async function loginWithPassword(username: string, password: string): Pro
   }) as { tenant_slug: string }
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiFetch('/pwa/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
 export async function setAdminPassword(currentPassword: string | null, newPassword: string): Promise<void> {
   await apiFetch('/pwa/admin/set-password', {
     method: 'POST',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { Kontakt, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
@@ -10,8 +11,8 @@ import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../c
 import { fmtDate } from '../utils/format'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
-  DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab,
-  ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval,
+  DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
+  ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval, ProjectTask,
   CATEGORY_LABELS, formatDateTime,
 } from './projectDetail/tabs'
 
@@ -42,8 +43,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [name, setName] = useState(project?.name ?? '')
   const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
   const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
-  const [artDerArbeit, setArtDerArbeit] = useState(project?.art_der_arbeit ?? '')
+  // Mehrfachauswahl: ein Projekt kann mehrere Leistungsarten tragen (z.B. Neumontage + Reparatur)
+  const [artDerArbeit, setArtDerArbeit] = useState<string[]>(project?.art_der_arbeit ?? [])
+  const toggleArt = (value: string) =>
+    setArtDerArbeit(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
+  const hasEntsorgungsart = artDerArbeit.includes('Demontage') || artDerArbeit.includes('Wiedermontage')
   const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
+  const [geruestfach, setGeruestfach] = useState(project?.geruestfach?.toString() ?? '')
+  const [showGeruestfach, setShowGeruestfach] = useState(false)
   const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
   const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
@@ -105,8 +112,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [sendEmail, setSendEmail] = useState('')
   const [sendingQuote, setSendingQuote] = useState(false)
 
+  // Aufgaben (Checkliste)
+  const [tasks, setTasks] = useState<ProjectTask[]>([])
+
   // Tab-Auswahl
-  type ProjectTab = 'details' | 'documents' | 'supplier' | 'quotes' | 'reports' | 'invoices' | 'approvals'
+  type ProjectTab = 'details' | 'documents' | 'supplier' | 'quotes' | 'reports' | 'invoices' | 'approvals' | 'tasks'
   const [activeTab, setActiveTab] = useState<ProjectTab>('details')
 
   // Bestellfreigaben
@@ -140,7 +150,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     apiFetch('/pwa/admin/customers').then((data: unknown) => {
       setCustomers(data as Customer[])
     }).catch(() => {})
-    getMe().then(me => setCurrentUserId(me.authorized_user_id)).catch(() => {})
+    getMe().then(me => {
+      setCurrentUserId(me.authorized_user_id)
+      setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -151,7 +164,53 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     reloadInvoices()
     reloadReports()
     reloadApprovals()
+    reloadTasks()
   }, [project?.id])
+
+  async function reloadTasks() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/tasks`) as ProjectTask[]
+      setTasks(d)
+    } catch { /* ignore */ }
+  }
+
+  async function handleAddTask(text: string) {
+    if (!project) return
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      })
+      await reloadTasks()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Anlegen')
+    }
+  }
+
+  async function handleEditTask(taskId: string, text: string) {
+    if (!project) return
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ text }),
+      })
+      await reloadTasks()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Speichern')
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!project) return
+    if (!window.confirm('Aufgabe wirklich löschen?')) return
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/tasks/${taskId}`, { method: 'DELETE' })
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Löschen')
+    }
+  }
 
   async function reloadApprovals() {
     if (!project) return
@@ -409,12 +468,13 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           name: name.trim(),
           customer_id: customerId || null,
           object_address: objectAddress || null,
-          art_der_arbeit: artDerArbeit || null,
+          art_der_arbeit: artDerArbeit,
           bemerkung: bemerkung || null,
+          geruestfach: geruestfach.trim() ? parseInt(geruestfach, 10) : null,
           projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
           kontakte,
-          disposal_details: (artDerArbeit === 'Demontage' || artDerArbeit === 'Wiedermontage') && !disposalEmpty(disposal) ? disposal : null,
+          disposal_details: hasEntsorgungsart && !disposalEmpty(disposal) ? disposal : null,
           wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
           wartung_last_at: wartungLastAt || null,
           wartung_next_due_at: wartungNextDueAt || null,
@@ -454,7 +514,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       if (reopenReason === 'garantiefall') {
         await apiFetch(`/pwa/admin/projects/${project.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: project.name, art_der_arbeit: 'Reparatur', is_warranty: true }),
+          body: JSON.stringify({ name: project.name, art_der_arbeit: Array.from(new Set([...artDerArbeit, 'Reparatur'])), is_warranty: true }),
         })
       }
       showToast('Projekt wiedereröffnet')
@@ -616,6 +676,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       {!isNew && (
         <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Projekt Details</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'tasks' ? 'active' : ''}`} onClick={() => setActiveTab('tasks')}>Aufgaben</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Dokumente</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'supplier' ? 'active' : ''}`} onClick={() => setActiveTab('supplier')}>Lieferantendokumente</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => setActiveTab('quotes')}>Offerten</button>
@@ -640,13 +701,18 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
               </div>
               <div className="admin-form-group">
-                <label className="admin-form-label">Art der Arbeit</label>
-                <select className="admin-form-select" value={artDerArbeit} onChange={e => setArtDerArbeit(e.target.value)}>
-                  <option value="">— auswählen —</option>
-                  {WORK_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
+                <label className="admin-form-label">Art der Arbeit <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(Mehrfachauswahl)</span></label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                  {WORK_TYPES.map(t => {
+                    const active = artDerArbeit.includes(t.value)
+                    return (
+                      <label key={t.value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, padding: '4px 10px', borderRadius: 6, background: active ? 'var(--primary)' : 'var(--surface-2)', color: active ? '#fff' : 'var(--text)', border: '1px solid', borderColor: active ? 'var(--primary)' : 'var(--border)' }}>
+                        <input type="checkbox" style={{ display: 'none' }} checked={active} onChange={() => toggleArt(t.value)} />
+                        {t.label}
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">
@@ -664,6 +730,20 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   style={{ resize: 'vertical' }}
                 />
               </div>
+              {showGeruestfach && (
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Gerüstfach (Lagerort)</label>
+                  <input
+                    className="admin-form-input"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={geruestfach}
+                    onChange={e => setGeruestfach(e.target.value)}
+                    placeholder="z. B. 12"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -758,7 +838,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
 
           {/* ── Entsorgung (bei Demontage / Wiedermontage) ────── */}
-          {(artDerArbeit === 'Demontage' || artDerArbeit === 'Wiedermontage') && (
+          {hasEntsorgungsart && (
             <div className="admin-table-wrap" style={{ padding: 24 }}>
               <div className="admin-section-title">Entsorgung</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -971,6 +1051,15 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onShowCreateForm={() => setShowApprovalForm(true)}
           onDecide={handleDecideApproval}
           onDelete={handleDeleteApproval}
+        />
+      )}
+
+      {!isNew && activeTab === 'tasks' && (
+        <TasksTab
+          tasks={tasks}
+          onAdd={handleAddTask}
+          onEdit={handleEditTask}
+          onDelete={handleDeleteTask}
         />
       )}
 

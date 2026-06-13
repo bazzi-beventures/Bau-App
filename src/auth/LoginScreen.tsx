@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { authenticatePasskey } from './webauthn'
 import { ApiError } from '../api/client'
 import { TenantLogo } from '../App'
-import { loginWithPassword } from '../api/admin'
+import { loginWithPassword, requestPasswordReset } from '../api/admin'
 import { SK } from '../api/storageKeys'
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -39,6 +39,10 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotMsg, setForgotMsg] = useState('')
 
   const tenantSlug = localStorage.getItem(SK.TENANT_SLUG) ?? ''
   const authorizedUserId = localStorage.getItem(SK.AUTHORIZED_USER_ID) ?? ''
@@ -83,6 +87,26 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!forgotEmail) return
+    setForgotLoading(true)
+    setForgotMsg('')
+    try {
+      await requestPasswordReset(forgotEmail.toLowerCase())
+      setForgotMsg('Falls ein Konto mit dieser E-Mail existiert, wurde ein Link zum Zurücksetzen gesendet. Bitte prüfe dein Postfach.')
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setForgotMsg('Zu viele Versuche. Bitte versuche es in 15 Minuten erneut.')
+      } else {
+        // Keine Enumeration: auch bei Fehlern generische Bestätigung anzeigen
+        setForgotMsg('Falls ein Konto mit dieser E-Mail existiert, wurde ein Link zum Zurücksetzen gesendet. Bitte prüfe dein Postfach.')
+      }
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -164,6 +188,56 @@ export default function LoginScreen({ logoUrl, onLoggedIn }: Props) {
           {loading ? <><Spinner />Anmelden…</> : 'Anmelden'}
         </button>
       </form>
+
+      {!showForgot ? (
+        <button
+          type="button"
+          onClick={() => { setShowForgot(true); setForgotMsg('') }}
+          style={{
+            background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+            fontSize: 13, textDecoration: 'underline', padding: '6px 0', marginTop: 2, alignSelf: 'center',
+          }}
+        >
+          Passwort vergessen?
+        </button>
+      ) : (
+        <form onSubmit={handleForgotPassword} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+          <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-Mail für Reset-Link</label>
+          <input
+            type="email"
+            value={forgotEmail}
+            onChange={e => setForgotEmail(e.target.value)}
+            placeholder="name@firma.ch"
+            autoComplete="email"
+            required
+            style={{
+              background: 'var(--surface, #1a1f2e)',
+              border: '1px solid var(--border, #2a3148)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              fontSize: 15,
+              color: 'var(--text)',
+              outline: 'none',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          />
+          {forgotMsg && <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0, lineHeight: 1.4 }}>{forgotMsg}</p>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn-secondary" disabled={forgotLoading || !forgotEmail} style={{ flex: 1 }}>
+              {forgotLoading ? <><Spinner />Senden…</> : 'Link senden'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForgot(false); setForgotEmail(''); setForgotMsg('') }}
+              className="btn-secondary"
+              style={{ flex: 1 }}
+            >
+              Abbrechen
+            </button>
+          </div>
+        </form>
+      )}
 
       <button className="btn-secondary" onClick={handlePasskeyLogin} disabled={loading} style={{ marginTop: 4 }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 18, height: 18, marginRight: 6, verticalAlign: 'middle' }}>

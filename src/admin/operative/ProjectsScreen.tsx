@@ -65,7 +65,7 @@ export interface Project {
   customer_id: string | null
   customer: EmbeddedCustomer | null
   object_address: string | null
-  art_der_arbeit: string | null
+  art_der_arbeit: string[] | null
   projektleiter_id: string | null
   monteur_ids: string[]
   kontakte: Kontakt[]
@@ -80,6 +80,7 @@ export interface Project {
   created_by: string | null
   created_by_id: string | null
   bemerkung: string | null
+  geruestfach: number | null
   start_date: string | null
   end_date: string | null
   start_time: string | null

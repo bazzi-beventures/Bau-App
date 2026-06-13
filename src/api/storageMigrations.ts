@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 8
+export const APP_DATA_VERSION = 9
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -23,6 +23,7 @@ function isKnownKey(k: string): boolean {
   if (k === 'my-time-stempel-state') return true
   if (k === 'zeit_offline_queue') return true
   if (k === 'projektEntwurf_offline_queue') return true
+  if (k === 'hinweise_offline_queue') return true
   if (k === 'admin-theme') return true
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true
@@ -136,7 +137,19 @@ const migration_7_to_8: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8]
+// v8 → v9: Neuer localStorage-Key `hinweise_offline_queue` für offline
+// abgehakte Projekt-Aufgaben (Monteur auf der Baustelle ohne Netz). Keine
+// Migration nötig — Key existiert nur, wenn offline abgehakt wurde. Tripwire
+// für ältere Clients.
+const migration_8_to_9: Migration = {
+  from: 8,
+  to: 9,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

@@ -11,13 +11,14 @@ import ArbeitsZeitScreen from './screens/ArbeitsZeitScreen'
 import ProfileScreen from './screens/ProfileScreen'
 import BerichtScreen, { BerichtType } from './screens/BerichtScreen'
 import ProjekteScreen from './screens/ProjekteScreen'
+import OffertenScreen from './screens/OffertenScreen'
 import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import HelpBot from './shared/HelpBot'
 import { applyTheme, loadTheme, useTheme } from './theme'
 
-type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'projektEntwurf' | 'admin' | 'absenzen' | 'help'
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen' | 'help'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -365,6 +366,7 @@ export default function App() {
         onNavRapport={() => setScreen('rapport')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
+        onNavOfferten={() => setScreen('offerten')}
         onNavProjektEntwurf={() => setScreen('projektEntwurf')}
         onNavProfile={() => setScreen('profile')}
         onNavHelp={() => setScreen('help')}
@@ -450,6 +452,18 @@ export default function App() {
           setScreen('rapport')
         }}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProfile={() => setScreen('profile')}
+        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+      />
+    )
+  } else if (screen === 'offerten' && user) {
+    if (user.role === 'user_light' || !user.enabled_modules?.includes('quotes')) { setScreen('home'); return null }
+    inner = (
+      <OffertenScreen
+        logoUrl={effectiveLogo}
+        onNavHome={() => setScreen('home')}
+        onNavArbeitszeit={() => setScreen('arbeitszeit')}
+        onNavProjekte={() => setScreen('projekte')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
