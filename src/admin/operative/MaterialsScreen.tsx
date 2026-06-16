@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 
 interface Supplier {
@@ -213,8 +213,19 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
   )
 }
 
-type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'cost_price' | 'unit_price' | 'stock'
+// Nur echte DB-Spalten sind serverseitig sortierbar. VK-Preis (berechnet) und
+// Bestand (separate inventory-Tabelle) sind es nicht — siehe MaterialsListResponse.
+type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'cost_price'
 type SortDir = 'asc' | 'desc'
+
+interface MaterialsListResponse {
+  rows: Material[]
+  total: number
+  page: number
+  page_size: number
+}
+
+const PAGE_SIZE = 50
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
@@ -225,32 +236,69 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 export default function MaterialsScreen() {
-  const [materials, setMaterials] = useState<Material[]>([])
+  const [data, setData] = useState<MaterialsListResponse>({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [nextArtNr, setNextArtNr] = useState('1')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
   const [sortKey, setSortKey] = useState<MaterialSortKey>('art_nr')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [page, setPage] = useState(1)
   const [editMaterial, setEditMaterial] = useState<Material | null | 'new'>()
   const [stockMaterial, setStockMaterial] = useState<Material | null>(null)
 
-  async function load() {
+  // Lieferanten, Kategorien-Dropdown und naechste Art.-Nr. sind nicht aus der
+  // (paginierten) Liste ableitbar → separat laden, nach jedem Speichern auffrischen.
+  const loadMeta = useCallback(async () => {
+    try {
+      const [sups, meta] = await Promise.all([
+        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
+        apiFetch('/pwa/admin/materials/meta') as Promise<{ categories: string[]; next_art_nr: string }>,
+      ])
+      setSuppliers(sups)
+      setCategories(meta.categories ?? [])
+      setNextArtNr(meta.next_art_nr ?? '1')
+    } catch { /* nicht blockierend */ }
+  }, [])
+
+  useEffect(() => { loadMeta() }, [loadMeta])
+
+  // Suche: 300ms Debounce, damit nicht jeder Tastendruck einen Roundtrip ausloest.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Filter/Suche/Sort aendern → zurueck auf Seite 1.
+  useEffect(() => { setPage(1) }, [debouncedSearch, categoryFilter, supplierFilter, sortKey, sortDir])
+
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [mats, sups] = await Promise.all([
-        apiFetch('/pwa/admin/materials') as Promise<Material[]>,
-        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
-      ])
-      setMaterials(mats)
-      setSuppliers(sups)
+      const params = new URLSearchParams({
+        sort: sortKey,
+        dir: sortDir,
+        page: String(page),
+        page_size: String(PAGE_SIZE),
+      })
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      if (categoryFilter) params.set('category', categoryFilter)
+      if (supplierFilter) params.set('supplier_id', supplierFilter)
+      const res = await apiFetch(`/pwa/admin/materials/list?${params.toString()}`) as MaterialsListResponse
+      setData(res)
     } finally {
       setLoading(false)
     }
-  }
+  }, [debouncedSearch, categoryFilter, supplierFilter, sortKey, sortDir, page])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
+
+  // Nach Speichern/Lager-Anpassung: aktuelle Seite + Meta neu laden.
+  const reload = useCallback(() => { load(); loadMeta() }, [load, loadMeta])
 
   function toggleSort(key: MaterialSortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -258,47 +306,20 @@ export default function MaterialsScreen() {
   }
 
   const supplierMap = Object.fromEntries(suppliers.map(s => [s.id, s.name]))
-  const categories = Array.from(new Set(materials.map(m => m.category).filter(Boolean))).sort() as string[]
-  const nextArtNr = String(
-    materials.reduce((max, m) => {
-      const n = parseInt(m.art_nr, 10)
-      return Number.isFinite(n) && n > max ? n : max
-    }, 0) + 1
-  )
-
-  const filtered = materials.filter(m => {
-    const q = search.toLowerCase()
-    const supplierName = m.supplier_id ? (supplierMap[m.supplier_id] ?? '') : ''
-    const matchSearch = m.name.toLowerCase().includes(q) || m.art_nr.toLowerCase().includes(q) || supplierName.toLowerCase().includes(q)
-    const matchCat = !categoryFilter || m.category === categoryFilter
-    const matchSup = !supplierFilter || m.supplier_id === supplierFilter
-    return matchSearch && matchCat && matchSup
-  }).sort((a, b) => {
-    let aVal: string | number
-    let bVal: string | number
-    switch (sortKey) {
-      case 'art_nr':   aVal = a.art_nr; bVal = b.art_nr; break
-      case 'name':     aVal = a.name; bVal = b.name; break
-      case 'category': aVal = a.category ?? ''; bVal = b.category ?? ''; break
-      case 'unit':     aVal = a.unit ?? ''; bVal = b.unit ?? ''; break
-      case 'cost_price': aVal = a.cost_price ?? -1; bVal = b.cost_price ?? -1; break
-      case 'unit_price': aVal = a.calc_vk ?? -1; bVal = b.calc_vk ?? -1; break
-      case 'stock':    aVal = a.inventory[0]?.quantity ?? -1; bVal = b.inventory[0]?.quantity ?? -1; break
-    }
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-    }
-    return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
-  })
+  const { rows, total } = data
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
+  const thStaticStyle: React.CSSProperties = { whiteSpace: 'nowrap' }
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Material / Lager</div>
-          <div className="admin-page-subtitle">{materials.length} Artikel</div>
+          <div className="admin-page-subtitle">{total} Artikel</div>
         </div>
         <button className="admin-btn admin-btn-primary" onClick={() => setEditMaterial('new')}>
           <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1z" clipRule="evenodd"/></svg>
@@ -340,19 +361,15 @@ export default function MaterialsScreen() {
                 <th style={thStyle} onClick={() => toggleSort('cost_price')}>
                   EK-Preis <SortIcon active={sortKey === 'cost_price'} dir={sortDir} />
                 </th>
-                <th style={thStyle} onClick={() => toggleSort('unit_price')}>
-                  VK-Preis <SortIcon active={sortKey === 'unit_price'} dir={sortDir} />
-                </th>
-                <th style={thStyle} onClick={() => toggleSort('stock')}>
-                  Bestand <SortIcon active={sortKey === 'stock'} dir={sortDir} />
-                </th>
+                <th style={thStaticStyle}>VK-Preis</th>
+                <th style={thStaticStyle}>Bestand</th>
                 <th>Aktionen</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr><td colSpan={8} className="admin-table-empty">Keine Materialien gefunden.</td></tr>
-              ) : filtered.map(m => {
+              ) : rows.map(m => {
                 const stock = m.inventory[0]?.quantity ?? null
                 const minStock = m.inventory[0]?.min_quantity ?? null
                 const stockLow = stock !== null && minStock !== null && stock <= minStock
@@ -390,13 +407,40 @@ export default function MaterialsScreen() {
             </tbody>
           </table>
         )}
+
+        {total > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+              {rangeStart}–{rangeEnd} von {total}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                ← Zurück
+              </button>
+              <span style={{ fontSize: 13, color: 'var(--muted)', minWidth: 90, textAlign: 'center' }}>
+                Seite {page} / {totalPages}
+              </span>
+              <button
+                className="admin-btn admin-btn-sm admin-btn-secondary"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              >
+                Weiter →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {editMaterial !== undefined && (
         <MaterialModal
           material={editMaterial === 'new' ? null : (editMaterial as Material)}
           onClose={() => setEditMaterial(undefined)}
-          onSaved={() => { setEditMaterial(undefined); load() }}
+          onSaved={() => { setEditMaterial(undefined); reload() }}
           existingCategories={categories}
           suppliers={suppliers}
           suggestedArtNr={nextArtNr}
@@ -407,7 +451,7 @@ export default function MaterialsScreen() {
         <StockModal
           material={stockMaterial}
           onClose={() => setStockMaterial(null)}
-          onSaved={() => { setStockMaterial(null); load() }}
+          onSaved={() => { setStockMaterial(null); reload() }}
         />
       )}
     </div>

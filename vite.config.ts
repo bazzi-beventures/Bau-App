@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -75,5 +76,13 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
       },
     },
+  },
+  // Vitest — jsdom für localStorage + React-Rendering, gemeinsame Setup-Datei.
+  // Der test-Block wird vom Prod-Build (vite build) ignoriert.
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: false,
   },
 }))

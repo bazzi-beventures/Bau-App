@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { CompanySearch } from '../components/CompanySearch'
@@ -405,28 +405,50 @@ function CustomerForm({
   )
 }
 
+interface CustomersListResponse {
+  rows: Customer[]
+  total: number
+  page: number
+  page_size: number
+}
+
+const PAGE_SIZE = 50
+
 export default function CustomersScreen() {
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [data, setData] = useState<CustomersListResponse>({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<Customer | null | 'new'>(null)
   const [confirmDelete, setConfirmDelete] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  async function load() {
+  // Suche: 300ms Debounce, damit nicht jeder Tastendruck einen Roundtrip ausloest.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Suche aendern → zurueck auf Seite 1.
+  useEffect(() => { setPage(1) }, [debouncedSearch])
+
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await apiFetch('/pwa/admin/customers') as Customer[]
-      setCustomers(data)
+      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      const res = await apiFetch(`/pwa/admin/customers/list?${params.toString()}`) as CustomersListResponse
+      setData(res)
     } catch {
-      setCustomers([])
+      setData({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
     } finally {
       setLoading(false)
     }
-  }
+  }, [debouncedSearch, page])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -448,26 +470,17 @@ export default function CustomersScreen() {
     }
   }
 
-  const filtered = customers.filter(c => {
-    const q = search.toLowerCase()
-    return (
-      c.name.toLowerCase().includes(q) ||
-      (c.company ?? '').toLowerCase().includes(q) ||
-      (c.email ?? '').toLowerCase().includes(q) ||
-      (c.phone ?? '').toLowerCase().includes(q) ||
-      (c.phone_landline ?? '').toLowerCase().includes(q) ||
-      (c.address ?? '').toLowerCase().includes(q) ||
-      (c.billing_address ?? '').toLowerCase().includes(q) ||
-      (c.object_address ?? '').toLowerCase().includes(q)
-    )
-  })
+  const { rows, total } = data
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   return (
     <div className="admin-page admin-page-wide">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Kundenstamm</div>
-          <div className="admin-page-subtitle">{customers.length} Kunden</div>
+          <div className="admin-page-subtitle">{total} Kunden</div>
         </div>
         <button className="admin-btn admin-btn-primary" onClick={() => setEditing('new')}>
           + Neuer Kunde
@@ -490,67 +503,95 @@ export default function CustomersScreen() {
         />
       )}
 
-      <div style={{ marginBottom: 16 }}>
-        <input
-          className="admin-form-input"
-          placeholder="Suchen…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ maxWidth: 320 }}
-        />
-      </div>
+      <div className="admin-table-wrap">
+        <div className="admin-filter-bar">
+          <input
+            className="admin-search"
+            placeholder="Suchen…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
 
-      {loading ? (
-        <div className="admin-loading">Laden…</div>
-      ) : filtered.length === 0 ? (
-        <div className="admin-table-wrap" style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>
-          {search ? 'Kein Kunde gefunden.' : 'Noch keine Kunden angelegt.'}
-        </div>
-      ) : (
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Firma</th>
-                <th>E-Mail</th>
-                <th>Mobil</th>
-                <th>Festnetz</th>
-                <th>Rechnungsadresse</th>
-                <th>Objektadresse (Default)</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(c => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 500 }}>{c.name}</td>
-                  <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)' }}>{c.phone_landline ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>
-                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.object_address ?? '—'}</td>
-                  <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button
-                      className="admin-btn admin-btn-sm admin-btn-secondary"
-                      onClick={() => setEditing(c)}
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      className="admin-btn admin-btn-sm admin-btn-danger"
-                      onClick={() => setConfirmDelete(c)}
-                    >
-                      Löschen
-                    </button>
-                  </td>
+        {loading ? (
+          <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>
+            {debouncedSearch ? 'Kein Kunde gefunden.' : 'Noch keine Kunden angelegt.'}
+          </div>
+        ) : (
+          <>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Firma</th>
+                  <th>E-Mail</th>
+                  <th>Mobil</th>
+                  <th>Festnetz</th>
+                  <th>Rechnungsadresse</th>
+                  <th>Objektadresse (Default)</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {rows.map(c => (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>{c.phone_landline ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.object_address ?? '—'}</td>
+                    <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button
+                        className="admin-btn admin-btn-sm admin-btn-secondary"
+                        onClick={() => setEditing(c)}
+                      >
+                        Bearbeiten
+                      </button>
+                      <button
+                        className="admin-btn admin-btn-sm admin-btn-danger"
+                        onClick={() => setConfirmDelete(c)}
+                      >
+                        Löschen
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {total > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                  {rangeStart}–{rangeEnd} von {total}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    disabled={page <= 1 || loading}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                  >
+                    ← Zurück
+                  </button>
+                  <span style={{ fontSize: 13, color: 'var(--muted)', minWidth: 90, textAlign: 'center' }}>
+                    Seite {page} / {totalPages}
+                  </span>
+                  <button
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Weiter →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {confirmDelete && (
         <div className="admin-confirm-overlay">

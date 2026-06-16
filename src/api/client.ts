@@ -88,7 +88,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
 // sowohl filename="..." als auch das RFC-5987-Format filename*=utf-8''<urlencoded>,
 // das FastAPI/Starlette automatisch verwenden, sobald der Name Leerzeichen
 // oder Sonderzeichen enthaelt — z.B. "Einsatzplanung Gehlhaar Test KW 19.pdf".
-function parseDispositionFilename(disposition: string): string | null {
+export function parseDispositionFilename(disposition: string): string | null {
   const m5987 = disposition.match(/filename\*\s*=\s*([^']*)''([^;]+)/i)
   if (m5987) {
     try { return decodeURIComponent(m5987[2].trim()) } catch { /* fall through */ }
