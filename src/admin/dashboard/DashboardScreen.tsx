@@ -8,6 +8,7 @@ import {
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { fmtDate } from '../utils/format'
+import { apiUrl } from '../../api/client'
 
 interface Props {
   dashboard: AdminDashboard | null
@@ -375,7 +376,7 @@ function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
                     </div>
                   </div>
                   {a.file_url && (
-                    <a className="approval-file" href={a.file_url} target="_blank" rel="noreferrer">
+                    <a className="approval-file" href={apiUrl(`/pwa/admin/approvals/${a.id}/download`)} target="_blank" rel="noreferrer">
                       <span className="approval-file-icon">PDF</span>
                       <span className="approval-file-name">{a.filename}</span>
                     </a>

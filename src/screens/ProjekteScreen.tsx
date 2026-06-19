@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch, ApiError, apiFormFetch, isOfflineError } from '../api/client'
+import { apiFetch, ApiError, apiFormFetch, apiUrl, isOfflineError } from '../api/client'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 
@@ -538,7 +538,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                   <span style={{ fontSize: 16 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
                   <span className="projekte-detail-value" style={{ flex: 1 }}>
                     {f.file_url
-                      ? <a href={f.file_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
+                      ? <a href={apiUrl(`/pwa/projects/${selected.id}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
                       : f.filename
                     }
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
