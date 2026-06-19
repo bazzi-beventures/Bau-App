@@ -21,6 +21,7 @@ import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
+import QuoteTemplatesScreen from './operative/QuoteTemplatesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import ImportScreen from './system/ImportScreen'
 import UsersScreen from './system/UsersScreen'
@@ -80,6 +81,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'materials': 'Material / Lager',
   'material-import': 'Material-Import',
   'pricing-rules': 'Preisregeln',
+  'quote-templates': 'Offert-Vorlagen',
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
   'configuration': 'Konfiguration',
@@ -125,7 +127,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const isSuperadmin = user.role === 'superadmin'
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
+    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     if ((screen === 'service-status' || screen === 'push-test') && !isSuperadmin) {
@@ -149,6 +151,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'materials':    return <MaterialsScreen />
       case 'material-import': return <ImportScreen />
       case 'pricing-rules':return <PricingRulesScreen />
+      case 'quote-templates': return <QuoteTemplatesScreen />
       case 'users':        return <UsersScreen />
       case 'kpis':         return guard('kpis', <KpiScreen />)
       case 'configuration': return <ConfigurationScreen userRole={user.role} />

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import UnitsPanel from './UnitsPanel'
 
 interface Supplier {
   id: string
@@ -97,18 +98,27 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   )
 }
 
-function MaterialModal({ material, onClose, onSaved, existingCategories, suppliers, suggestedArtNr }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; suppliers: Supplier[]; suggestedArtNr: string }) {
+function MaterialModal({ material, onClose, onSaved, existingCategories, existingUnits, suppliers, suggestedArtNr }: { material: Material | null; onClose: () => void; onSaved: () => void; existingCategories: string[]; existingUnits: string[]; suppliers: Supplier[]; suggestedArtNr: string }) {
   const isNew = !material
   const [artNr, setArtNr] = useState(material?.art_nr ?? suggestedArtNr)
   const [name, setName] = useState(material?.name ?? '')
   const [category, setCategory] = useState(material?.category ?? '')
   const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
   const [unit, setUnit] = useState(material?.unit ?? '')
+  const [isNewUnit, setIsNewUnit] = useState(false)
   const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
   const [costPrice, setCostPrice] = useState(material?.cost_price?.toString() ?? '')
   const [supplierId, setSupplierId] = useState(material?.supplier_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Legacy-Einheit eines Materials, die (noch) nicht im Vokabular steht, trotzdem
+  // als Auswahl anbieten — sonst ginge der Alt-Wert beim Speichern verloren.
+  const unitOptions = useMemo(() => {
+    const set = new Set(existingUnits)
+    if (material?.unit) set.add(material.unit)
+    return Array.from(set)
+  }, [existingUnits, material])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -116,6 +126,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
     setSaving(true)
     setError('')
     try {
+      const trimmedUnit = unit.trim()
       const method = isNew ? 'POST' : 'PATCH'
       const url = isNew ? '/pwa/admin/materials' : `/pwa/admin/materials/${encodeURIComponent(artNr)}`
       await apiFetch(url, {
@@ -124,12 +135,16 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
           art_nr: artNr.trim(),
           name: name.trim(),
           category: category || null,
-          unit: unit || null,
+          unit: trimmedUnit || null,
           unit_price: unitPrice ? parseFloat(unitPrice) : 0,
           cost_price: costPrice ? parseFloat(costPrice) : null,
           supplier_id: supplierId || null,
         }),
       })
+      // Neue Einheit best-effort ins Vokabular aufnehmen (409 = existiert schon → egal).
+      if (trimmedUnit && !existingUnits.includes(trimmedUnit)) {
+        try { await apiFetch('/pwa/admin/units', { method: 'POST', body: JSON.stringify({ code: trimmedUnit }) }) } catch { /* ignore */ }
+      }
       onSaved()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler')
@@ -177,7 +192,21 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, supplie
             </div>
             <div className="admin-form-group">
               <label className="admin-form-label">Einheit</label>
-              <input className="admin-form-input" value={unit} onChange={e => setUnit(e.target.value)} placeholder="Stk, m, kg…" />
+              {isNewUnit ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input className="admin-form-input" value={unit} onChange={e => setUnit(e.target.value)} placeholder="z.B. m², Stk, kg" autoFocus />
+                  <button type="button" className="admin-btn admin-btn-secondary" style={{ flexShrink: 0, padding: '6px 10px' }} onClick={() => { setIsNewUnit(false); setUnit('') }}>×</button>
+                </div>
+              ) : (
+                <select className="admin-form-select" value={unit} onChange={e => {
+                  if (e.target.value === '__new__') { setIsNewUnit(true); setUnit('') }
+                  else setUnit(e.target.value)
+                }}>
+                  <option value="">— Keine —</option>
+                  {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                  <option value="__new__">+ neue Einheit…</option>
+                </select>
+              )}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -235,10 +264,11 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   )
 }
 
-export default function MaterialsScreen() {
+function MaterialInventoryPanel() {
   const [data, setData] = useState<MaterialsListResponse>({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])
+  const [units, setUnits] = useState<string[]>([])
   const [nextArtNr, setNextArtNr] = useState('1')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -257,10 +287,11 @@ export default function MaterialsScreen() {
     try {
       const [sups, meta] = await Promise.all([
         apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
-        apiFetch('/pwa/admin/materials/meta') as Promise<{ categories: string[]; next_art_nr: string }>,
+        apiFetch('/pwa/admin/materials/meta') as Promise<{ categories: string[]; units: string[]; next_art_nr: string }>,
       ])
       setSuppliers(sups)
       setCategories(meta.categories ?? [])
+      setUnits(meta.units ?? [])
       setNextArtNr(meta.next_art_nr ?? '1')
     } catch { /* nicht blockierend */ }
   }, [])
@@ -315,7 +346,7 @@ export default function MaterialsScreen() {
   const thStaticStyle: React.CSSProperties = { whiteSpace: 'nowrap' }
 
   return (
-    <div className="admin-page">
+    <>
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Material / Lager</div>
@@ -442,6 +473,7 @@ export default function MaterialsScreen() {
           onClose={() => setEditMaterial(undefined)}
           onSaved={() => { setEditMaterial(undefined); reload() }}
           existingCategories={categories}
+          existingUnits={units}
           suppliers={suppliers}
           suggestedArtNr={nextArtNr}
         />
@@ -454,6 +486,33 @@ export default function MaterialsScreen() {
           onSaved={() => { setStockMaterial(null); reload() }}
         />
       )}
+    </>
+  )
+}
+
+type MaterialTab = 'inventory' | 'units'
+
+export default function MaterialsScreen() {
+  const [tab, setTab] = useState<MaterialTab>('inventory')
+
+  return (
+    <div className="admin-page">
+      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+        <button
+          className={`kpi-admin-tab${tab === 'inventory' ? ' active' : ''}`}
+          onClick={() => setTab('inventory')}
+        >
+          Material / Lager
+        </button>
+        <button
+          className={`kpi-admin-tab${tab === 'units' ? ' active' : ''}`}
+          onClick={() => setTab('units')}
+        >
+          Einheiten
+        </button>
+      </div>
+
+      {tab === 'inventory' ? <MaterialInventoryPanel /> : <UnitsPanel />}
     </div>
   )
 }

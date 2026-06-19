@@ -108,6 +108,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         {isManagement && (
           <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
         )}
+        {isManagement && has('quotes') && (
+          <NavItem label="Offert-Vorlagen" target="quote-templates" current={screen} onNav={onNav} icon={<IconReceipt />} />
+        )}
 
         {isManagement && has('kpis') && (
           <>

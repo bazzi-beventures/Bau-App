@@ -202,6 +202,11 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                     <IconTag /><span>Lieferantenpreise</span>
                   </button>
                 )}
+                {isManagement && has('quotes') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'quote-templates' ? ' active' : ''}`} onClick={() => navigate('quote-templates')}>
+                    <IconReceipt /><span>Offert-Vorlagen</span>
+                  </button>
+                )}
                 {isManagement && has('kpis') && (
                   <button className={`admin-mobile-drawer-item${screen === 'kpis' ? ' active' : ''}`} onClick={() => navigate('kpis')}>
                     <IconChart /><span>Kennzahlen</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct, ConfirmedPosition } from './PdfExtractionReviewModal'
@@ -7,6 +7,7 @@ import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
+import { MaterialCombobox } from './MaterialCombobox'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
@@ -92,6 +93,12 @@ interface Material {
   calc_vk?: number | null
   unit: string
   category?: string
+  supplier_id?: string | null
+}
+
+interface Supplier {
+  id: string
+  name: string
 }
 
 interface LaborRow { description: string; quantity: string; unit_price: number | null }
@@ -148,6 +155,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [materialSupplierFilter, setMaterialSupplierFilter] = useState('')
+  const [materialCategoryFilter, setMaterialCategoryFilter] = useState('')
   const [projectName, setProjectName] = useState(lockedProjectName ?? '')
   const [laborRows, setLaborRows] = useState<LaborRow[]>([{ description: '', quantity: '', unit_price: null }])
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
@@ -181,6 +191,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       setMaterials(m)
       setInstallationTemplates(t)
     })
+    // Lieferanten nur für den optionalen Material-Filter — Fehler darf das
+    // Formular nicht blockieren (Filter bleibt dann einfach leer).
+    apiFetch('/pwa/admin/suppliers')
+      .then(s => setSuppliers(s as Supplier[]))
+      .catch(() => {})
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
     getMe().then(me => {
       if (!isFeatureEnabled(me, 'sonderpositionen')) return
@@ -348,6 +363,16 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     }
   }
 
+  // Lieferanten-Lookup + Kategorien für die optionalen Material-Filter.
+  // Kategorien direkt aus dem (vollständig geladenen) Materialstamm ableiten.
+  const supplierMap = useMemo(() => Object.fromEntries(suppliers.map(s => [s.id, s.name])), [suppliers])
+  const usedSupplierIds = useMemo(() => new Set(materials.map(m => m.supplier_id).filter(Boolean)), [materials])
+  const supplierOptions = useMemo(() => suppliers.filter(s => usedSupplierIds.has(s.id)), [suppliers, usedSupplierIds])
+  const categories = useMemo(
+    () => [...new Set(materials.map(m => m.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
+    [materials],
+  )
+
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <h3 style={{ margin: '0 0 20px' }}>Neue Offerte erstellen</h3>
@@ -412,21 +437,37 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       {/* Materials */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Materialpositionen</legend>
+        {/* Optionale Filter — grenzen die Auswahl in allen Material-Comboboxen ein. */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <select
+            className="admin-form-select"
+            style={{ flex: 1, minWidth: 160 }}
+            value={materialSupplierFilter}
+            onChange={e => setMaterialSupplierFilter(e.target.value)}
+          >
+            <option value="">Alle Lieferanten</option>
+            {supplierOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <select
+            className="admin-form-select"
+            style={{ flex: 1, minWidth: 160 }}
+            value={materialCategoryFilter}
+            onChange={e => setMaterialCategoryFilter(e.target.value)}
+          >
+            <option value="">Alle Artikelgruppen</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
         {materialRows.map((row, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <select
-              className="admin-form-select"
-              style={{ flex: 2 }}
+            <MaterialCombobox
+              materials={materials}
+              supplierMap={supplierMap}
+              supplierFilter={materialSupplierFilter}
+              categoryFilter={materialCategoryFilter}
               value={row.art_nr}
-              onChange={e => updateMaterial(i, { art_nr: e.target.value })}
-            >
-              <option value="">Material wählen…</option>
-              {materials.map(m => (
-                <option key={m.art_nr} value={m.art_nr}>
-                  {m.art_nr} — {m.name} ({fmtCHF(m.calc_vk ?? m.unit_price)}/{m.unit})
-                </option>
-              ))}
-            </select>
+              onChange={artNr => updateMaterial(i, { art_nr: artNr })}
+            />
             <input
               className="admin-form-input"
               style={{ flex: 1 }}

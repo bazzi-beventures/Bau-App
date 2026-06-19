@@ -18,6 +18,7 @@ export type AdminScreen =
   | 'materials'
   | 'material-import'
   | 'pricing-rules'
+  | 'quote-templates'
   | 'users'
   | 'kpis'
   | 'configuration'
