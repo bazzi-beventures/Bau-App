@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { getMe } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { CompanySearch } from '../components/CompanySearch'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -218,6 +220,8 @@ export interface Customer {
   object_address: string | null
   local_contact_name: string | null
   local_contact_phone: string | null
+  owner_contact_name: string | null
+  owner_contact_phone: string | null
   notes: string | null
   created_at: string
 }
@@ -245,9 +249,16 @@ function CustomerForm({
   const [objectAddress, setObjectAddress] = useState(initial?.object_address ?? '')
   const [localContactName, setLocalContactName] = useState(initial?.local_contact_name ?? '')
   const [localContactPhone, setLocalContactPhone] = useState(initial?.local_contact_phone ?? '')
+  const [ownerContactName, setOwnerContactName] = useState(initial?.owner_contact_name ?? '')
+  const [ownerContactPhone, setOwnerContactPhone] = useState(initial?.owner_contact_phone ?? '')
+  const [showOwnerContact, setShowOwnerContact] = useState(false)
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    getMe().then(me => setShowOwnerContact(isFeatureEnabled(me, 'eigentuemer_kontakt'))).catch(() => {})
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -271,6 +282,10 @@ function CustomerForm({
           object_address: objectAddress || null,
           local_contact_name: localContactName.trim() || null,
           local_contact_phone: localContactPhone.trim() || null,
+          ...(showOwnerContact ? {
+            owner_contact_name: ownerContactName.trim() || null,
+            owner_contact_phone: ownerContactPhone.trim() || null,
+          } : {}),
           notes: notes || null,
         }),
       })
@@ -380,6 +395,19 @@ function CustomerForm({
             <input className="admin-form-input" value={localContactPhone} onChange={e => setLocalContactPhone(e.target.value)} />
           </div>
         </div>
+
+        {showOwnerContact && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="admin-form-group">
+              <label className="admin-form-label">Eigentümer — Name</label>
+              <input className="admin-form-input" value={ownerContactName} onChange={e => setOwnerContactName(e.target.value)} placeholder="z.B. Eigentümer / Verwaltung" />
+            </div>
+            <div className="admin-form-group">
+              <label className="admin-form-label">Eigentümer — Telefon</label>
+              <input className="admin-form-input" value={ownerContactPhone} onChange={e => setOwnerContactPhone(e.target.value)} />
+            </div>
+          </div>
+        )}
 
         <div className="admin-form-group">
           <label className="admin-form-label">Notizen</label>

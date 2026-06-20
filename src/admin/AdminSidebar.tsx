@@ -100,6 +100,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         {has('invoicing') && (
           <NavItem label="Rechnungen" target="invoices" current={screen} onNav={onNav} icon={<IconCash />} />
         )}
+        {has('payment_matching') && (
+          <NavItem label="Zahlungsabgleich" target="payment-reconciliation" current={screen} onNav={onNav} icon={<IconCash />} />
+        )}
 
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />

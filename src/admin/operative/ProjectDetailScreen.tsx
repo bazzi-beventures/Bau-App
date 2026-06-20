@@ -5,7 +5,8 @@ import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { Kontakt, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
-import { QuoteCreateForm } from './QuotesScreen'
+import { CustomerCombobox } from './CustomerCombobox'
+import { QuoteCreateForm, QuoteEditForm, QuoteDetail } from './QuotesScreen'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
@@ -43,6 +44,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [name, setName] = useState(project?.name ?? '')
   const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
   const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
+  // Wurde die Objektadresse manuell bearbeitet? Dann beim Kundenwechsel NICHT überschreiben.
+  // Eine nur automatisch (aus dem Kundenstamm) befüllte Adresse wird hingegen neu geseedet,
+  // damit ein Kundenwechsel auch die Distanz (Offerten-Fahrspesen) neu berechnen lässt.
+  const [objectAddressTouched, setObjectAddressTouched] = useState(!!project?.object_address)
   // Mehrfachauswahl: ein Projekt kann mehrere Leistungsarten tragen (z.B. Neumontage + Reparatur)
   const [artDerArbeit, setArtDerArbeit] = useState<string[]>(project?.art_der_arbeit ?? [])
   const toggleArt = (value: string) =>
@@ -53,6 +58,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [showGeruestfach, setShowGeruestfach] = useState(false)
   const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
   const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
+  // Einsatzplanung (Termin) – dieselben Felder wie im Kalender (ProjectScheduleScreen)
+  const [startDate, setStartDate] = useState(project?.start_date?.slice(0, 10) ?? '')
+  const [endDate, setEndDate] = useState(project?.end_date?.slice(0, 10) ?? '')
+  const [startTime, setStartTime] = useState(project?.start_time?.slice(0, 5) ?? '')
+  const [endTime, setEndTime] = useState(project?.end_time?.slice(0, 5) ?? '')
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
   const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
   const [disposal, setDisposal] = useState<DisposalDetails>(project?.disposal_details ?? EMPTY_DISPOSAL)
@@ -105,6 +115,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([])
   const [reports, setReports] = useState<ProjectReport[]>([])
   const [showQuoteForm, setShowQuoteForm] = useState(false)
+  const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
@@ -301,6 +312,17 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     } catch { /* ignore */ }
   }
 
+  async function handleEditQuote(quoteId: number) {
+    // Detail (alle Positionen) frisch laden — die ProjectQuote-Liste trägt nur
+    // die Kopfdaten, das Bearbeiten-Formular braucht die vollständige Offerte.
+    try {
+      const detail = await apiFetch(`/pwa/admin/quotes/${quoteId}`) as QuoteDetail
+      setEditQuote(detail)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Laden der Offerte')
+    }
+  }
+
   async function handleRegenerateQuote(quoteId: number) {
     setRegeneratingQuoteId(quoteId)
     try {
@@ -406,7 +428,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (!id) return
     const c = customers.find(x => x.id === id)
     if (!c) return
-    if (!objectAddress) setObjectAddress(c.object_address || c.billing_address || c.address || '')
+    if (!objectAddressTouched) setObjectAddress(c.object_address || c.billing_address || c.address || '')
     // Baustellenkontakt aus Kundenstamm seeden, falls noch keiner markiert ist
     // und der Kunde einen Standardkontakt hat.
     if ((c.local_contact_name || c.local_contact_phone) && !kontakte.some(k => k.is_site_contact)) {
@@ -457,6 +479,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
+    if (startDate && endDate && endDate < startDate) {
+      setError('Enddatum muss nach Startdatum liegen.'); return
+    }
+    if (startTime && endTime && startDate === endDate && endTime < startTime) {
+      setError('Endzeit muss nach Startzeit liegen.'); return
+    }
     setError('')
     setSaving(true)
     try {
@@ -473,6 +501,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           geruestfach: geruestfach.trim() ? parseInt(geruestfach, 10) : null,
           projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
+          start_date: startDate || null,
+          end_date: endDate || null,
+          start_time: startTime || null,
+          end_time: endTime || null,
           kontakte,
           disposal_details: hasEntsorgungsart && !disposalEmpty(disposal) ? disposal : null,
           wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
@@ -753,16 +785,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
                 <label className="admin-form-label">Kunde (Rechnungsempfänger)</label>
-                <select
-                  className="admin-form-select"
+                <CustomerCombobox
+                  customers={customers}
                   value={customerId}
-                  onChange={e => handleSelectCustomer(e.target.value)}
-                >
-                  <option value="">— kein Kunde zugeordnet —</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}{c.billing_address ? ` · ${c.billing_address}` : c.address ? ` · ${c.address}` : ''}</option>
-                  ))}
-                </select>
+                  onChange={handleSelectCustomer}
+                />
                 {customerId && (
                   <div style={{ marginTop: 6, padding: '8px 12px', background: 'var(--bg-subtle, #f5f5f5)', borderRadius: 6, fontSize: 13, color: 'var(--muted)' }}>
                     <strong>Rechnung an:</strong> {billingRecipient || '—'}{billingAddress ? `, ${billingAddress}` : ''}
@@ -772,7 +799,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
               <div className="admin-form-group">
                 <label className="admin-form-label">Objektadresse (Baustelle)</label>
-                <AddressAutocomplete className="admin-form-input" value={objectAddress} onChange={setObjectAddress} />
+                <AddressAutocomplete className="admin-form-input" value={objectAddress} onChange={v => { setObjectAddress(v); setObjectAddressTouched(true) }} />
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
                   Wird beim Auswählen des Kunden als Vorschlag übernommen und kann pro Projekt überschrieben werden.
                 </div>
@@ -911,9 +938,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </div>
           </div>
 
-          {/* ── Zuständigkeiten ───────────────────────────────── */}
+          {/* ── Einsatzplanung (Zuständigkeiten + Termin) ─────── */}
           <div className="admin-table-wrap" style={{ padding: 24 }}>
-            <div className="admin-section-title">Zuständigkeiten</div>
+            <div className="admin-section-title">Einsatzplanung</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
                 <label className="admin-form-label">Projektleiter</label>
@@ -941,6 +968,31 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                       {s.name}
                     </label>
                   ))}
+                </div>
+              </div>
+
+              {/* ── Termin (wie im Einsatz-Kalender) ───────────── */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+                  Termin festlegen, damit das Projekt im Einsatz-Kalender erscheint. Leer lassen = kein Termin.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Start (Datum)</label>
+                    <input className="admin-form-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  </div>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Ende (Datum)</label>
+                    <input className="admin-form-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                  </div>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Startzeit</label>
+                    <input className="admin-form-input" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                  </div>
+                  <div className="admin-form-group" style={{ margin: 0 }}>
+                    <label className="admin-form-label">Endzeit</label>
+                    <input className="admin-form-input" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1022,6 +1074,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={handleOpenSendQuote}
+          onEdit={handleEditQuote}
         />
       )}
 
@@ -1136,6 +1189,22 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               lockedProjectName={project.name}
               onDone={() => { setShowQuoteForm(false); reloadQuotes() }}
               onCancel={() => setShowQuoteForm(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Dialog: Offerte bearbeiten (nur Entwürfe) ────────── */}
+      {/* Klick ausserhalb (auf das Overlay) verlässt die Maske ohne zu speichern.
+          Das PDF entsteht erst beim Speichern — Verlassen erzeugt nichts. Wieder
+          rein kommt man per Klick auf den Entwurf in der Liste. */}
+      {editQuote && (
+        <div className="admin-confirm-overlay" onClick={() => setEditQuote(null)}>
+          <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+            <QuoteEditForm
+              quote={editQuote}
+              onDone={() => { setEditQuote(null); reloadQuotes() }}
+              onCancel={() => setEditQuote(null)}
             />
           </div>
         </div>

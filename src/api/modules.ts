@@ -5,6 +5,7 @@ export type ModuleName =
   | 'scheduling'
   | 'quotes'
   | 'invoicing'
+  | 'payment_matching'
   | 'inventory'
   | 'hr'
   | 'arg_compliance'

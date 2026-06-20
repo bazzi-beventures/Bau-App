@@ -54,15 +54,46 @@ export default function QuoteTemplatesScreen() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
+  // Standard-Bemerkungen: aktueller Editor-Wert, zuletzt gespeicherter Wert (für Dirty-Check),
+  // und ob aktuell der System-Default greift (Mandant hat noch keinen eigenen Text).
+  const [stdNotes, setStdNotes] = useState('')
+  const [stdNotesSaved, setStdNotesSaved] = useState('')
+  const [stdIsDefault, setStdIsDefault] = useState(true)
+  const [savingNotes, setSavingNotes] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const data = await apiFetch('/pwa/admin/quote-position-templates') as { installation: InstallationTpl[]; special: SpecialTpl[] }
+      const [data, notes] = await Promise.all([
+        apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
+        apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
+      ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
+      setStdNotes(notes.notes ?? '')
+      setStdNotesSaved(notes.notes ?? '')
+      setStdIsDefault(notes.is_default)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function saveStandardNotes(reset = false) {
+    setSavingNotes(true)
+    setError('')
+    try {
+      const res = await apiFetch('/pwa/admin/quote-standard-notes', {
+        method: 'PATCH',
+        body: JSON.stringify({ notes: reset ? '' : stdNotes }),
+      }) as { notes: string; is_default: boolean }
+      setStdNotes(res.notes ?? '')
+      setStdNotesSaved(res.notes ?? '')
+      setStdIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Standard-Bemerkungen gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingNotes(false)
     }
   }
 
@@ -240,6 +271,46 @@ export default function QuoteTemplatesScreen() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* ── Standard-Bemerkungen ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Standard-Bemerkungen</div>
+              <div className="admin-page-subtitle">
+                Vorausgefüllter Bemerkungstext im Offerte-Formular — gibt dem Kunden mehr Flexibilität.
+                {stdIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={10}
+              value={stdNotes}
+              onChange={e => setStdNotes(e.target.value)}
+              placeholder="Standard-Bemerkungstext für neue Offerten…"
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveStandardNotes(false)}
+                disabled={savingNotes || stdNotes === stdNotesSaved}
+              >
+                {savingNotes ? 'Speichern…' : 'Bemerkungen speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveStandardNotes(true)}
+                disabled={savingNotes || stdIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
+              </span>
+            </div>
           </div>
         </>
       )}

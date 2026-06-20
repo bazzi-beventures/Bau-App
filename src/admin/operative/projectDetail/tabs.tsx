@@ -284,9 +284,10 @@ interface QuotesTabProps {
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
   onSend: (quote: ProjectQuote) => void
+  onEdit: (quoteId: number) => void
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate, onSend }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate, onSend, onEdit }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
@@ -319,12 +320,23 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateF
                     </span>
                   </div>
                 )}
-                {group.map((q, idx) => (
-                  <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
+                {group.map((q, idx) => {
+                  // Nur der aktuellste Entwurf ist direkt bearbeitbar — ein Klick auf
+                  // die Zeile öffnet die Maske. Klicks auf Buttons/Links (PDF, Senden …)
+                  // sollen NICHT ins Bearbeiten springen.
+                  const editable = idx === 0 && q.status === 'entwurf'
+                  return (
+                  <div
+                    key={q.id}
+                    onClick={editable ? (e) => { if (!(e.target as HTMLElement).closest('button, a')) onEdit(q.id) } : undefined}
+                    title={editable ? 'Klicken zum Bearbeiten (z.B. Vertipper korrigieren)' : undefined}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', cursor: editable ? 'pointer' : 'default' }}
+                  >
                     <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{q.version}</span>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, minWidth: 130 }}>{q.quote_number}</span>
                     <span className={`admin-badge ${QUOTE_STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>{QUOTE_STATUS_LABELS[q.status] || q.status}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(q.created_at)}</span>
+                    {editable && <span style={{ fontSize: 12, color: 'var(--muted)' }} title="Klicken zum Bearbeiten">✎ bearbeiten</span>}
                     <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
                     {q.pdf_url && (
                       <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
@@ -355,7 +367,8 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateF
                       </>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )
           })}
@@ -469,7 +482,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
             <input type="checkbox" checked={useAcceptedQuote} onChange={e => onUseAcceptedQuoteChange(e.target.checked)} />
-            Aus akzeptierter Offerte
+            Aus aktueller Offerte
           </label>
           <button
             type="button"
@@ -496,7 +509,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
         }}>
           <span style={{ fontSize: 16 }}>⚠️</span>
           <span>
-            Kein unterzeichneter Rapport vorhanden — die Rechnung wird auf Basis der akzeptierten Offerte erstellt.
+            Kein unterzeichneter Rapport vorhanden — die Rechnung wird auf Basis der aktuellen (zuletzt bearbeiteten) Offerte erstellt.
           </span>
         </div>
       )}

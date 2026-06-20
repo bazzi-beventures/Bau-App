@@ -12,8 +12,9 @@ import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
 // Standard-Bemerkungen, die beim Erstellen einer Offerte vorausgefüllt werden.
-// Vorerst genau EINE Version (per Checkbox an-/abwählbar). Spätere Varianten
-// (z. B. "Fundament wird gegossen") kommen separat. Echte Zeilenumbrüche (\n) —
+// Der verbindliche Text wird pro Mandant unter "Offert-Vorlagen" gepflegt und beim
+// Laden des Formulars von /pwa/admin/quote-standard-notes geholt. Diese Konstante
+// dient nur noch als Fallback, falls der Abruf fehlschlägt. Echte Zeilenumbrüche (\n) —
 // das PDF rendert sie via nl2br als <br>.
 const STANDARD_NOTES = `Preise inkl. Montage und Transport.
 Lieferfrist nach Absprache, nach def. Massaufnahme.
@@ -70,7 +71,7 @@ interface StaffRole {
   hourly_rate: number
 }
 
-interface QuoteDetail {
+export interface QuoteDetail {
   id: number
   quote_number: string
   project_name: string
@@ -172,6 +173,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
   const [notes, setNotes] = useState(STANDARD_NOTES)
+  const [stdNotes, setStdNotes] = useState(STANDARD_NOTES)
   const [useStandardNotes, setUseStandardNotes] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -195,6 +197,17 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
     // Formular nicht blockieren (Filter bleibt dann einfach leer).
     apiFetch('/pwa/admin/suppliers')
       .then(s => setSuppliers(s as Supplier[]))
+      .catch(() => {})
+    // Mandanten-spezifischen Standard-Bemerkungstext laden (pflegbar unter Offert-Vorlagen).
+    // Fehler darf das Formular nicht blockieren — dann bleibt der Fallback-Default.
+    apiFetch('/pwa/admin/quote-standard-notes')
+      .then(res => {
+        const text = (res as { notes: string }).notes ?? STANDARD_NOTES
+        setStdNotes(text)
+        // Nur vorausfüllen, solange noch der Fallback-Default unverändert drinsteht
+        // (Nutzer hat nichts getippt und die Checkbox nicht abgewählt).
+        setNotes(prev => (prev === STANDARD_NOTES ? text : prev))
+      })
       .catch(() => {})
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
     getMe().then(me => {
@@ -614,12 +627,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
             onChange={e => {
               const on = e.target.checked
               setUseStandardNotes(on)
-              setNotes(on ? STANDARD_NOTES : '')
+              setNotes(on ? stdNotes : '')
             }}
           />
           <span>Standard-Bemerkungen verwenden</span>
         </label>
-        <textarea className="admin-form-input" rows={8} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen zur Offerte…" />
+        <textarea className="admin-form-input" rows={8} style={{ resize: 'vertical', minHeight: 140 }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen zur Offerte…" />
       </div>
 
       {/* Actions */}
@@ -642,7 +655,7 @@ type EditFreeRow = { description: string; quantity: string; unit: string; unit_p
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
 
-function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: () => void; onCancel: () => void }) {
+export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: () => void; onCancel: () => void }) {
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [laborRows, setLaborRows] = useState<EditLaborRow[]>(() =>
     quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price) }))
@@ -900,7 +913,7 @@ function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
         <label className="admin-form-label">Bemerkungen</label>
-        <textarea className="admin-form-input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen…" />
+        <textarea className="admin-form-input" rows={8} style={{ resize: 'vertical', minHeight: 140 }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen…" />
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>

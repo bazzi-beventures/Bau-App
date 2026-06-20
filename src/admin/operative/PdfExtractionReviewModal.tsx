@@ -93,61 +93,74 @@ function productEk(row: RowState): number {
     .reduce((sum, p) => sum + parseNum(p.ek_price), 0)
 }
 
-// Baut die finalen Offert-Zeilen aus einer Produktkarte:
+// Baut die finalen Offert-Zeilen aus EINER Produktkarte:
 // 1 Produktzeile (EK = Summe nicht-separater Positionen) + N separate Zeilen.
-function buildConfirmed(rows: RowState[], supplierId: string | null): ConfirmedExtraProduct[] {
+function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedExtraProduct[] {
   const out: ConfirmedExtraProduct[] = []
-  for (const row of rows) {
-    const pct = parseNum(row.margin_pct)
-    const factor = Math.round((1 + pct / 100) * 10000) / 10000
-    const hasPositions = row.positions.length > 0
-    const category = row.category || null
+  const pct = parseNum(row.margin_pct)
+  const factor = Math.round((1 + pct / 100) * 10000) / 10000
+  const hasPositions = row.positions.length > 0
+  const category = row.category || null
 
-    // Produktzeile: immer ohne Positionen, sonst nur wenn ≥1 nicht-separate Position gewählt ist.
-    const includeProduct = !hasPositions || row.positions.some(p => p.selected && !p.separate)
-    if (includeProduct) {
-      const ek = productEk(row)
+  // Produktzeile: immer ohne Positionen, sonst nur wenn ≥1 nicht-separate Position gewählt ist.
+  const includeProduct = !hasPositions || row.positions.some(p => p.selected && !p.separate)
+  if (includeProduct) {
+    const ek = productEk(row)
+    const vk = ceilToHalf(ek * (1 + pct / 100))
+    const fullDescription = row.description ? `${row.name} — ${row.description}` : row.name
+    out.push({
+      description: fullDescription,
+      quantity: row.quantity || '1',
+      unit: row.unit || 'Stk',
+      unit_price: String(vk),
+      ek_price: ek,
+      margin_factor: factor,
+      supplier_id: supplierId,
+      category,
+      positions: hasPositions
+        ? row.positions.map(p => ({
+            label: p.label,
+            ek_price: parseNum(p.ek_price),
+            selected: p.selected,
+            separate: p.separate,
+          }))
+        : undefined,
+    })
+  }
+
+  // Separate Zeilen: jede angehakte Position mit „separat ausweisen".
+  // Produktname als Kontext voranstellen (z. B. „P206C.03, Lamisol III 70 Fix — Küche 1570×965").
+  for (const p of row.positions) {
+    if (p.selected && p.separate) {
+      const ek = parseNum(p.ek_price)
       const vk = ceilToHalf(ek * (1 + pct / 100))
-      const fullDescription = row.description ? `${row.name} — ${row.description}` : row.name
       out.push({
-        description: fullDescription,
-        quantity: row.quantity || '1',
+        description: row.name ? `${row.name} — ${p.label}` : p.label,
+        quantity: '1',
         unit: row.unit || 'Stk',
         unit_price: String(vk),
         ek_price: ek,
         margin_factor: factor,
         supplier_id: supplierId,
         category,
-        positions: hasPositions
-          ? row.positions.map(p => ({
-              label: p.label,
-              ek_price: parseNum(p.ek_price),
-              selected: p.selected,
-              separate: p.separate,
-            }))
-          : undefined,
       })
-    }
-
-    // Separate Zeilen: jede angehakte Position mit „separat ausweisen".
-    for (const p of row.positions) {
-      if (p.selected && p.separate) {
-        const ek = parseNum(p.ek_price)
-        const vk = ceilToHalf(ek * (1 + pct / 100))
-        out.push({
-          description: p.label,
-          quantity: '1',
-          unit: row.unit || 'Stk',
-          unit_price: String(vk),
-          ek_price: ek,
-          margin_factor: factor,
-          supplier_id: supplierId,
-          category,
-        })
-      }
     }
   }
   return out
+}
+
+function buildConfirmed(rows: RowState[], supplierId: string | null): ConfirmedExtraProduct[] {
+  return rows.flatMap(row => buildConfirmedRow(row, supplierId))
+}
+
+// Karten-Summen über ALLE Zeilen, die diese Karte erzeugt (Produktzeile + separate Zeilen).
+// So spiegelt die Anzeige das wider, was tatsächlich übernommen wird — auch wenn alle
+// Positionen „separat" sind (Griesser) und die Produktzeile selbst leer bleibt.
+function cardTotals(row: RowState, supplierId: string | null): { ek: number; vk: number } {
+  const lines = buildConfirmedRow(row, supplierId)
+  const ek = lines.reduce((s, l) => s + l.ek_price, 0)
+  const vk = lines.reduce((s, l) => s + parseNum(l.unit_price), 0)
+  return { ek, vk }
 }
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -163,6 +176,10 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
     return m
   }, [rules])
 
+  // Griesser-Positionen sind eigenständige, bereits rabattierte POS-Zeilen (je Raum/Fenster) —
+  // jede soll standardmässig angehakt UND als eigene Offert-Zeile ausgewiesen werden.
+  const isGriesser = data.supplier === 'griesser'
+
   const [rows, setRows] = useState<RowState[]>(() =>
     (data.products ?? []).map(p => {
       const factor = p.suggested_margin_factor ?? 1
@@ -177,12 +194,13 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         positions: (p.positions ?? []).map(pos => ({
           label: pos.label,
           ek_price: String(pos.ek_price ?? 0),
-          // Minus-Positionen sind Lieferanten-/Einkaufsrabatte des Tenants (z. B. „WebShop Rabatt",
-          // „Tuch Preis-Gruppe 1") — sie gehören dem Tenant, nicht dem Kunden. Darum standardmässig
-          // abgewählt: sonst landen sie in der Produktkopf-Zeile und erzeugen einen Phantom-Minusbetrag.
-          // Bei Bedarf kann der Admin sie pro Position manuell wieder anhaken.
-          selected: (pos.ek_price ?? 0) >= 0,
-          separate: false,
+          // Griesser: jede Position ist eine echte Offert-Zeile → angehakt + separat.
+          // Stobag: Minus-Positionen sind Lieferanten-/Einkaufsrabatte des Tenants (z. B. „WebShop
+          // Rabatt", „Tuch Preis-Gruppe 1") — sie gehören dem Tenant, nicht dem Kunden. Darum dort
+          // standardmässig abgewählt: sonst landen sie in der Produktkopf-Zeile und erzeugen einen
+          // Phantom-Minusbetrag. Bei Bedarf kann der Admin sie pro Position manuell wieder anhaken.
+          selected: isGriesser ? true : (pos.ek_price ?? 0) >= 0,
+          separate: isGriesser,
         })),
       }
     })
@@ -207,11 +225,6 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
     } else {
       updateRow(i, { category })
     }
-  }
-
-  function vkOf(row: RowState): number {
-    const pct = parseNum(row.margin_pct)
-    return ceilToHalf(productEk(row) * (1 + pct / 100))
   }
 
   const confirmed = useMemo(() => buildConfirmed(rows, data.supplier_id), [rows, data.supplier_id])
@@ -259,7 +272,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         {/* Karten pro Produkt */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {rows.map((row, i) => {
-            const vk = vkOf(row)
+            const totals = cardTotals(row, data.supplier_id)
             const hasPositions = row.positions.length > 0
             return (
               <div
@@ -297,7 +310,9 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                 {/* Positionsliste (nur Stobag o.ä.): an-/abwählbar, optional separat ausweisen */}
                 {hasPositions && (
                   <div style={{ marginBottom: 10 }}>
-                    <label style={LABEL_STYLE}>Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile · Lieferanten-Rabatte (Minus) sind standardmässig abgewählt</label>
+                    <label style={LABEL_STYLE}>{isGriesser
+                      ? 'Positionen — jede wird eine eigene Offert-Zeile; EK ist Netto inkl. Auftrags- und Kundenrabatt. Abwählen entfernt die Zeile.'
+                      : 'Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile · Lieferanten-Rabatte (Minus) sind standardmässig abgewählt'}</label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {row.positions.map((p, k) => (
                         <div
@@ -357,10 +372,10 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                     <input className="admin-form-input" value={row.unit} onChange={e => updateRow(i, { unit: e.target.value })} />
                   </div>
                   <div>
-                    <label style={LABEL_STYLE}>EK / Stk (CHF){hasPositions ? ' — Summe gewählter Positionen' : ''}</label>
+                    <label style={LABEL_STYLE}>EK (CHF){hasPositions ? ' — Summe gewählter Positionen' : ' / Stk'}</label>
                     {hasPositions ? (
                       <div className="admin-form-input" style={{ background: 'transparent', fontWeight: 600 }}>
-                        {fmtCHF(productEk(row))}
+                        {fmtCHF(totals.ek)}
                       </div>
                     ) : (
                       <input className="admin-form-input" value={row.ek_price} onChange={e => updateRow(i, { ek_price: e.target.value })} />
@@ -389,8 +404,8 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                     <input className="admin-form-input" value={row.margin_pct} onChange={e => updateRow(i, { margin_pct: e.target.value })} />
                   </div>
                   <div style={{ minWidth: 140, textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted, #666)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>VK / Stk{hasPositions ? ' (Produktzeile)' : ''}</div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtCHF(vk)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted, #666)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>VK{hasPositions ? ' — Summe gewählter Positionen' : ' / Stk'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtCHF(totals.vk)}</div>
                   </div>
                 </div>
               </div>

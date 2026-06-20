@@ -1,4 +1,4 @@
-import { apiFetch } from './client'
+import { apiFetch, apiFormFetch } from './client'
 import { AdminScreen } from '../admin/useAdminNav'
 
 // ─── Dashboard ─────────────────────────────────────────────
@@ -327,6 +327,49 @@ export async function markInvoicePaid(id: string): Promise<void> {
   await apiFetch(`/pwa/admin/invoices/${id}/mark-paid`, { method: 'POST' })
 }
 
+// ─── Zahlungsabgleich (CAMT) ───────────────────────────────
+
+export type ReconcileStatus = 'matched' | 'amount_mismatch' | 'already_paid' | 'unmatched'
+
+export interface ReconcileResult {
+  status: ReconcileStatus
+  reference: string | null
+  paid_amount: number
+  currency: string | null
+  value_date: string | null
+  debtor_name: string | null
+  invoice_id: number | null
+  invoice_number: string | null
+  project_name: string | null
+  expected_amount: number | null
+  amount_diff: number | null
+}
+
+export interface ReconcileSummary {
+  total: number
+  matched: number
+  amount_mismatch: number
+  already_paid: number
+  unmatched: number
+  applied: number
+  dry_run: boolean
+}
+
+export interface ReconcileResponse {
+  status: string
+  summary: ReconcileSummary
+  results: ReconcileResult[]
+}
+
+export async function reconcileCamt(file: File, dryRun: boolean): Promise<ReconcileResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return apiFormFetch(
+    `/pwa/admin/invoices/reconcile-camt?dry_run=${dryRun ? 'true' : 'false'}`,
+    form,
+  ) as Promise<ReconcileResponse>
+}
+
 export async function getInvoicePdf(id: string): Promise<Blob> {
   const resp = await fetch(`/pwa/admin/invoices/${id}/pdf`, {
     credentials: 'include',
@@ -375,6 +418,30 @@ export async function updateTenantModules(modules: string[]): Promise<{ enabled_
     method: 'PATCH',
     body: JSON.stringify({ enabled_modules: modules }),
   }) as Promise<{ enabled_modules: string[] }>
+}
+
+// ─── Tenant Fahrtkosten-Tabelle ─────────────────────────────
+
+// Eine Zeile der Staffelung: [km-Schwelle, CHF]. null in der km-Schwelle = „und darüber"
+// (nur im default_table vom Backend; eigene Tabellen brauchen keine null-Zeile).
+export type TravelCostRow = [number | null, number]
+
+export interface TenantTravelCostResponse {
+  travel_cost_table: TravelCostRow[] | null  // null = Mandant nutzt System-Default
+  default_table: TravelCostRow[]
+}
+
+export async function getTenantTravelCost(): Promise<TenantTravelCostResponse> {
+  return apiFetch('/pwa/admin/tenant/travel-cost') as Promise<TenantTravelCostResponse>
+}
+
+export async function updateTenantTravelCost(
+  table: TravelCostRow[] | null,
+): Promise<{ travel_cost_table: TravelCostRow[] | null }> {
+  return apiFetch('/pwa/admin/tenant/travel-cost', {
+    method: 'PATCH',
+    body: JSON.stringify({ travel_cost_table: table }),
+  }) as Promise<{ travel_cost_table: TravelCostRow[] | null }>
 }
 
 // ─── Tenant Feature-Flags (Workflows) ───────────────────────

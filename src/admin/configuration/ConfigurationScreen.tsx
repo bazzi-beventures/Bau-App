@@ -4,6 +4,7 @@ import {
   getTenantModules, updateTenantModules, TenantModulesResponse,
   getTenantFeatures, updateTenantFeature,
   TenantFeaturesResponse, FeatureRegistryEntry, FeatureFieldSchema,
+  getTenantTravelCost, updateTenantTravelCost, TravelCostRow,
 } from '../../api/admin'
 
 // Modul-Kategorien für die gruppierte Darstellung im Module-Tab.
@@ -23,6 +24,7 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   scheduling:       { label: 'Einsatzplanung',    desc: 'Wochenplan inkl. interne Einsätze', category: 'operativ' },
   quotes:           { label: 'Offerten',          desc: 'Offerten mit PDF-Generierung', category: 'operativ' },
   invoicing:        { label: 'Rechnungen',        desc: 'Rechnungen mit PDF-Generierung', category: 'operativ' },
+  payment_matching: { label: 'Zahlungsabgleich',  desc: 'CAMT-Bankauszug einlesen und Zahlungseingänge automatisch mit Rechnungen abgleichen (benötigt Rechnungen)', category: 'operativ' },
   inventory:        { label: 'Lager',             desc: 'Bestände & Lagerbewegungen (Material-Katalog bleibt verfügbar)', category: 'operativ' },
   hr:               { label: 'HR',                desc: 'Absenzen, Ferien, HR-Berichte', category: 'hr' },
   arg_compliance:   { label: 'ArG-Compliance',    desc: 'Arbeitsgesetz-Verstoss-Erkennung (benötigt HR + Zeiterfassung)', category: 'hr' },
@@ -83,7 +85,7 @@ interface ConfigProps {
 
 export default function ConfigurationScreen({ userRole }: ConfigProps) {
   const isSuperadmin = userRole === 'superadmin'
-  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows'>('weekly-plan')
+  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows' | 'travel-cost'>('weekly-plan')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -137,6 +139,14 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
             Workflows
           </button>
         )}
+        {isSuperadmin && (
+          <button
+            className={`admin-btn ${tab === 'travel-cost' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setTab('travel-cost')}
+          >
+            Fahrtkosten
+          </button>
+        )}
       </div>
 
       {tab === 'weekly-plan' && <WeeklyPlanTab onToast={showToast} />}
@@ -144,6 +154,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
       {tab === 'modules' && isSuperadmin && <ModulesTab onToast={showToast} view="modules" />}
       {tab === 'notifications' && isSuperadmin && <ModulesTab onToast={showToast} view="notifications" />}
       {tab === 'workflows' && isSuperadmin && <WorkflowsTab onToast={showToast} />}
+      {tab === 'travel-cost' && isSuperadmin && <TravelCostTab onToast={showToast} />}
 
       {toast && (
         <div className="admin-toast-container">
@@ -727,6 +738,270 @@ function setEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false
   for (const v of a) if (!b.has(v)) return false
   return true
+}
+
+// ─── Fahrtkosten-Tab: Distanz-Staffelung pro Mandant ─────────────────────────
+//
+// Jede Zeile ist [km-Schwelle, CHF]. Die Distanz (km) wird bei Projekt-Anlage
+// einmalig via Google Maps berechnet und auf den nächsten ganzen km aufgerundet;
+// die erste Zeile, deren Schwelle ≥ diesem Wert ist, bestimmt den Pauschalbetrag.
+// Der Preis der LETZTEN Zeile gilt automatisch für alle größeren Distanzen.
+// Kein Override (null) ⇒ es greift die System-Default-Tabelle.
+
+function validateTravelRows(rows: TravelCostRow[]): string[] {
+  const errors: string[] = []
+  if (rows.length === 0) {
+    return ['Mindestens eine Zeile erforderlich (oder auf System-Default zurücksetzen).']
+  }
+  let prev: number | null = null
+  rows.forEach((row, i) => {
+    const km = row[0]
+    const chf = row[1]
+    if (km == null || !Number.isFinite(km) || km <= 0) {
+      errors.push(`Zeile ${i + 1}: km-Schwelle muss eine positive Zahl sein.`)
+      return
+    }
+    if (!Number.isFinite(chf) || chf < 0) {
+      errors.push(`Zeile ${i + 1}: CHF muss ≥ 0 sein.`)
+      return
+    }
+    if (prev != null && km <= prev) {
+      errors.push(`Zeile ${i + 1}: km-Schwellen müssen streng aufsteigend sein.`)
+    }
+    prev = km
+  })
+  return errors
+}
+
+function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [rows, setRows] = useState<TravelCostRow[]>([])
+  const [isDefault, setIsDefault] = useState(true)
+  const [defaultTable, setDefaultTable] = useState<TravelCostRow[]>([])
+  const [original, setOriginal] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  function snapshot(useDefault: boolean, r: TravelCostRow[]): string {
+    return JSON.stringify({ useDefault, rows: useDefault ? [] : r })
+  }
+
+  async function load() {
+    setLoading(true)
+    try {
+      const res = await getTenantTravelCost()
+      setDefaultTable(res.default_table)
+      if (res.travel_cost_table && res.travel_cost_table.length > 0) {
+        setRows(res.travel_cost_table)
+        setIsDefault(false)
+        setOriginal(snapshot(false, res.travel_cost_table))
+      } else {
+        setRows([])
+        setIsDefault(true)
+        setOriginal(snapshot(true, []))
+      }
+    } catch {
+      onToast('Laden fehlgeschlagen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  if (loading) {
+    return <div className="admin-loading"><div className="admin-spinner" /> Fahrtkosten werden geladen…</div>
+  }
+
+  const errors = isDefault ? [] : validateTravelRows(rows)
+  const dirty = snapshot(isDefault, rows) !== original
+
+  function startCustom() {
+    // Vom System-Default ableiten: numerische Zeilen übernehmen, die „∞"-Zeile fällt weg
+    // (der Preis der letzten Zeile gilt ohnehin automatisch für alle größeren Distanzen).
+    const seeded = defaultTable
+      .filter(([km]) => km != null)
+      .map(([km, chf]) => [km as number, chf] as TravelCostRow)
+    setRows(seeded)
+    setIsDefault(false)
+  }
+
+  function setRow(i: number, km: number | null, chf: number) {
+    setRows(prev => prev.map((r, j) => (j === i ? [km, chf] : r)))
+  }
+
+  function addRow() {
+    const lastKm = rows.length ? (rows[rows.length - 1][0] ?? 0) : 0
+    setRows(prev => [...prev, [(lastKm || 0) + 1, 0]])
+  }
+
+  function removeRow(i: number) {
+    setRows(prev => prev.filter((_, j) => j !== i))
+  }
+
+  async function save() {
+    if (errors.length > 0) {
+      onToast('Bitte zuerst Fehler beheben', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = isDefault ? null : rows
+      const res = await updateTenantTravelCost(payload)
+      const saved = res.travel_cost_table
+      if (saved && saved.length > 0) {
+        setRows(saved)
+        setIsDefault(false)
+        setOriginal(snapshot(false, saved))
+      } else {
+        setRows([])
+        setIsDefault(true)
+        setOriginal(snapshot(true, []))
+      }
+      onToast('Fahrtkosten gespeichert', 'success')
+    } catch {
+      onToast('Speichern fehlgeschlagen', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function resetToDefault() {
+    setIsDefault(true)
+    setRows([])
+  }
+
+  const fmtKm = (km: number | null) => (km == null ? '∞ (und darüber)' : `bis ${km} km`)
+
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24, maxWidth: 640 }}>
+      <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+        Fahrtkosten-Pauschale je nach Distanz (Firmensitz → Objektadresse). Die Distanz
+        wird bei der Projekt-Anlage einmalig berechnet und auf den nächsten ganzen km
+        aufgerundet. Es greift die erste Zeile, deren km-Schwelle ≥ der Distanz ist; der
+        Preis der <strong>letzten</strong> Zeile gilt für alle größeren Distanzen.
+        Diese Tabelle wird in Offerten <em>und</em> Rechnungen verwendet.
+      </div>
+
+      {isDefault ? (
+        <>
+          <div style={{
+            padding: 12, marginBottom: 16, borderRadius: 8,
+            background: 'rgba(59,130,171,0.08)', border: '1px solid rgba(59,130,171,0.25)',
+            fontSize: 13,
+          }}>
+            Dieser Mandant nutzt aktuell die <strong>System-Standard-Tabelle</strong>.
+          </div>
+          <table className="admin-table" style={{ marginBottom: 16 }}>
+            <thead>
+              <tr><th>Distanz</th><th style={{ width: 140 }}>CHF</th></tr>
+            </thead>
+            <tbody>
+              {defaultTable.map(([km, chf], i) => (
+                <tr key={i}>
+                  <td>{fmtKm(km)}</td>
+                  <td>CHF {chf.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button className="admin-btn admin-btn-primary" onClick={startCustom}>
+            Eigene Tabelle erstellen
+          </button>
+        </>
+      ) : (
+        <>
+          <table className="admin-table" style={{ marginBottom: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ width: 160 }}>bis … km</th>
+                <th style={{ width: 160 }}>CHF</th>
+                <th style={{ width: 80 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([km, chf], i) => (
+                <tr key={i}>
+                  <td>
+                    <input
+                      type="number" min="0" step="1" className="admin-form-input"
+                      value={km ?? ''}
+                      onChange={e => setRow(i, e.target.value === '' ? null : parseFloat(e.target.value), chf)}
+                      style={{ width: 130 }}
+                    />
+                    {i === rows.length - 1 && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>gilt auch darüber</div>
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      type="number" min="0" step="0.05" className="admin-form-input"
+                      value={Number.isFinite(chf) ? chf : ''}
+                      onChange={e => setRow(i, km, parseFloat(e.target.value) || 0)}
+                      style={{ width: 130 }}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      className="admin-btn admin-btn-secondary"
+                      style={{ fontSize: 11, padding: '3px 8px' }}
+                      onClick={() => removeRow(i)}
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <button
+            className="admin-btn admin-btn-secondary"
+            onClick={addRow}
+            style={{ fontSize: 12, marginBottom: 16 }}
+          >
+            + Zeile
+          </button>
+
+          {errors.length > 0 && (
+            <div style={{
+              padding: 12, marginBottom: 16, borderRadius: 8,
+              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+              fontSize: 13, color: '#fca5a5',
+            }}>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                {errors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={save}
+              disabled={!dirty || saving || errors.length > 0}
+            >
+              {saving ? 'Speichern…' : 'Speichern'}
+            </button>
+            <button
+              className="admin-btn admin-btn-secondary"
+              onClick={load}
+              disabled={saving || !dirty}
+            >
+              Verwerfen
+            </button>
+            <button
+              className="admin-btn admin-btn-secondary"
+              onClick={resetToDefault}
+              disabled={saving}
+              style={{ marginLeft: 'auto' }}
+            >
+              Auf System-Standard zurücksetzen
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 // ─── Workflows-Tab: konfigurierbare Feature-Flags pro Tenant ─────────────────
