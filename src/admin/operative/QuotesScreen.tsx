@@ -75,7 +75,7 @@ export interface QuoteDetail {
   id: number
   quote_number: string
   project_name: string
-  labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; hidden?: boolean }[]
   material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   travel_items: { description: string; total_price: number }[]
   extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
@@ -102,7 +102,10 @@ interface Supplier {
   name: string
 }
 
-interface LaborRow { description: string; quantity: string; unit_price: number | null }
+// `hidden` (Workflow "montage_in_produktpreis"): Stunden dem Kunden nicht als eigene
+// Lohnzeile zeigen, sondern als Gesamtbetrag in die Produktpreise einrechnen (Backend
+// foldet beim PDF). Intern bleibt die Position als Lohn erhalten (Nachkalkulation).
+interface LaborRow { description: string; quantity: string; unit_price: number | null; hidden?: boolean }
 interface MaterialRow { art_nr: string; quantity: string; description?: string; unit_price?: number; unit?: string }
 interface ExtraProductRow {
   description: string
@@ -160,9 +163,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [materialSupplierFilter, setMaterialSupplierFilter] = useState('')
   const [materialCategoryFilter, setMaterialCategoryFilter] = useState('')
   const [projectName, setProjectName] = useState(lockedProjectName ?? '')
-  const [laborRows, setLaborRows] = useState<LaborRow[]>([{ description: '', quantity: '', unit_price: null }])
+  const [laborRows, setLaborRows] = useState<LaborRow[]>([{ description: '', quantity: '', unit_price: null, hidden: false }])
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
+  const [montageEnabled, setMontageEnabled] = useState(false)
   const [extraCharges, setExtraCharges] = useState<ExtraChargeRow[]>([])
   const [includeTravelCost, setIncludeTravelCost] = useState(true)
   const [installationRows, setInstallationRows] = useState<InstallationRow[]>([])
@@ -211,6 +215,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
       .catch(() => {})
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
     getMe().then(me => {
+      setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
       if (!isFeatureEnabled(me, 'sonderpositionen')) return
       setSpecialEnabled(true)
       apiFetch('/pwa/admin/special-position-templates')
@@ -223,7 +228,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   function updateLabor(i: number, patch: Partial<LaborRow>) {
     setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
   }
-  function addLabor() { setLaborRows(r => [...r, { description: '', quantity: '', unit_price: null }]) }
+  function addLabor() { setLaborRows(r => [...r, { description: '', quantity: '', unit_price: null, hidden: false }]) }
   function removeLabor(i: number) { setLaborRows(r => r.filter((_, j) => j !== i)) }
 
   // ── Material helpers ──
@@ -327,6 +332,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           description: r.description,
           quantity: parseNum(r.quantity),
           unit_price: r.unit_price,
+          hidden: !!r.hidden,
         })),
         material_items: materialRows.filter(r => r.art_nr && parseNum(r.quantity) > 0).map(r => ({
           art_nr: r.art_nr,
@@ -439,6 +445,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
               value={row.quantity}
               onChange={e => updateLabor(i, { quantity: e.target.value })}
             />
+            {montageEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Dem Kunden nicht als eigene Zeile zeigen — in die Produktpreise einrechnen">
+                <input type="checkbox" checked={!!row.hidden} onChange={e => updateLabor(i, { hidden: e.target.checked })} />
+                verstecken
+              </label>
+            )}
             {laborRows.length > 1 && (
               <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeLabor(i)} title="Entfernen">✕</button>
             )}
@@ -650,7 +662,7 @@ function round2(n: number) { return Math.round(n * 100) / 100 }
 
 // ─── Edit Form ──────────────────────────────────────────────
 
-type EditLaborRow = { description: string; quantity: string; unit_price: string }
+type EditLaborRow = { description: string; quantity: string; unit_price: string; hidden?: boolean }
 type EditFreeRow = { description: string; quantity: string; unit: string; unit_price: string }
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
@@ -658,7 +670,7 @@ type EditTravelRow = { description: string; total_price: string }
 export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: () => void; onCancel: () => void }) {
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [laborRows, setLaborRows] = useState<EditLaborRow[]>(() =>
-    quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price) }))
+    quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price), hidden: !!i.hidden }))
   )
   const [materialRows, setMaterialRows] = useState<EditFreeRow[]>(() =>
     quote.material_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price) }))
@@ -676,6 +688,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     quote.installation_items.map(i => ({ description: i.description, unit_price: String(i.unit_price) }))
   )
   const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
+  const [montageEnabled, setMontageEnabled] = useState(false)
   const [specialEnabled, setSpecialEnabled] = useState(false)
   const [specialTemplates, setSpecialTemplates] = useState<SpecialPositionTemplate[]>([])
   const [specialRows, setSpecialRows] = useState<SpecialRow[]>(() =>
@@ -699,6 +712,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     ]).then(([r, t]) => { setRoles(r); setInstallationTemplates(t) })
     // Sonderpositionen-Sektion nur wenn Feature für den Tenant aktiv.
     getMe().then(me => {
+      setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
       if (!isFeatureEnabled(me, 'sonderpositionen')) return
       setSpecialEnabled(true)
       apiFetch('/pwa/admin/special-position-templates')
@@ -714,7 +728,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       const payload = {
         labor_items: laborRows
           .filter(r => r.description && parseNum(r.quantity) > 0)
-          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: 'h', unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: 'h', unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)), hidden: !!r.hidden })),
         material_items: materialRows
           .filter(r => r.description && parseNum(r.quantity) > 0)
           .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
@@ -777,10 +791,16 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
               onChange={e => setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
             <input className="admin-form-input" style={{ flex: 1 }} placeholder="CHF/h" value={row.unit_price}
               onChange={e => setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            {montageEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Dem Kunden nicht als eigene Zeile zeigen — in die Produktpreise einrechnen">
+                <input type="checkbox" checked={!!row.hidden} onChange={e => setLaborRows(rows => rows.map((r, j) => j === i ? { ...r, hidden: e.target.checked } : r))} />
+                verstecken
+              </label>
+            )}
             {laborRows.length > 1 && <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setLaborRows(r => r.filter((_, j) => j !== i))}>✕</button>}
           </div>
         ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setLaborRows(r => [...r, { description: '', quantity: '', unit_price: '' }])}>+ Lohnposition</button>
+        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setLaborRows(r => [...r, { description: '', quantity: '', unit_price: '', hidden: false }])}>+ Lohnposition</button>
       </fieldset>
 
       {/* Materials */}
