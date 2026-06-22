@@ -4,7 +4,7 @@ import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
   IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
-  IconLogout, IconAddressBook, IconSettings, IconHelp,
+  IconLogout, IconAddressBook, IconSettings,
 } from './AdminIcons'
 
 interface Props {
@@ -109,6 +109,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         <NavItem label="Material / Lager" target="materials" current={screen} onNav={onNav} icon={<IconBox />} />
         <NavItem label="Material-Import" target="material-import" current={screen} onNav={onNav} icon={<IconDocument />} />
         {isManagement && (
+          <NavItem label="Funktionen" target="staff-roles" current={screen} onNav={onNav} icon={<IconUsers />} />
+        )}
+        {isManagement && (
           <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
         )}
         {isManagement && has('quotes') && (
@@ -133,13 +136,6 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
             {isSuperadmin && (
               <NavItem label="Push-Test" target="push-test" current={screen} onNav={onNav} icon={<IconDashboard />} />
             )}
-          </>
-        )}
-
-        {has('help_bot') && (
-          <>
-            <div className="admin-nav-group-label">Hilfe</div>
-            <NavItem label="Hilfe-Bot" target="help" current={screen} onNav={onNav} icon={<IconHelp />} />
           </>
         )}
       </nav>

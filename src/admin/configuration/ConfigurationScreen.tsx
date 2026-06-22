@@ -37,6 +37,19 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   kpis_email:       { label: 'KPI-Analyse-Mail',  desc: 'Wöchentliche KI-Kennzahlen-Analyse per Mail am Montag (benötigt Kennzahlen)', category: 'notifications', channel: 'mail' },
   // Benachrichtigungen — Push
   clock_in_reminder:{ label: 'Einstempel-Erinnerung', desc: 'Push werktags um 07:15 an eingeplante, noch nicht eingestempelte Mitarbeiter (benötigt Zeiterfassung)', category: 'notifications', channel: 'push' },
+  clock_out_reminder:{ label: 'Ausstempel-Erinnerung', desc: 'Abend-Push (Standard 18:00, einstellbar) an Mitarbeiter, die noch eingestempelt sind — verhindert die automatische Schliessung um 23:59 (benötigt Zeiterfassung)', category: 'notifications', channel: 'push' },
+  auto_clockout_correction_reminder:{ label: 'Korrektur-Erinnerung (Folgetag)', desc: 'Morgen-Push (Standard 07:00, einstellbar) an Mitarbeiter, deren Session am Vortag automatisch um 23:59 geschlossen wurde (benötigt HR + Zeiterfassung)', category: 'notifications', channel: 'push' },
+  approval_push:{ label: 'Genehmigungs-Push', desc: 'Sofort-Push an Mitarbeiter, wenn ihr Ferien- oder Korrekturantrag genehmigt oder abgelehnt wurde', category: 'notifications', channel: 'push' },
+  morning_briefing:{ label: 'Morgen-Briefing', desc: 'Push beim Einstempeln mit den heutigen Baustellen + Adressen (benötigt Einsatzplanung + Zeiterfassung)', category: 'notifications', channel: 'push' },
+  project_change_push:{ label: 'Projektänderungs-Push', desc: 'Sofort-Push an betroffene Monteure, wenn Einsatztag, Startzeit oder Team eines Projekts geändert wird (benötigt Einsatzplanung)', category: 'notifications', channel: 'push' },
+}
+
+// Module mit zusätzlich konfigurierbarer Uhrzeit. Das An/Aus ist das Modul-Toggle;
+// die Uhrzeit liegt als Feature-Flag (feature_flags.<feature>.time, HH:MM) und wird
+// inline unter dem Toggle gepflegt. Defaults spiegeln feature_registry.py.
+const MODULE_TIME_FEATURE: Record<string, { feature: string; default: string }> = {
+  clock_out_reminder: { feature: 'clock_out_reminder_time', default: '18:00' },
+  auto_clockout_correction_reminder: { feature: 'auto_clockout_correction_reminder_time', default: '07:00' },
 }
 
 const CATEGORY_ORDER: ModuleCategory[] = ['operativ', 'hr', 'analyse', 'ki', 'notifications', 'other']
@@ -552,6 +565,8 @@ function ModulesTab({ onToast, view }: { onToast: (msg: string, type: 'success' 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Reminder-Uhrzeiten (Feature-Flags): feature-key -> HH:MM. Nur im Notifications-View relevant.
+  const [reminderTimes, setReminderTimes] = useState<Record<string, string>>({})
 
   async function load() {
     setLoading(true)
@@ -559,10 +574,32 @@ function ModulesTab({ onToast, view }: { onToast: (msg: string, type: 'success' 
       const result = await getTenantModules()
       setData(result)
       setSelected(new Set(result.enabled_modules))
+      // Aktuelle Reminder-Uhrzeiten aus den Feature-Overrides ziehen (nur Notifications-Tab).
+      if (view === 'notifications') {
+        try {
+          const features = await getTenantFeatures()
+          const times: Record<string, string> = {}
+          for (const { feature, default: def } of Object.values(MODULE_TIME_FEATURE)) {
+            const ov = features.overrides?.[feature] as { time?: string } | undefined
+            times[feature] = (ov?.time as string) || def
+          }
+          setReminderTimes(times)
+        } catch { /* Uhrzeiten optional — Toggle funktioniert auch ohne */ }
+      }
     } catch {
       onToast('Laden fehlgeschlagen', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function saveReminderTime(feature: string, time: string) {
+    setReminderTimes(prev => ({ ...prev, [feature]: time }))
+    try {
+      await updateTenantFeature(feature, { time })
+      onToast('Uhrzeit gespeichert', 'success')
+    } catch {
+      onToast('Uhrzeit speichern fehlgeschlagen', 'error')
     }
   }
 
@@ -638,6 +675,25 @@ function ModulesTab({ onToast, view }: { onToast: (msg: string, type: 'success' 
           {deps.length > 0 && (
             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
               Benötigt: {deps.map(d => MODULE_LABELS[d]?.label ?? d).join(', ')}
+            </div>
+          )}
+          {MODULE_TIME_FEATURE[m] && isOn && (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}
+              onClick={e => { e.preventDefault(); e.stopPropagation() }}
+            >
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Uhrzeit:</span>
+              <input
+                type="time"
+                value={reminderTimes[MODULE_TIME_FEATURE[m].feature] ?? MODULE_TIME_FEATURE[m].default}
+                onClick={e => e.stopPropagation()}
+                onChange={e => saveReminderTime(MODULE_TIME_FEATURE[m].feature, e.target.value)}
+                style={{
+                  padding: '4px 8px', borderRadius: 6, fontSize: 13,
+                  border: '1px solid rgba(255,255,255,0.15)', background: 'transparent',
+                  color: 'inherit',
+                }}
+              />
             </div>
           )}
         </div>

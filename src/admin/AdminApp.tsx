@@ -24,13 +24,15 @@ import PaymentReconciliationScreen from './operative/PaymentReconciliationScreen
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import QuoteTemplatesScreen from './operative/QuoteTemplatesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
+import StaffRolesScreen from './masterdata/StaffRolesScreen'
 import ImportScreen from './system/ImportScreen'
 import UsersScreen from './system/UsersScreen'
 import ServiceStatusScreen from './system/ServiceStatusScreen'
 import PushTestScreen from './system/PushTestScreen'
 import KpiScreen from './kpis/KpiScreen'
 import ConfigurationScreen from './configuration/ConfigurationScreen'
-import HelpBot from '../shared/HelpBot'
+import HelpBubble from '../shared/HelpBubble'
+import { hasModule, isFeatureEnabled } from '../api/modules'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
 import './tokens.css'
 import './admin.css'
@@ -80,6 +82,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'invoices': 'Rechnungen',
   'payment-reconciliation': 'Zahlungsabgleich',
   'suppliers': 'Lieferanten',
+  'staff-roles': 'Funktionen',
   'materials': 'Material / Lager',
   'material-import': 'Material-Import',
   'pricing-rules': 'Preisregeln',
@@ -89,7 +92,6 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'configuration': 'Konfiguration',
   'service-status': 'Service-Status',
   'push-test': 'Push-Test',
-  'help': 'Hilfe-Bot',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
@@ -127,6 +129,9 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   )
 
   const isSuperadmin = user.role === 'superadmin'
+  // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_admin' = unabhängiger
+  // Schalter für den Admin-Bereich (Default an).
+  const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
 
   function renderScreen() {
     if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
@@ -151,6 +156,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
       case 'payment-reconciliation': return guard('payment_matching', <PaymentReconciliationScreen />)
       case 'suppliers':    return <SuppliersScreen />
+      case 'staff-roles':  return <StaffRolesScreen />
       case 'materials':    return <MaterialsScreen />
       case 'material-import': return <ImportScreen />
       case 'pricing-rules':return <PricingRulesScreen />
@@ -160,7 +166,6 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'configuration': return <ConfigurationScreen userRole={user.role} />
       case 'service-status': return <ServiceStatusScreen />
       case 'push-test':    return <PushTestScreen />
-      case 'help':         return guard('help_bot', <HelpBot maxWidth={760} showReindex />)
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }
@@ -204,6 +209,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           enabledModules={user.enabled_modules ?? []}
           badges={badges}
         />
+        {showHelpBubble && <HelpBubble />}
       </div>
     )
   }
@@ -254,6 +260,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           <Fragment key={`${screen}:${resetTick}`}>{renderScreen()}</Fragment>
         </div>
       </main>
+      {showHelpBubble && <HelpBubble />}
     </div>
   )
 }

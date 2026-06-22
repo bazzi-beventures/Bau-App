@@ -14,7 +14,6 @@ interface Props {
   onNavOfferten: () => void
   onNavProjektEntwurf: () => void
   onNavProfile: () => void
-  onNavHelp: () => void
   onLoggedOut: () => void
   onSwitchToAdmin?: () => void
 }
@@ -43,7 +42,7 @@ function formatClockIn(isoUtc: string): string {
   return dt.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
 }
 
-export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavOfferten, onNavProjektEntwurf, onNavProfile, onNavHelp, onLoggedOut, onSwitchToAdmin }: Props) {
+export default function HomeScreen({ displayName, logoUrl, role, enabledModules, onNavRapport, onNavArbeitszeit, onNavProjekte, onNavOfferten, onNavProjektEntwurf, onNavProfile, onLoggedOut, onSwitchToAdmin }: Props) {
   const firstName = displayName.split(' ')[0]
   const isLight = role === 'user_light'
   const has = (m: ModuleName) => enabledModules.includes(m)
@@ -104,20 +103,6 @@ export default function HomeScreen({ displayName, logoUrl, role, enabledModules,
                 </svg>
               )}
             </button>
-            {has('help_bot') && (
-              <button
-                onClick={onNavHelp}
-                className="home-theme-btn"
-                title="Hilfe zur App"
-                aria-label="Hilfe"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </button>
-            )}
             {onSwitchToAdmin && (
               <button
                 onClick={onSwitchToAdmin}

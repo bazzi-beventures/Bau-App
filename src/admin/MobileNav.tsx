@@ -5,7 +5,7 @@ import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconFolder, IconClock, IconCash,
   IconUsers, IconAddressBook, IconReceipt, IconCalendar,
-  IconDocument, IconBox, IconTag, IconChart, IconKey, IconLogout, IconSettings, IconHelp,
+  IconDocument, IconBox, IconTag, IconChart, IconKey, IconLogout, IconSettings,
 } from './AdminIcons'
 
 interface Props {
@@ -218,11 +218,6 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 {isManagement && (
                   <button className={`admin-mobile-drawer-item${screen === 'configuration' ? ' active' : ''}`} onClick={() => navigate('configuration')}>
                     <IconSettings /><span>Konfiguration</span>
-                  </button>
-                )}
-                {has('help_bot') && (
-                  <button className={`admin-mobile-drawer-item${screen === 'help' ? ' active' : ''}`} onClick={() => navigate('help')}>
-                    <IconHelp /><span>Hilfe-Bot</span>
                   </button>
                 )}
               </div>

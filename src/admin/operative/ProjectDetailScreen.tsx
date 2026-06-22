@@ -843,19 +843,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </button>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Name</label>
-                  <input className="admin-form-input" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
+                  {/* autoComplete mit unbekanntem Token: verhindert, dass Chrome/Edge das leere
+                      Feld ungefragt mit dem Browser-Profilnamen (z.B. "Luca Bazzi") befüllt. */}
+                  <input className="admin-form-input" autoComplete="new-kontakt-name" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Kommentar</label>
-                  <input className="admin-form-input" value={k.kommentar} onChange={e => updateKontakt(i, 'kommentar', e.target.value)} placeholder="z.B. Hausabwart" />
+                  <input className="admin-form-input" autoComplete="new-kontakt-kommentar" value={k.kommentar} onChange={e => updateKontakt(i, 'kommentar', e.target.value)} placeholder="z.B. Hausabwart" />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Telefon</label>
-                  <input className="admin-form-input" value={k.telefon} onChange={e => updateKontakt(i, 'telefon', e.target.value)} />
+                  <input className="admin-form-input" autoComplete="new-kontakt-telefon" value={k.telefon} onChange={e => updateKontakt(i, 'telefon', e.target.value)} />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">E-Mail</label>
-                  <input className="admin-form-input" type="email" value={k.email} onChange={e => updateKontakt(i, 'email', e.target.value)} />
+                  <input className="admin-form-input" autoComplete="new-kontakt-email" type="email" value={k.email} onChange={e => updateKontakt(i, 'email', e.target.value)} />
                 </div>
                 <button type="button" className="admin-btn admin-btn-sm admin-btn-danger" style={{ marginBottom: 1 }} onClick={() => removeKontakt(i)}>
                   ✕

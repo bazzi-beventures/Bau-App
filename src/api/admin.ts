@@ -143,6 +143,13 @@ export async function getStaffRoles(): Promise<StaffRole[]> {
   return apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>
 }
 
+export async function upsertStaffRole(name: string, hourly_rate: number): Promise<{ status: string; message: string }> {
+  return apiFetch('/pwa/admin/staff-roles', {
+    method: 'PUT',
+    body: JSON.stringify({ name, hourly_rate }),
+  }) as Promise<{ status: string; message: string }>
+}
+
 export async function upsertStaff(data: Partial<StaffMember> & { id?: string }): Promise<StaffMember> {
   const method = data.id ? 'PATCH' : 'POST'
   const url = data.id ? `/pwa/admin/staff/${data.id}` : '/pwa/admin/staff'

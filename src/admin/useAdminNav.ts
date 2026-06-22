@@ -16,6 +16,7 @@ export type AdminScreen =
   | 'invoices'
   | 'payment-reconciliation'
   | 'suppliers'
+  | 'staff-roles'
   | 'materials'
   | 'material-import'
   | 'pricing-rules'
@@ -25,7 +26,6 @@ export type AdminScreen =
   | 'configuration'
   | 'service-status'
   | 'push-test'
-  | 'help'
 
 export interface AdminNavState {
   screen: AdminScreen

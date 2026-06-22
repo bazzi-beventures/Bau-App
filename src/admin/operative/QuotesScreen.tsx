@@ -8,6 +8,7 @@ import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
+import { SpellcheckTextarea } from './SpellcheckTextarea'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
@@ -85,6 +86,7 @@ export interface QuoteDetail {
   labor_discount_pct: number
   material_discount_pct: number
   notes: string | null
+  product_description: string | null
 }
 
 interface Material {
@@ -178,6 +180,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [materialDiscount, setMaterialDiscount] = useState('')
   const [notes, setNotes] = useState(STANDARD_NOTES)
   const [stdNotes, setStdNotes] = useState(STANDARD_NOTES)
+  const [productDescription, setProductDescription] = useState('')
   const [useStandardNotes, setUseStandardNotes] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -372,6 +375,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
+        product_description: productDescription.trim() || null,
       }
       await apiFetch('/pwa/admin/quotes', { method: 'POST', body: JSON.stringify(payload) })
       onDone()
@@ -629,6 +633,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         onMaterialChange={setMaterialDiscount}
       />
 
+      {/* Product description */}
+      <div style={{ marginBottom: 20 }}>
+        <label className="admin-form-label">Produktbeschreibung</label>
+        <SpellcheckTextarea value={productDescription} onChange={setProductDescription} placeholder="Beschreibung der angebotenen Produkte…" />
+      </div>
+
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
         <label className="admin-form-label">Bemerkungen</label>
@@ -702,6 +712,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
   const [notes, setNotes] = useState(quote.notes || '')
+  const [productDescription, setProductDescription] = useState(quote.product_description || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -748,6 +759,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
+        product_description: productDescription.trim() || null,
       }
       await apiFetch(`/pwa/admin/quotes/${quote.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
       onDone()
@@ -929,6 +941,12 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         onLaborChange={setLaborDiscount}
         onMaterialChange={setMaterialDiscount}
       />
+
+      {/* Product description */}
+      <div style={{ marginBottom: 20 }}>
+        <label className="admin-form-label">Produktbeschreibung</label>
+        <SpellcheckTextarea value={productDescription} onChange={setProductDescription} placeholder="Beschreibung der angebotenen Produkte…" />
+      </div>
 
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>

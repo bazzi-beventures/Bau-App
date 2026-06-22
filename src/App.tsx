@@ -15,10 +15,11 @@ import OffertenScreen from './screens/OffertenScreen'
 import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
-import HelpBot from './shared/HelpBot'
+import HelpBubble from './shared/HelpBubble'
+import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
 
-type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen' | 'help'
+type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen'
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -369,17 +370,9 @@ export default function App() {
         onNavOfferten={() => setScreen('offerten')}
         onNavProjektEntwurf={() => setScreen('projektEntwurf')}
         onNavProfile={() => setScreen('profile')}
-        onNavHelp={() => setScreen('help')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
         onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
       />
-    )
-  } else if (screen === 'help' && user) {
-    if (!user.enabled_modules?.includes('help_bot')) { setScreen('home'); return null }
-    inner = (
-      <div className="app-screen" style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
-        <HelpBot header={{ title: 'Hilfe', onBack: () => setScreen('home') }} />
-      </div>
     )
   } else if (screen === 'profile' && user) {
     inner = (
@@ -503,6 +496,16 @@ export default function App() {
     )
   }
 
+  // Schwebende Hilfe-Blase: auf allen authentifizierten Mitarbeiter-Screens, aber nicht
+  // auf Auth-Screens und nicht im Admin-Bereich (AdminApp rendert eine eigene Blase).
+  // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_pwa' = unabhängiger
+  // Schalter für die Mitarbeiter-App (Default an).
+  const showHelpBubble =
+    !!user &&
+    hasModule(user, 'help_bot') &&
+    isFeatureEnabled(user, 'help_bot_pwa') &&
+    !['loading', 'login', 'pin', 'consent', 'admin'].includes(screen)
+
   return (
     <>
       {offlineBanner}
@@ -510,6 +513,7 @@ export default function App() {
       {pushBanner}
       {updateBanner}
       {inner}
+      {showHelpBubble && <HelpBubble columnMaxWidth={480} />}
     </>
   )
 }

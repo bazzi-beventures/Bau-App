@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { askHelp, HelpSource, ReindexStatus, getReindexStatus, triggerReindex } from '../api/help'
+import { askHelp, HelpSource } from '../api/help'
 import { ApiError, isOfflineError } from '../api/client'
 
 type Role = 'user' | 'assistant'
@@ -20,9 +20,6 @@ interface Props {
   header?: { title: string; onBack?: () => void }
   /** Begrenzt die maximale Breite (z.B. fuer Admin-Desktop). Default: full width. */
   maxWidth?: number
-  /** Wenn true: Reindex-Bereich (Drive-Dokumente neu einlesen) sichtbar machen.
-      Sollte nur fuer Admins gesetzt werden. */
-  showReindex?: boolean
 }
 
 const DEFAULT_SUGGESTIONS = [
@@ -34,62 +31,12 @@ const DEFAULT_SUGGESTIONS = [
 
 let _nextId = 1
 
-export default function HelpBot({ suggestions = DEFAULT_SUGGESTIONS, header, maxWidth, showReindex }: Props) {
+export default function HelpBot({ suggestions = DEFAULT_SUGGESTIONS, header, maxWidth }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [reindex, setReindex] = useState<ReindexStatus | null>(null)
-  const [reindexErr, setReindexErr] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-
-  // Beim Mount + alle 3s (waehrend running) Status pollen
-  useEffect(() => {
-    if (!showReindex) return
-    let cancelled = false
-    let timer: number | null = null
-
-    async function tick() {
-      try {
-        const st = await getReindexStatus()
-        if (cancelled) return
-        setReindex(st)
-        if (st.state === 'running') {
-          timer = window.setTimeout(tick, 3000)
-        }
-      } catch {
-        if (!cancelled) timer = window.setTimeout(tick, 10000)
-      }
-    }
-    tick()
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
-  }, [showReindex])
-
-  async function handleReindex() {
-    setReindexErr(null)
-    try {
-      await triggerReindex()
-      // Sofort Status pollen + erneutes Polling starten
-      const st = await getReindexStatus()
-      setReindex(st)
-      const loop = async () => {
-        try {
-          const s = await getReindexStatus()
-          setReindex(s)
-          if (s.state === 'running') window.setTimeout(loop, 3000)
-        } catch { /* ignore */ }
-      }
-      window.setTimeout(loop, 3000)
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 400) setReindexErr('Drive-Ordner nicht konfiguriert.')
-        else if (err.status === 429) setReindexErr('Bitte 5 Minuten warten.')
-        else setReindexErr(err.message)
-      } else {
-        setReindexErr('Re-Index fehlgeschlagen.')
-      }
-    }
-  }
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -182,52 +129,6 @@ export default function HelpBot({ suggestions = DEFAULT_SUGGESTIONS, header, max
             </button>
           )}
           <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{header.title}</div>
-        </div>
-      )}
-
-      {showReindex && (
-        <div style={{
-          padding: '10px 16px', borderBottom: '1px solid var(--border, #e5e7eb)',
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          background: 'var(--surface-muted, #f9fafb)',
-          fontSize: '0.85rem',
-        }}>
-          <button
-            onClick={handleReindex}
-            disabled={reindex?.state === 'running'}
-            style={{
-              padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border, #d1d5db)',
-              background: reindex?.state === 'running' ? 'var(--surface-muted, #e5e7eb)' : 'var(--surface, #fff)',
-              color: 'var(--text, #111)', cursor: reindex?.state === 'running' ? 'not-allowed' : 'pointer',
-              fontWeight: 500,
-            }}
-          >
-            {reindex?.state === 'running' ? 'Re-Index läuft…' : 'Drive-Handbücher neu einlesen'}
-          </button>
-
-          {reindex && reindex.state !== 'idle' && (
-            <div style={{ color: 'var(--muted, #6b7280)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {reindex.state === 'running' && (
-                <span>{reindex.files_processed}/{reindex.files_total} Dateien</span>
-              )}
-              {reindex.state === 'success' && (
-                <span style={{ color: '#16a34a' }}>
-                  ✓ {reindex.chunks_indexed} Chunks aus {reindex.files_processed} Datei(en)
-                  {reindex.files_skipped > 0 && ` (${reindex.files_skipped} übersprungen)`}
-                </span>
-              )}
-              {reindex.state === 'error' && (
-                <span style={{ color: '#dc2626' }}>Fehler: {reindex.last_error}</span>
-              )}
-              {reindex.errors.length > 0 && reindex.state !== 'error' && (
-                <span style={{ color: '#dc2626' }}>{reindex.errors.length} Datei-Fehler</span>
-              )}
-            </div>
-          )}
-
-          {reindexErr && (
-            <span style={{ color: '#dc2626' }}>{reindexErr}</span>
-          )}
         </div>
       )}
 
