@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { askHelp, HelpSource } from '../api/help'
+import ReactMarkdown from 'react-markdown'
+import { askHelp } from '../api/help'
 import { ApiError, isOfflineError } from '../api/client'
 
 type Role = 'user' | 'assistant'
@@ -8,8 +9,6 @@ interface Message {
   id: number
   role: Role
   text: string
-  sources?: HelpSource[]
-  cached?: boolean
   error?: string
 }
 
@@ -59,10 +58,6 @@ export default function HelpBot({ suggestions = DEFAULT_SUGGESTIONS, header, max
         if (ev.type === 'delta') {
           setMessages(prev => prev.map(m =>
             m.id === botMsg.id ? { ...m, text: m.text + ev.text } : m
-          ))
-        } else if (ev.type === 'sources') {
-          setMessages(prev => prev.map(m =>
-            m.id === botMsg.id ? { ...m, sources: ev.sources, cached: ev.cached } : m
           ))
         } else if (ev.type === 'error') {
           setMessages(prev => prev.map(m =>
@@ -144,45 +139,40 @@ export default function HelpBot({ suggestions = DEFAULT_SUGGESTIONS, header, max
           </div>
         )}
 
-        {messages.map(m => (
-          <div key={m.id} style={{
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '85%',
-            padding: '10px 14px',
-            borderRadius: 12,
-            background: m.role === 'user'
-              ? 'var(--accent-blue, #1e3a5f)'
-              : 'var(--surface-muted, #f3f4f6)',
-            color: m.role === 'user' ? '#fff' : 'var(--text, #111)',
-            fontSize: '0.95rem',
-            lineHeight: 1.4,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}>
-            {m.text || (m.role === 'assistant' && !m.error && (
-              <span style={{ opacity: 0.6, fontStyle: 'italic' }}>denkt nach…</span>
-            ))}
-            {m.error && (
-              <div style={{ color: '#ef4444', fontWeight: 500, marginTop: 4 }}>
-                {m.error}
-              </div>
-            )}
-            {m.sources && m.sources.length > 0 && (
-              <div style={{
-                marginTop: 8, paddingTop: 8,
-                borderTop: '1px solid rgba(0,0,0,0.08)',
-                fontSize: '0.78rem', opacity: 0.75,
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                  Quellen{m.cached ? ' (aus Cache)' : ''}:
+        {messages.map(m => {
+          const isUser = m.role === 'user'
+          return (
+            <div key={m.id} style={{
+              alignSelf: isUser ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+              padding: '10px 14px',
+              borderRadius: 12,
+              background: isUser
+                ? 'var(--accent-blue, #1e3a5f)'
+                : 'var(--surface-muted, #f3f4f6)',
+              color: isUser ? '#fff' : 'var(--text, #111)',
+              fontSize: '0.95rem',
+              lineHeight: 1.4,
+              // Nutzer-Eingabe als Klartext (Zeilenumbrueche erhalten); Bot-Antwort
+              // rendert Markdown selbst, daher hier kein pre-wrap.
+              whiteSpace: isUser ? 'pre-wrap' : 'normal',
+              wordBreak: 'break-word',
+            }}>
+              {isUser
+                ? m.text
+                : m.text
+                  ? <div className="chat-md"><ReactMarkdown>{m.text}</ReactMarkdown></div>
+                  : !m.error && (
+                      <span style={{ opacity: 0.6, fontStyle: 'italic' }}>denkt nach…</span>
+                    )}
+              {m.error && (
+                <div style={{ color: '#ef4444', fontWeight: 500, marginTop: 4 }}>
+                  {m.error}
                 </div>
-                {m.sources.map((s, i) => (
-                  <div key={i}>• {s.section}</div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Vorschlaege (nur solange noch keine Nachrichten existieren) */}

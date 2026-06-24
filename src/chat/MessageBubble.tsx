@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown'
+
 interface Props {
   role: 'user' | 'bot'
   text: string
@@ -13,7 +15,11 @@ export default function MessageBubble({ role, text, transcription, timestamp }: 
         {transcription && (
           <p className="bubble-transcription">🎤 „{transcription}"</p>
         )}
-        <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+        {/* Nutzer-Eingabe als Klartext (Zeilenumbrueche erhalten); Bot-Antwort
+            rendert Markdown (**fett**, Listen) statt rohe Sternchen zu zeigen. */}
+        {isUser
+          ? <p style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+          : <div className="chat-md"><ReactMarkdown>{text}</ReactMarkdown></div>}
         <span className="bubble-time">{timestamp}</span>
       </div>
     </div>

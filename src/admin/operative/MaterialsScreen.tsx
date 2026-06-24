@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import UnitsPanel from './UnitsPanel'
+import FrequentMaterialsPanel from './FrequentMaterialsPanel'
+import { UserInfo } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 
 interface Supplier {
   id: string
@@ -490,10 +493,12 @@ function MaterialInventoryPanel() {
   )
 }
 
-type MaterialTab = 'inventory' | 'units'
+type MaterialTab = 'inventory' | 'units' | 'frequent'
 
-export default function MaterialsScreen() {
+export default function MaterialsScreen({ user }: { user: UserInfo }) {
   const [tab, setTab] = useState<MaterialTab>('inventory')
+  // Tab "Häufig benutzte Produkte" nur, wenn der Workflow ersatzteil_prompt aktiv ist.
+  const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
 
   return (
     <div className="admin-page">
@@ -510,9 +515,19 @@ export default function MaterialsScreen() {
         >
           Einheiten
         </button>
+        {ersatzteilEnabled && (
+          <button
+            className={`kpi-admin-tab${tab === 'frequent' ? ' active' : ''}`}
+            onClick={() => setTab('frequent')}
+          >
+            Häufig benutzte Produkte
+          </button>
+        )}
       </div>
 
-      {tab === 'inventory' ? <MaterialInventoryPanel /> : <UnitsPanel />}
+      {tab === 'inventory' && <MaterialInventoryPanel />}
+      {tab === 'units' && <UnitsPanel />}
+      {tab === 'frequent' && ersatzteilEnabled && <FrequentMaterialsPanel />}
     </div>
   )
 }

@@ -495,3 +495,39 @@ export async function updateTenantFeature(
     body: JSON.stringify({ feature_key: featureKey, value }),
   }) as Promise<{ feature_key: string; effective: Record<string, unknown> }>
 }
+
+// ─── Häufig benutzte Ersatzteile (kuratierte Material-Liste) ─────────
+
+export interface FrequentMaterial {
+  id: string            // frequent_materials.id (für remove/reorder)
+  sort_order: number
+  material_id: string
+  art_nr: string
+  name: string
+  unit: string
+  category?: string | null
+  is_active: boolean
+  calc_vk: number
+}
+
+export async function getFrequentMaterials(): Promise<FrequentMaterial[]> {
+  return apiFetch('/pwa/admin/frequent-materials') as Promise<FrequentMaterial[]>
+}
+
+export async function addFrequentMaterial(artNr: string): Promise<{ status: string }> {
+  return apiFetch('/pwa/admin/frequent-materials', {
+    method: 'POST',
+    body: JSON.stringify({ art_nr: artNr }),
+  }) as Promise<{ status: string }>
+}
+
+export async function removeFrequentMaterial(id: string): Promise<{ status: string }> {
+  return apiFetch(`/pwa/admin/frequent-materials/${id}`, { method: 'DELETE' }) as Promise<{ status: string }>
+}
+
+export async function reorderFrequentMaterials(orderedIds: string[]): Promise<{ status: string }> {
+  return apiFetch('/pwa/admin/frequent-materials/order', {
+    method: 'PUT',
+    body: JSON.stringify({ ordered_ids: orderedIds }),
+  }) as Promise<{ status: string }>
+}

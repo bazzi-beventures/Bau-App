@@ -157,7 +157,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'payment-reconciliation': return guard('payment_matching', <PaymentReconciliationScreen />)
       case 'suppliers':    return <SuppliersScreen />
       case 'staff-roles':  return <StaffRolesScreen />
-      case 'materials':    return <MaterialsScreen />
+      case 'materials':    return <MaterialsScreen user={user} />
       case 'material-import': return <ImportScreen />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'quote-templates': return <QuoteTemplatesScreen />

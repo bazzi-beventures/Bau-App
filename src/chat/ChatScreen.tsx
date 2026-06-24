@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { UserInfo } from '../api/auth'
-import { getFeature, KleinmaterialPromptConfig } from '../api/modules'
+import { getFeature, isFeatureEnabled, KleinmaterialPromptConfig } from '../api/modules'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
 import KleinmaterialPrompt from './KleinmaterialPrompt'
+import ErsatzteilPrompt from './ErsatzteilPrompt'
 
 interface Message {
   id: number
@@ -43,6 +44,8 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
   const [kleinmaterialDone, setKleinmaterialDone] = useState<Set<number>>(new Set())
+  const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
+  const [ersatzteilDone, setErsatzteilDone] = useState<Set<number>>(new Set())
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -368,9 +371,27 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
           />
         )}
 
-        {/* Inline signature pad — shown after report is saved (und nach Kleinmaterial-Abfrage falls aktiv) */}
+        {/* Ersatzteil-Abfrage — nach Kleinmaterial, vor der Unterschrift, sofern Feature aktiv */}
         {pendingSignReportId !== null
-          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId)) && (
+          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId))
+          && ersatzteilEnabled
+          && !ersatzteilDone.has(pendingSignReportId) && (
+          <ErsatzteilPrompt
+            reportId={pendingSignReportId}
+            onDone={() => {
+              setErsatzteilDone(prev => {
+                const next = new Set(prev)
+                next.add(pendingSignReportId)
+                return next
+              })
+            }}
+          />
+        )}
+
+        {/* Inline signature pad — shown after report is saved (und nach Klein-/Ersatzteil-Abfrage falls aktiv) */}
+        {pendingSignReportId !== null
+          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId))
+          && (!ersatzteilEnabled || ersatzteilDone.has(pendingSignReportId)) && (
           <SignaturePad
             reportId={pendingSignReportId}
             onDone={() => {

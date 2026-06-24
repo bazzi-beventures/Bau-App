@@ -108,6 +108,30 @@ export async function downloadRapportPdf(reportId: number): Promise<{ blob: Blob
   return apiBlobFetch(`/pwa/chat/report/${reportId}/pdf`)
 }
 
+// ─── Häufig benutzte Ersatzteile (Rapport-Abschluss) ─────────
+
+export interface FrequentMaterialOption {
+  id: string
+  art_nr: string
+  name: string
+  unit: string
+  calc_vk: number
+}
+
+export async function fetchFrequentMaterials(): Promise<FrequentMaterialOption[]> {
+  return apiFetch('/pwa/chat/frequent-materials', { method: 'GET' }) as Promise<FrequentMaterialOption[]>
+}
+
+export async function recordErsatzteile(
+  reportId: number,
+  items: { art_nr: string; amount: number }[],
+): Promise<{ status: string; recorded: number }> {
+  return apiFetch(`/pwa/chat/report/${reportId}/ersatzteile`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  }) as Promise<{ status: string; recorded: number }>
+}
+
 export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {
   return apiFetch('/pwa/chat/disambiguate', {
     method: 'POST',
