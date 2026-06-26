@@ -74,6 +74,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
         <div className="admin-nav-group-label">Personal</div>
         <NavItem label="Mitarbeiter" target="staff" current={screen} onNav={onNav} icon={<IconUsers />} />
+        {isManagement && has('timekeeping') && (
+          <NavItem label="Massen-Einstempeln" target="bulk-clockin" current={screen} onNav={onNav} icon={<IconClock />} />
+        )}
         {has('hr') && (
           <NavItem label="Absenzen" target="absences" current={screen} onNav={onNav} icon={<IconCalendar />} badge={badges?.absences} />
         )}
@@ -107,7 +110,6 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />
         <NavItem label="Material / Lager" target="materials" current={screen} onNav={onNav} icon={<IconBox />} />
-        <NavItem label="Material-Import" target="material-import" current={screen} onNav={onNav} icon={<IconDocument />} />
         {isManagement && (
           <NavItem label="Funktionen" target="staff-roles" current={screen} onNav={onNav} icon={<IconUsers />} />
         )}
@@ -129,12 +131,8 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           <>
             <div className="admin-nav-group-label">System</div>
             <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
-            <NavItem label="Konfiguration" target="configuration" current={screen} onNav={onNav} icon={<IconSettings />} />
             {isSuperadmin && (
-              <NavItem label="Service-Status" target="service-status" current={screen} onNav={onNav} icon={<IconDashboard />} />
-            )}
-            {isSuperadmin && (
-              <NavItem label="Push-Test" target="push-test" current={screen} onNav={onNav} icon={<IconDashboard />} />
+              <NavItem label="Admin-Tools" target="admin-tools" current={screen} onNav={onNav} icon={<IconSettings />} />
             )}
           </>
         )}

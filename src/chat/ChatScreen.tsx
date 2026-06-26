@@ -6,8 +6,8 @@ import { getFeature, isFeatureEnabled, KleinmaterialPromptConfig } from '../api/
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
-import KleinmaterialPrompt from './KleinmaterialPrompt'
-import ErsatzteilPrompt from './ErsatzteilPrompt'
+import KleinmaterialPrompt, { KleinmaterialSelection } from './KleinmaterialPrompt'
+import ErsatzteilPrompt, { ErsatzteilSelection } from './ErsatzteilPrompt'
 
 interface Message {
   id: number
@@ -43,9 +43,12 @@ function now() {
 export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
-  const [kleinmaterialDone, setKleinmaterialDone] = useState<Set<number>>(new Set())
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
-  const [ersatzteilDone, setErsatzteilDone] = useState<Set<number>>(new Set())
+  // Vor dem Speichern gesammelte Zusatz-Positionen (werden beim Bestätigen mitgebucht).
+  const [kleinCollected, setKleinCollected] = useState(false)
+  const [ersatzCollected, setErsatzCollected] = useState(false)
+  const [collectedKlein, setCollectedKlein] = useState<KleinmaterialSelection | null>(null)
+  const [collectedErsatz, setCollectedErsatz] = useState<ErsatzteilSelection[]>([])
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
@@ -84,6 +87,11 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingConfirm(true)
       setPendingDisambiguation(false)
       setPendingQuoteQuestion(false)
+      // Neue Bestätigung → Zusatz-Material-Schritte zurücksetzen
+      setKleinCollected(false)
+      setErsatzCollected(false)
+      setCollectedKlein(null)
+      setCollectedErsatz([])
     } else if (res.action_taken === 'disambiguate') {
       setPendingDisambiguation(true)
       setPendingConfirm(false)
@@ -196,7 +204,10 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     setPendingConfirm(false)
     setLoading(true)
     try {
-      const res = await confirmReport()
+      const res = await confirmReport({
+        kleinmaterial: collectedKlein,
+        ersatzteile: collectedErsatz.map(it => ({ art_nr: it.art_nr, amount: it.amount })),
+      })
       addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
       handleActionState(res)
     } catch (err) {
@@ -263,6 +274,12 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const lastDisambigMsg = pendingDisambiguation
     ? [...messages].reverse().find(m => m.disambiguation && m.disambiguation.length > 0)
     : null
+
+  // Vor dem Speichern: erst Klein-, dann Ersatzteil-Schritt, dann Speichern-Button.
+  const kleinStepPending = pendingConfirm && kleinmaterialEnabled && !!kleinmaterialCfg && !kleinCollected
+  const ersatzStepPending = pendingConfirm && !kleinStepPending && ersatzteilEnabled && !ersatzCollected
+  const confirmReady = pendingConfirm && !kleinStepPending && !ersatzStepPending
+  const hasExtras = !!collectedKlein?.amount_chf || collectedErsatz.length > 0
 
   return (
     <div className="chat-screen">
@@ -341,57 +358,58 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
           </div>
         )}
 
-        {/* Confirmation buttons — shown below the pending summary message */}
-        {pendingConfirm && !loading && (
-          <div className="confirm-buttons">
-            <button className="confirm-btn confirm-btn-yes" onClick={handleConfirm}>
-              Speichern
-            </button>
-            <button className="confirm-btn confirm-btn-no" onClick={handleCancel}>
-              Abbrechen
-            </button>
-          </div>
-        )}
-
-        {/* Klein-/Schmiermaterial-Abfrage — vor der Unterschrift, sofern Feature aktiv */}
-        {pendingSignReportId !== null
-          && kleinmaterialEnabled
-          && kleinmaterialCfg
-          && !kleinmaterialDone.has(pendingSignReportId) && (
+        {/* Vor dem Speichern: Klein-/Schmiermaterial-Schritt (Feature aktiv) */}
+        {kleinStepPending && kleinmaterialCfg && !loading && (
           <KleinmaterialPrompt
-            reportId={pendingSignReportId}
             config={kleinmaterialCfg}
-            onDone={() => {
-              setKleinmaterialDone(prev => {
-                const next = new Set(prev)
-                next.add(pendingSignReportId)
-                return next
-              })
-            }}
+            onSubmit={(sel) => { setCollectedKlein(sel); setKleinCollected(true) }}
           />
         )}
 
-        {/* Ersatzteil-Abfrage — nach Kleinmaterial, vor der Unterschrift, sofern Feature aktiv */}
-        {pendingSignReportId !== null
-          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId))
-          && ersatzteilEnabled
-          && !ersatzteilDone.has(pendingSignReportId) && (
+        {/* Vor dem Speichern: Ersatzteil-Schritt (nach Kleinmaterial, Feature aktiv) */}
+        {ersatzStepPending && !loading && (
           <ErsatzteilPrompt
-            reportId={pendingSignReportId}
-            onDone={() => {
-              setErsatzteilDone(prev => {
-                const next = new Set(prev)
-                next.add(pendingSignReportId)
-                return next
-              })
-            }}
+            onSubmit={(items) => { setCollectedErsatz(items); setErsatzCollected(true) }}
           />
         )}
 
-        {/* Inline signature pad — shown after report is saved (und nach Klein-/Ersatzteil-Abfrage falls aktiv) */}
-        {pendingSignReportId !== null
-          && (!kleinmaterialEnabled || kleinmaterialDone.has(pendingSignReportId))
-          && (!ersatzteilEnabled || ersatzteilDone.has(pendingSignReportId)) && (
+        {/* Recap der gesammelten Zusatz-Positionen + Speichern/Abbrechen */}
+        {confirmReady && !loading && (
+          <>
+            {hasExtras && (
+              <div className="kleinmaterial-prompt">
+                <div className="kleinmaterial-title">Zusätzlich zum Rapport erfasst</div>
+                <div className="ersatzteil-list">
+                  {collectedKlein?.amount_chf ? (
+                    <div className="ersatzteil-row">
+                      <span className="ersatzteil-name">Klein-/Schmiermaterial</span>
+                      <span>CHF {collectedKlein.amount_chf} × {collectedKlein.count} = CHF {collectedKlein.amount_chf * collectedKlein.count}</span>
+                    </div>
+                  ) : null}
+                  {collectedErsatz.map(it => (
+                    <div key={it.art_nr} className="ersatzteil-row">
+                      <span className="ersatzteil-name">
+                        <span className="ersatzteil-artnr">{it.art_nr}</span> {it.name}
+                      </span>
+                      <span>{it.amount} {it.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="confirm-buttons">
+              <button className="confirm-btn confirm-btn-yes" onClick={handleConfirm}>
+                Speichern
+              </button>
+              <button className="confirm-btn confirm-btn-no" onClick={handleCancel}>
+                Abbrechen
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Inline signature pad — shown after report is saved */}
+        {pendingSignReportId !== null && (
           <SignaturePad
             reportId={pendingSignReportId}
             onDone={() => {

@@ -162,6 +162,32 @@ export interface KpiMaterialLeistungsartRow {
   total_materialkosten_intern: number
 }
 
+/* ── LLM-Kosten-Views (eine Zeile pro Tag × Dimension) ── */
+
+interface KpiLlmKostenBase {
+  tenant_id: string
+  datum: string // 'YYYY-MM-DD' (Europe/Zurich)
+  calls: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  kosten_usd: number
+}
+
+export interface KpiLlmKostenEndpunktRow extends KpiLlmKostenBase {
+  endpoint: string
+}
+
+export interface KpiLlmKostenModellRow extends KpiLlmKostenBase {
+  provider: string
+  model: string
+}
+
+export interface KpiLlmKostenBenutzerRow extends KpiLlmKostenBase {
+  user_id: string
+  benutzer_name: string
+}
+
 export interface CategoryPricingRow {
   id: string
   tenant_id: string

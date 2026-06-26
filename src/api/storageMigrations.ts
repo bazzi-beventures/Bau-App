@@ -24,6 +24,7 @@ function isKnownKey(k: string): boolean {
   if (k === 'zeit_offline_queue') return true
   if (k === 'projektEntwurf_offline_queue') return true
   if (k === 'hinweise_offline_queue') return true
+  if (k.startsWith('quote-draft:')) return true  // lokaler Offert-Zwischenstand (pro Projekt)
   if (k === 'admin-theme') return true
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true

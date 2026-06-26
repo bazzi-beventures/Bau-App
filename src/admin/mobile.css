@@ -490,6 +490,13 @@
     flex-shrink: 0;
   }
 
+  /* Admin-Tools-Tableiste: Padding an das mobile .admin-page (var(--s-4))
+     anpassen, damit der erste Tab mit dem Tool-Screen darunter fluchtet. */
+  .admin-tools-tabs {
+    padding: var(--s-4) var(--s-4) 0;
+    max-width: 100%;
+  }
+
   /* ─── Confirm dialog → bottom sheet ──────────────────── */
 
   .admin-confirm-overlay {

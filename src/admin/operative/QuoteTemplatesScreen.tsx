@@ -60,19 +60,28 @@ export default function QuoteTemplatesScreen() {
   const [stdNotesSaved, setStdNotesSaved] = useState('')
   const [stdIsDefault, setStdIsDefault] = useState(true)
   const [savingNotes, setSavingNotes] = useState(false)
+  // Footer-Disclaimer: analog zu den Standard-Bemerkungen, eigenes Tenant-Feld.
+  const [stdDisc, setStdDisc] = useState('')
+  const [stdDiscSaved, setStdDiscSaved] = useState('')
+  const [stdDiscIsDefault, setStdDiscIsDefault] = useState(true)
+  const [savingDisc, setSavingDisc] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes] = await Promise.all([
+      const [data, notes, disc] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
       setStdNotes(notes.notes ?? '')
       setStdNotesSaved(notes.notes ?? '')
       setStdIsDefault(notes.is_default)
+      setStdDisc(disc.disclaimer ?? '')
+      setStdDiscSaved(disc.disclaimer ?? '')
+      setStdDiscIsDefault(disc.is_default)
     } finally {
       setLoading(false)
     }
@@ -94,6 +103,27 @@ export default function QuoteTemplatesScreen() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingNotes(false)
+    }
+  }
+
+  async function saveFooterDisclaimer(reset = false) {
+    setSavingDisc(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer
+      // String ist erlaubt und heisst "bewusst kein Disclaimer" (wird gespeichert).
+      const res = await apiFetch('/pwa/admin/quote-footer-disclaimer', {
+        method: 'PATCH',
+        body: JSON.stringify({ disclaimer: reset ? null : stdDisc }),
+      }) as { disclaimer: string; is_default: boolean }
+      setStdDisc(res.disclaimer ?? '')
+      setStdDiscSaved(res.disclaimer ?? '')
+      setStdDiscIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Disclaimer gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingDisc(false)
     }
   }
 
@@ -304,6 +334,48 @@ export default function QuoteTemplatesScreen() {
                 className="admin-btn admin-btn-secondary"
                 onClick={() => saveStandardNotes(true)}
                 disabled={savingNotes || stdIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Footer-Disclaimer ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer</div>
+              <div className="admin-page-subtitle">
+                Erscheint zuunterst auf jedem Offerten-PDF, unter den Bemerkungen.
+                {stdDiscIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+                {!stdDiscIsDefault && stdDiscSaved.trim() === '' &&
+                  ' Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={4}
+              value={stdDisc}
+              onChange={e => setStdDisc(e.target.value)}
+              placeholder="Schlusstext / Disclaimer fürs Offerten-PDF…"
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveFooterDisclaimer(false)}
+                disabled={savingDisc || stdDisc === stdDiscSaved}
+              >
+                {savingDisc ? 'Speichern…' : 'Disclaimer speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveFooterDisclaimer(true)}
+                disabled={savingDisc || stdDiscIsDefault}
               >
                 Auf Standardtext zurücksetzen
               </button>

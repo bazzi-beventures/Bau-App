@@ -8,6 +8,7 @@ import { useAdminNav, AdminScreen } from './useAdminNav'
 import { useIsMobile } from './useIsMobile'
 import DashboardScreen from './dashboard/DashboardScreen'
 import StaffScreen from './personal/StaffScreen'
+import BulkClockInScreen from './personal/BulkClockInScreen'
 import MyTimeScreen from './personal/MyTimeScreen'
 import AbsencesScreen from './personal/AbsencesScreen'
 import CorrectionsScreen from './personal/CorrectionsScreen'
@@ -25,12 +26,9 @@ import PricingRulesScreen from './operative/PricingRulesScreen'
 import QuoteTemplatesScreen from './operative/QuoteTemplatesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import StaffRolesScreen from './masterdata/StaffRolesScreen'
-import ImportScreen from './system/ImportScreen'
 import UsersScreen from './system/UsersScreen'
-import ServiceStatusScreen from './system/ServiceStatusScreen'
-import PushTestScreen from './system/PushTestScreen'
+import AdminToolsScreen from './system/AdminToolsScreen'
 import KpiScreen from './kpis/KpiScreen'
-import ConfigurationScreen from './configuration/ConfigurationScreen'
 import HelpBubble from '../shared/HelpBubble'
 import { hasModule, isFeatureEnabled } from '../api/modules'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
@@ -70,6 +68,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'dashboard': 'Dashboard',
   'my-time': 'Meine Zeiterfassung',
   'staff': 'Mitarbeiter',
+  'bulk-clockin': 'Massen-Einstempeln',
   'absences': 'Absenzen',
   'corrections': 'Zeitkorrekturen',
   'hr-reports': 'HR-Berichte',
@@ -84,14 +83,11 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'suppliers': 'Lieferanten',
   'staff-roles': 'Funktionen',
   'materials': 'Material / Lager',
-  'material-import': 'Material-Import',
   'pricing-rules': 'Preisregeln',
   'quote-templates': 'Offert-Vorlagen',
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
-  'configuration': 'Konfiguration',
-  'service-status': 'Service-Status',
-  'push-test': 'Push-Test',
+  'admin-tools': 'Admin-Tools',
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
@@ -134,16 +130,17 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'configuration') && !isManagement) {
+    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'bulk-clockin') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
-    if ((screen === 'service-status' || screen === 'push-test') && !isSuperadmin) {
+    if (screen === 'admin-tools' && !isSuperadmin) {
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
       case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} />)
       case 'staff':        return <StaffScreen />
+      case 'bulk-clockin': return guard('timekeeping', <BulkClockInScreen />)
       case 'absences':     return guard('hr', <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />)
       case 'corrections':  return guard('timekeeping', <CorrectionsScreen onBadgeChange={loadDashboard} />)
       case 'hr-reports':   return guard('hr', <HrReportsScreen />)
@@ -158,14 +155,11 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'suppliers':    return <SuppliersScreen />
       case 'staff-roles':  return <StaffRolesScreen />
       case 'materials':    return <MaterialsScreen user={user} />
-      case 'material-import': return <ImportScreen />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'quote-templates': return <QuoteTemplatesScreen />
       case 'users':        return <UsersScreen />
       case 'kpis':         return guard('kpis', <KpiScreen />)
-      case 'configuration': return <ConfigurationScreen userRole={user.role} />
-      case 'service-status': return <ServiceStatusScreen />
-      case 'push-test':    return <PushTestScreen />
+      case 'admin-tools':  return <AdminToolsScreen userRole={user.role} />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }

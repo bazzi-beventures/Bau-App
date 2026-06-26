@@ -1,34 +1,39 @@
 import { useEffect, useState } from 'react'
-import { fetchFrequentMaterials, recordErsatzteile, FrequentMaterialOption } from '../api/chat'
+import { fetchFrequentMaterials, FrequentMaterialOption } from '../api/chat'
 
-interface Props {
-  reportId: number
-  onDone: () => void
+export interface ErsatzteilSelection {
+  art_nr: string
+  amount: number
+  name: string
+  unit: string
 }
 
-// Beim Rapport-Abschluss: Mitarbeiter wählt aus der kuratierten Ersatzteil-Liste
-// (Mehrfachauswahl + Menge). Gewählte Teile werden als Material-Position gebucht
-// (verrechenbar, mit Lagerabbuchung). Analog zu KleinmaterialPrompt. Feature
-// `ersatzteil_prompt` — die Liste kommt vom Backend (leer ⇒ Schritt überspringen).
-export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
+interface Props {
+  onSubmit: (items: ErsatzteilSelection[]) => void
+}
+
+// Vor dem Speichern: Mitarbeiter wählt aus der kuratierten Ersatzteil-Liste
+// (Mehrfachauswahl + Menge). Sammelt nur die Auswahl (kein Buchen) und reicht sie
+// via onSubmit nach oben — die Buchung (verrechenbar + Lagerabbuchung) passiert
+// zusammen mit dem Rapport beim Bestätigen. Feature `ersatzteil_prompt` — die Liste
+// kommt vom Backend (leer ⇒ Schritt überspringen).
+export default function ErsatzteilPrompt({ onSubmit }: Props) {
   const [items, setItems] = useState<FrequentMaterialOption[]>([])
   const [qty, setQty] = useState<Record<string, number>>({})  // art_nr -> Menge (0 = nicht gewählt)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     fetchFrequentMaterials()
       .then(list => {
         if (cancelled) return
-        if (!list.length) { onDone(); return }   // nichts kuratiert → Schritt überspringen
+        if (!list.length) { onSubmit([]); return }   // nichts kuratiert → Schritt überspringen
         setItems(list)
       })
-      .catch(() => { if (!cancelled) onDone() })  // Fehler darf den Flow nicht blockieren
+      .catch(() => { if (!cancelled) onSubmit([]) })  // Fehler darf den Flow nicht blockieren
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [reportId])
+  }, [])
 
   function toggle(artNr: string) {
     setQty(prev => {
@@ -43,23 +48,14 @@ export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
     setQty(prev => ({ ...prev, [artNr]: Math.max(1, n) }))
   }
 
-  async function submit() {
-    const selected = Object.entries(qty)
-      .filter(([, n]) => n > 0)
-      .map(([art_nr, n]) => ({ art_nr, amount: n }))
-    setSaving(true)
-    setError(null)
-    try {
-      await recordErsatzteile(reportId, selected)
-      onDone()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
-    } finally {
-      setSaving(false)
-    }
+  function submit() {
+    const selected: ErsatzteilSelection[] = items
+      .filter(m => (qty[m.art_nr] || 0) > 0)
+      .map(m => ({ art_nr: m.art_nr, amount: qty[m.art_nr], name: m.name, unit: m.unit }))
+    onSubmit(selected)
   }
 
-  // Während des Ladens und bei leerer Liste (onDone wurde dann schon gerufen) nichts zeigen.
+  // Während des Ladens und bei leerer Liste (onSubmit wurde dann schon gerufen) nichts zeigen.
   if (loading || items.length === 0) return null
 
   const selectedCount = Object.values(qty).filter(n => n > 0).length
@@ -81,7 +77,6 @@ export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(m.art_nr)}
-                  disabled={saving}
                 />
                 <span className="ersatzteil-name">
                   <span className="ersatzteil-artnr">{m.art_nr}</span> {m.name}
@@ -92,13 +87,12 @@ export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
                   <button
                     type="button"
                     onClick={() => setCount(m.art_nr, qty[m.art_nr] - 1)}
-                    disabled={saving || qty[m.art_nr] <= 1}
+                    disabled={qty[m.art_nr] <= 1}
                   >−</button>
                   <span>{qty[m.art_nr]}</span>
                   <button
                     type="button"
                     onClick={() => setCount(m.art_nr, qty[m.art_nr] + 1)}
-                    disabled={saving}
                   >+</button>
                   <span className="ersatzteil-unit">{m.unit}</span>
                 </div>
@@ -108,14 +102,11 @@ export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
         })}
       </div>
 
-      {error && <div className="kleinmaterial-error">{error}</div>}
-
       <div className="kleinmaterial-actions">
         <button
           type="button"
           className="confirm-btn confirm-btn-no"
           onClick={submit}
-          disabled={saving}
         >
           Nichts verbraucht
         </button>
@@ -123,9 +114,9 @@ export default function ErsatzteilPrompt({ reportId, onDone }: Props) {
           type="button"
           className="confirm-btn confirm-btn-yes"
           onClick={submit}
-          disabled={saving || selectedCount === 0}
+          disabled={selectedCount === 0}
         >
-          {saving ? 'Speichern…' : `Erfassen${selectedCount ? ` (${selectedCount})` : ''}`}
+          {`Erfassen${selectedCount ? ` (${selectedCount})` : ''}`}
         </button>
       </div>
     </div>

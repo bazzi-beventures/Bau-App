@@ -1,37 +1,30 @@
 import { useState } from 'react'
-import { apiFetch } from '../api/client'
 import { KleinmaterialPromptConfig } from '../api/modules'
 
-interface Props {
-  reportId: number
-  config: KleinmaterialPromptConfig
-  onDone: () => void
+export interface KleinmaterialSelection {
+  amount_chf: number | null  // null = "nichts verbraucht"
+  count: number
+  scope: string
 }
 
-export default function KleinmaterialPrompt({ reportId, config, onDone }: Props) {
+interface Props {
+  config: KleinmaterialPromptConfig
+  onSubmit: (selection: KleinmaterialSelection) => void
+}
+
+// Vor dem Speichern: Mitarbeiter wählt einen Pauschalbetrag für Klein-/Schmiermaterial.
+// Sammelt nur die Auswahl (kein Buchen) und reicht sie via onSubmit nach oben — die
+// Buchung passiert zusammen mit dem Rapport beim Bestätigen. Feature `kleinmaterial_prompt`.
+export default function KleinmaterialPrompt({ config, onSubmit }: Props) {
   const [selected, setSelected] = useState<number | null>(null)
   const [count, setCount] = useState(1)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  async function submit(amountChf: number | null) {
-    setSaving(true)
-    setError(null)
-    try {
-      await apiFetch(`/pwa/chat/report/${reportId}/kleinmaterial`, {
-        method: 'POST',
-        body: JSON.stringify({
-          amount_chf: amountChf,
-          count: amountChf === null ? 0 : count,
-          scope: config.scope,
-        }),
-      })
-      onDone()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
-    } finally {
-      setSaving(false)
-    }
+  function submit(amountChf: number | null) {
+    onSubmit({
+      amount_chf: amountChf,
+      count: amountChf === null ? 0 : count,
+      scope: config.scope,
+    })
   }
 
   const total = selected !== null ? selected * count : 0
@@ -50,7 +43,6 @@ export default function KleinmaterialPrompt({ reportId, config, onDone }: Props)
             type="button"
             className={`kleinmaterial-preset ${selected === amt ? 'is-selected' : ''}`}
             onClick={() => setSelected(amt)}
-            disabled={saving}
           >
             CHF {amt}
           </button>
@@ -64,27 +56,23 @@ export default function KleinmaterialPrompt({ reportId, config, onDone }: Props)
             <button
               type="button"
               onClick={() => setCount(Math.max(1, count - 1))}
-              disabled={saving || count <= 1}
+              disabled={count <= 1}
             >−</button>
             <span>{count}</span>
             <button
               type="button"
               onClick={() => setCount(count + 1)}
-              disabled={saving}
             >+</button>
           </div>
           <div className="kleinmaterial-total">= CHF {total}</div>
         </div>
       )}
 
-      {error && <div className="kleinmaterial-error">{error}</div>}
-
       <div className="kleinmaterial-actions">
         <button
           type="button"
           className="confirm-btn confirm-btn-no"
           onClick={() => submit(null)}
-          disabled={saving}
         >
           Nein, nichts verbraucht
         </button>
@@ -92,9 +80,9 @@ export default function KleinmaterialPrompt({ reportId, config, onDone }: Props)
           type="button"
           className="confirm-btn confirm-btn-yes"
           onClick={() => selected !== null && submit(selected)}
-          disabled={saving || selected === null}
+          disabled={selected === null}
         >
-          {saving ? 'Speichern…' : 'Erfassen'}
+          Erfassen
         </button>
       </div>
     </div>

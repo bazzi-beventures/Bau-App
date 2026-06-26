@@ -2,15 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ErsatzteilPrompt from './ErsatzteilPrompt'
-import { fetchFrequentMaterials, recordErsatzteile } from '../api/chat'
+import { fetchFrequentMaterials } from '../api/chat'
 
 vi.mock('../api/chat', () => ({
   fetchFrequentMaterials: vi.fn(),
-  recordErsatzteile: vi.fn(),
 }))
 
 const mockFetch = vi.mocked(fetchFrequentMaterials)
-const mockRecord = vi.mocked(recordErsatzteile)
 
 const LIST = [
   { id: 'f1', art_nr: 'A1', name: 'Motor', unit: 'Stk', calc_vk: 250 },
@@ -19,25 +17,23 @@ const LIST = [
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockRecord.mockResolvedValue({ status: 'ok', recorded: 0 })
 })
 
 describe('ErsatzteilPrompt', () => {
-  it('überspringt den Schritt (onDone) wenn keine Teile kuratiert sind', async () => {
+  it('überspringt den Schritt (onSubmit []) wenn keine Teile kuratiert sind', async () => {
     mockFetch.mockResolvedValue([])
-    const onDone = vi.fn()
-    render(<ErsatzteilPrompt reportId={42} onDone={onDone} />)
+    const onSubmit = vi.fn()
+    render(<ErsatzteilPrompt onSubmit={onSubmit} />)
 
-    await waitFor(() => expect(onDone).toHaveBeenCalled())
-    expect(mockRecord).not.toHaveBeenCalled()
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([]))
     expect(screen.queryByText('Ersatzteile verbraucht?')).not.toBeInTheDocument()
   })
 
-  it('bucht ausgewählte Teile mit Menge und ruft onDone', async () => {
+  it('sammelt ausgewählte Teile mit Menge und ruft onSubmit', async () => {
     mockFetch.mockResolvedValue(LIST)
-    const onDone = vi.fn()
+    const onSubmit = vi.fn()
     const user = userEvent.setup()
-    render(<ErsatzteilPrompt reportId={42} onDone={onDone} />)
+    render(<ErsatzteilPrompt onSubmit={onSubmit} />)
 
     expect(await screen.findByText('Ersatzteile verbraucht?')).toBeInTheDocument()
 
@@ -53,14 +49,12 @@ describe('ErsatzteilPrompt', () => {
 
     await user.click(screen.getByRole('button', { name: /Erfassen/ }))
 
-    await waitFor(() => expect(onDone).toHaveBeenCalled())
-    expect(mockRecord).toHaveBeenCalledTimes(1)
-    const [reportId, items] = mockRecord.mock.calls[0]
-    expect(reportId).toBe(42)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const [items] = onSubmit.mock.calls[0]
     expect(items).toEqual(
       expect.arrayContaining([
-        { art_nr: 'A1', amount: 3 },
-        { art_nr: 'B2', amount: 1 },
+        { art_nr: 'A1', amount: 3, name: 'Motor', unit: 'Stk' },
+        { art_nr: 'B2', amount: 1, name: 'Kette', unit: 'm' },
       ]),
     )
     expect(items).toHaveLength(2)
@@ -68,20 +62,19 @@ describe('ErsatzteilPrompt', () => {
 
   it('sendet bei "Nichts verbraucht" eine leere Liste', async () => {
     mockFetch.mockResolvedValue(LIST)
-    const onDone = vi.fn()
+    const onSubmit = vi.fn()
     const user = userEvent.setup()
-    render(<ErsatzteilPrompt reportId={7} onDone={onDone} />)
+    render(<ErsatzteilPrompt onSubmit={onSubmit} />)
 
     await screen.findByText('Ersatzteile verbraucht?')
     await user.click(screen.getByRole('button', { name: 'Nichts verbraucht' }))
 
-    await waitFor(() => expect(onDone).toHaveBeenCalled())
-    expect(mockRecord).toHaveBeenCalledWith(7, [])
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([]))
   })
 
   it('hält "Erfassen" deaktiviert, solange nichts gewählt ist', async () => {
     mockFetch.mockResolvedValue(LIST)
-    render(<ErsatzteilPrompt reportId={1} onDone={vi.fn()} />)
+    render(<ErsatzteilPrompt onSubmit={vi.fn()} />)
 
     const erfassen = await screen.findByRole('button', { name: /Erfassen/ })
     expect(erfassen).toBeDisabled()

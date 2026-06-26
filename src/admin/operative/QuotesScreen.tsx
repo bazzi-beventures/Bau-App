@@ -155,9 +155,57 @@ function parseNum(v: string): number {
   return parseFloat(v.replace(',', '.')) || 0
 }
 
+// ─── Auto-Entwurf (lokaler Zwischenstand) ───────────────────
+// Der noch nicht abgeschickte Offert-Entwurf wird laufend in localStorage
+// gehalten (pro Projekt ein Slot), damit ein versehentliches Schliessen des
+// Fensters die Eingaben nicht verliert. Beim erneuten Öffnen bietet ein Banner
+// die Wiederherstellung an. Gelöscht wird beim erfolgreichen Erstellen oder per
+// «Verwerfen». Neuer Key → in storageMigrations.isKnownKey whitelisten.
+const QUOTE_DRAFT_PREFIX = 'quote-draft:'
+
+// Gibt es für dieses Projekt einen laufenden (noch nicht abgeschickten) Entwurf?
+// Genutzt vom Projekt-Offerten-Tab, um den «Entwurf fortsetzen»-Button zu zeigen.
+export function hasQuoteDraft(projectName: string): boolean {
+  try { return !!localStorage.getItem(QUOTE_DRAFT_PREFIX + projectName) } catch { return false }
+}
+
+interface QuoteDraft {
+  projectName: string
+  laborRows: LaborRow[]
+  materialRows: MaterialRow[]
+  extraProducts: ExtraProductRow[]
+  extraCharges: ExtraChargeRow[]
+  includeTravelCost: boolean
+  installationRows: InstallationRow[]
+  specialRows: SpecialRow[]
+  laborDiscount: string
+  materialDiscount: string
+  notes: string
+  productDescription: string
+  useStandardNotes: boolean
+}
+
+// Hat der Entwurf überhaupt nennenswerten Inhalt? Leere Default-Formulare
+// (eine leere Lohn-/Materialzeile, Standard-Bemerkungen) zählen NICHT — so wird
+// kein leerer Entwurf gespeichert und das Restore-Banner bleibt aus.
+function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
+  return (
+    d.laborRows.some(r => r.description.trim() || r.quantity.trim()) ||
+    d.materialRows.some(r => r.art_nr.trim() || r.quantity.trim()) ||
+    d.extraProducts.length > 0 ||
+    d.extraCharges.length > 0 ||
+    d.installationRows.length > 0 ||
+    d.specialRows.length > 0 ||
+    !!d.productDescription.trim() ||
+    !!d.laborDiscount.trim() ||
+    !!d.materialDiscount.trim() ||
+    (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
+  )
+}
+
 // ─── Create Form ────────────────────────────────────────────
 
-export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string }) {
+export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoRestoreDraft }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string; autoRestoreDraft?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
@@ -186,7 +234,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
+  // Gefundener, noch nicht abgeschlossener Entwurf aus einer früheren Sitzung.
+  const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; data: QuoteDraft } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // localStorage-Slot pro Projekt — im gesperrten Projekt-Modal konstant, im
+  // freien Formular wechselt er mit der Projektauswahl.
+  const draftKey = QUOTE_DRAFT_PREFIX + projectName
 
   useEffect(() => {
     Promise.all([
@@ -226,6 +280,90 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         .catch(() => {})
     }).catch(() => {})
   }, [])
+
+  // ── Auto-Entwurf: aktuellen Formularstand serialisieren ──
+  function serializeDraft(): QuoteDraft {
+    return {
+      projectName, laborRows, materialRows, extraProducts, extraCharges,
+      includeTravelCost, installationRows, specialRows, laborDiscount,
+      materialDiscount, notes, productDescription, useStandardNotes,
+    }
+  }
+
+  const currentDraft = serializeDraft()
+  // Banner nur zeigen, solange das Formular noch leer ist — sobald der Nutzer
+  // tippt (oder den Entwurf übernimmt), verschwindet es von selbst.
+  const formIsPristine = !quoteDraftHasContent(currentDraft, stdNotes)
+
+  // Einen Entwurf in die Formularfelder übernehmen.
+  function applyDraft(d: QuoteDraft) {
+    if (!lockedProjectName && d.projectName) setProjectName(d.projectName)
+    if (d.laborRows?.length) setLaborRows(d.laborRows)
+    if (d.materialRows?.length) setMaterialRows(d.materialRows)
+    setExtraProducts(d.extraProducts ?? [])
+    setExtraCharges(d.extraCharges ?? [])
+    setIncludeTravelCost(d.includeTravelCost ?? true)
+    setInstallationRows(d.installationRows ?? [])
+    setSpecialRows(d.specialRows ?? [])
+    setLaborDiscount(d.laborDiscount ?? '')
+    setMaterialDiscount(d.materialDiscount ?? '')
+    if (d.notes != null) setNotes(d.notes)
+    setProductDescription(d.productDescription ?? '')
+    setUseStandardNotes(d.useStandardNotes ?? true)
+  }
+
+  // Gespeicherten Entwurf für den aktuellen Projekt-Slot laden (Mount + bei
+  // Projektwechsel). Defektes JSON wird ignoriert (selbstheilend). Wurde das
+  // Formular gezielt über «Entwurf fortsetzen» geöffnet (autoRestoreDraft),
+  // wird direkt übernommen statt nur das Banner anzubieten.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (!raw) { setPendingDraft(null); return }
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.data) {
+        if (autoRestoreDraft) { applyDraft(parsed.data); setPendingDraft(null) }
+        else setPendingDraft({ savedAt: parsed.savedAt ?? 0, data: parsed.data })
+      } else setPendingDraft(null)
+    } catch { setPendingDraft(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey])
+
+  // Laufend speichern, sobald nennenswerter Inhalt da ist. Leeres Formular wird
+  // bewusst NICHT geschrieben/gelöscht — sonst würde der Mount mit Leerstand
+  // einen vorhandenen Entwurf vor dem Wiederherstellen überschreiben.
+  useEffect(() => {
+    const d = serializeDraft()
+    if (!quoteDraftHasContent(d, stdNotes)) return
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ savedAt: Date.now(), data: d }))
+    } catch { /* localStorage voll/blockiert — Entwurf ist Komfort, kein Muss */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, projectName, laborRows, materialRows, extraProducts, extraCharges,
+      includeTravelCost, installationRows, specialRows, laborDiscount,
+      materialDiscount, notes, productDescription, useStandardNotes, stdNotes])
+
+  // Esc schliesst das Fenster — ist das PDF-Review-Modal offen, zuerst dieses.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (pdfReview) { setPdfReview(null); return }
+      onCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pdfReview, onCancel])
+
+  function restoreDraft() {
+    if (!pendingDraft) return
+    applyDraft(pendingDraft.data)
+    setPendingDraft(null)
+  }
+
+  function discardDraft() {
+    try { localStorage.removeItem(draftKey) } catch { /* egal */ }
+    setPendingDraft(null)
+  }
 
   // ── Labor helpers ──
   function updateLabor(i: number, patch: Partial<LaborRow>) {
@@ -378,6 +516,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
         product_description: productDescription.trim() || null,
       }
       await apiFetch('/pwa/admin/quotes', { method: 'POST', body: JSON.stringify(payload) })
+      try { localStorage.removeItem(draftKey) } catch { /* egal */ }
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Erstellen')
@@ -397,7 +536,18 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
   )
 
   return (
-    <div className="admin-table-wrap" style={{ padding: 24 }}>
+    <div className="admin-table-wrap" style={{ padding: 24, position: 'relative' }}>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={saving}
+        title="Schliessen (Esc)"
+        aria-label="Schliessen"
+        className="admin-btn admin-btn-secondary admin-btn-sm"
+        style={{ position: 'absolute', top: 16, right: 16, lineHeight: 1, padding: '4px 10px', fontSize: 16 }}
+      >
+        ✕
+      </button>
       <h3 style={{ margin: '0 0 20px' }}>Neue Offerte erstellen</h3>
 
       {pdfReview && (
@@ -406,6 +556,20 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName }: { onDon
           onCancel={() => setPdfReview(null)}
           onConfirm={handlePdfReviewConfirm}
         />
+      )}
+
+      {/* Nicht abgeschlossener Entwurf aus einer früheren Sitzung */}
+      {pendingDraft && formIsPristine && (
+        <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', textAlign: 'left' }}>
+          <span style={{ fontSize: 13 }}>
+            Es gibt einen nicht abgeschlossenen Entwurf
+            {pendingDraft.savedAt ? ` vom ${new Date(pendingDraft.savedAt).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}.
+          </span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={restoreDraft}>Wiederherstellen</button>
+            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={discardDraft}>Verwerfen</button>
+          </span>
+        </div>
       )}
 
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}

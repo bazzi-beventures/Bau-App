@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import UnitsPanel from './UnitsPanel'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
+import ImportScreen from '../system/ImportScreen'
 import { UserInfo } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
@@ -493,7 +494,7 @@ function MaterialInventoryPanel() {
   )
 }
 
-type MaterialTab = 'inventory' | 'units' | 'frequent'
+type MaterialTab = 'inventory' | 'units' | 'frequent' | 'import'
 
 export default function MaterialsScreen({ user }: { user: UserInfo }) {
   const [tab, setTab] = useState<MaterialTab>('inventory')
@@ -523,11 +524,18 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
             Häufig benutzte Produkte
           </button>
         )}
+        <button
+          className={`kpi-admin-tab${tab === 'import' ? ' active' : ''}`}
+          onClick={() => setTab('import')}
+        >
+          Import
+        </button>
       </div>
 
       {tab === 'inventory' && <MaterialInventoryPanel />}
       {tab === 'units' && <UnitsPanel />}
       {tab === 'frequent' && ersatzteilEnabled && <FrequentMaterialsPanel />}
+      {tab === 'import' && <ImportScreen />}
     </div>
   )
 }

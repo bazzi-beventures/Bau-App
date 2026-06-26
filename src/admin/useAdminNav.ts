@@ -4,6 +4,7 @@ export type AdminScreen =
   | 'dashboard'
   | 'my-time'
   | 'staff'
+  | 'bulk-clockin'
   | 'absences'
   | 'corrections'
   | 'hr-reports'
@@ -18,14 +19,11 @@ export type AdminScreen =
   | 'suppliers'
   | 'staff-roles'
   | 'materials'
-  | 'material-import'
   | 'pricing-rules'
   | 'quote-templates'
   | 'users'
   | 'kpis'
-  | 'configuration'
-  | 'service-status'
-  | 'push-test'
+  | 'admin-tools'
 
 export interface AdminNavState {
   screen: AdminScreen

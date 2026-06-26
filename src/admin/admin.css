@@ -1007,6 +1007,17 @@ button.admin-list-item {
 
 .kpi-admin-content { flex: 1; overflow-y: auto; }
 
+/* Admin-Tools: Tab-Leiste über dem aktiven Tool-Screen. Das horizontale Padding
+   spiegelt .admin-page, damit der erste Tab mit dem Seiteninhalt darunter
+   fluchtet. Der Tool-Screen bringt sein eigenes admin-page-Padding mit und damit
+   den vertikalen Abstand zur Leiste — deshalb hier unten kein Padding und die
+   innere .kpi-admin-tabs ohne margin-bottom. */
+.admin-tools-tabs {
+  padding: var(--s-5) var(--s-6) 0;
+  max-width: 1200px;
+}
+.admin-tools-tabs .kpi-admin-tabs { margin-bottom: 0; }
+
 .kpi-admin-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

@@ -280,14 +280,16 @@ interface QuotesTabProps {
   quotes: ProjectQuote[]
   invoices: ProjectInvoice[]
   regeneratingQuoteId: number | null
+  hasLocalDraft: boolean
   onShowCreateForm: () => void
+  onResumeDraft: () => void
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
   onSend: (quote: ProjectQuote) => void
   onEdit: (quoteId: number) => void
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateForm, onUpdateStatus, onRegenerate, onSend, onEdit }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onEdit }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
@@ -296,13 +298,27 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, onShowCreateF
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div className="admin-section-title" style={{ margin: 0 }}>Offerten</div>
-        <button
-          type="button"
-          className="admin-btn admin-btn-sm admin-btn-primary"
-          onClick={onShowCreateForm}
-        >
-          + Neue Offerte
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Nur sichtbar, wenn ein lokal gespeicherter, noch nicht abgeschickter
+              Entwurf für dieses Projekt existiert (versehentlich geschlossen). */}
+          {hasLocalDraft && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-secondary"
+              onClick={onResumeDraft}
+              title="Eine begonnene, noch nicht erstellte Offerte fortsetzen"
+            >
+              ● Entwurf fortsetzen
+            </button>
+          )}
+          <button
+            type="button"
+            className="admin-btn admin-btn-sm admin-btn-primary"
+            onClick={onShowCreateForm}
+          >
+            + Neue Offerte
+          </button>
+        </div>
       </div>
       {quotes.length === 0 ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Offerten.</div>

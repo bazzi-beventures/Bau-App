@@ -89,8 +89,20 @@ export async function getCorrectionStatus(correctionId: string): Promise<{ statu
   }) as Promise<{ status: string; review_note: string; session_date: string }>
 }
 
-export async function confirmReport(): Promise<ChatResponse> {
-  return apiFetch('/pwa/chat/confirm', { method: 'POST' }) as Promise<ChatResponse>
+export interface ConfirmExtras {
+  // Vor dem Speichern im Chat gesammelte Zusatz-Positionen.
+  kleinmaterial?: { amount_chf: number | null; count: number; scope: string } | null
+  ersatzteile?: { art_nr: string; amount: number }[]
+}
+
+export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatResponse> {
+  return apiFetch('/pwa/chat/confirm', {
+    method: 'POST',
+    body: JSON.stringify({
+      kleinmaterial: extras.kleinmaterial ?? null,
+      ersatzteile: extras.ersatzteile ?? [],
+    }),
+  }) as Promise<ChatResponse>
 }
 
 export async function cancelReport(): Promise<ChatResponse> {
@@ -120,16 +132,6 @@ export interface FrequentMaterialOption {
 
 export async function fetchFrequentMaterials(): Promise<FrequentMaterialOption[]> {
   return apiFetch('/pwa/chat/frequent-materials', { method: 'GET' }) as Promise<FrequentMaterialOption[]>
-}
-
-export async function recordErsatzteile(
-  reportId: number,
-  items: { art_nr: string; amount: number }[],
-): Promise<{ status: string; recorded: number }> {
-  return apiFetch(`/pwa/chat/report/${reportId}/ersatzteile`, {
-    method: 'POST',
-    body: JSON.stringify({ items }),
-  }) as Promise<{ status: string; recorded: number }>
 }
 
 export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {

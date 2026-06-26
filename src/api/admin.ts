@@ -160,6 +160,34 @@ export async function deleteStaff(staffId: string): Promise<void> {
   await apiFetch(`/pwa/admin/staff/${staffId}`, { method: 'DELETE' })
 }
 
+// ─── Massen-Einstempeln ────────────────────────────────────
+
+export type BulkClockInStatus = 'clocked_in' | 'already' | 'error'
+
+export interface BulkClockInResult {
+  results: { staff_id: string; staff_name: string; status: BulkClockInStatus }[]
+  clocked_in: number
+  already: number
+  errors: number
+  push_sent: number
+}
+
+export async function getClockStatus(date?: string): Promise<{ clocked_in_staff_ids: string[] }> {
+  const q = date ? `?date=${encodeURIComponent(date)}` : ''
+  return apiFetch(`/pwa/admin/staff/clock-status${q}`) as Promise<{ clocked_in_staff_ids: string[] }>
+}
+
+export async function bulkClockIn(
+  staffIds: string[],
+  time: string,
+  opts: { date?: string; art_der_arbeit?: string } = {},
+): Promise<BulkClockInResult> {
+  return apiFetch('/pwa/admin/staff/bulk-clock-in', {
+    method: 'POST',
+    body: JSON.stringify({ staff_ids: staffIds, time, ...opts }),
+  }) as Promise<BulkClockInResult>
+}
+
 // ─── Password Auth ─────────────────────────────────────────
 
 export async function loginWithPassword(username: string, password: string): Promise<{ tenant_slug: string }> {

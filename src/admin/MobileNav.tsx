@@ -47,6 +47,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
 
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const isManagement = role === 'management' || role === 'superadmin'
+  const isSuperadmin = role === 'superadmin'
   const has = (m: ModuleName) => enabledModules.includes(m)
   const isMoreActive = !PRIMARY_TABS.includes(screen)
   const hasSecondaryBadge = (badges?.absences ?? 0) > 0
@@ -148,6 +149,11 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'staff' ? ' active' : ''}`} onClick={() => navigate('staff')}>
                   <IconUsers /><span>Mitarbeiter</span>
                 </button>
+                {isManagement && has('timekeeping') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'bulk-clockin' ? ' active' : ''}`} onClick={() => navigate('bulk-clockin')}>
+                    <IconClock /><span>Massen-Einstempeln</span>
+                  </button>
+                )}
                 <button className={`admin-mobile-drawer-item${screen === 'project-drafts' ? ' active' : ''}`} onClick={() => navigate('project-drafts')}>
                   <IconDocument /><span>Projekt-Entwürfe</span>
                   {(badges?.drafts ?? 0) > 0 && (
@@ -194,9 +200,6 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>
-                <button className={`admin-mobile-drawer-item${screen === 'material-import' ? ' active' : ''}`} onClick={() => navigate('material-import')}>
-                  <IconDocument /><span>Material-Import</span>
-                </button>
                 {isManagement && (
                   <button className={`admin-mobile-drawer-item${screen === 'pricing-rules' ? ' active' : ''}`} onClick={() => navigate('pricing-rules')}>
                     <IconTag /><span>Lieferantenpreise</span>
@@ -215,9 +218,9 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'users' ? ' active' : ''}`} onClick={() => navigate('users')}>
                   <IconKey /><span>Benutzerverwaltung</span>
                 </button>
-                {isManagement && (
-                  <button className={`admin-mobile-drawer-item${screen === 'configuration' ? ' active' : ''}`} onClick={() => navigate('configuration')}>
-                    <IconSettings /><span>Konfiguration</span>
+                {isSuperadmin && (
+                  <button className={`admin-mobile-drawer-item${screen === 'admin-tools' ? ' active' : ''}`} onClick={() => navigate('admin-tools')}>
+                    <IconSettings /><span>Admin-Tools</span>
                   </button>
                 )}
               </div>

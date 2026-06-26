@@ -355,6 +355,41 @@
   font-weight: 600;
 }
 
+/* ── LLM-Kosten Datumsbereich-Filter ─────────────────── */
+
+.llm-cost-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.llm-cost-range {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.llm-cost-range label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.llm-cost-range input[type='date'] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
 /* ── Horizontal Filter Bar ───────────────────────────── */
 
 .kpi-filter-bar {

@@ -6,7 +6,7 @@ import { AddressAutocomplete } from '../components/AddressAutocomplete'
 import { Kontakt, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
-import { QuoteCreateForm, QuoteEditForm, QuoteDetail } from './QuotesScreen'
+import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
@@ -115,6 +115,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([])
   const [reports, setReports] = useState<ProjectReport[]>([])
   const [showQuoteForm, setShowQuoteForm] = useState(false)
+  // Lokaler, noch nicht abgeschickter Offert-Entwurf für dieses Projekt vorhanden?
+  // Steuert den «Entwurf fortsetzen»-Button. resumeQuoteDraft = Form gezielt zum
+  // Fortsetzen geöffnet (übernimmt den Entwurf automatisch statt nur per Banner).
+  const [quoteDraftExists, setQuoteDraftExists] = useState(() => hasQuoteDraft(project?.name ?? ''))
+  const [resumeQuoteDraft, setResumeQuoteDraft] = useState(false)
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
@@ -1072,7 +1077,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           quotes={quotes}
           invoices={invoices}
           regeneratingQuoteId={regeneratingQuoteId}
-          onShowCreateForm={() => setShowQuoteForm(true)}
+          hasLocalDraft={quoteDraftExists}
+          onShowCreateForm={() => { setResumeQuoteDraft(false); setShowQuoteForm(true) }}
+          onResumeDraft={() => { setResumeQuoteDraft(true); setShowQuoteForm(true) }}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={handleOpenSendQuote}
@@ -1189,8 +1196,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteCreateForm
               lockedProjectName={project.name}
-              onDone={() => { setShowQuoteForm(false); reloadQuotes() }}
-              onCancel={() => setShowQuoteForm(false)}
+              autoRestoreDraft={resumeQuoteDraft}
+              onDone={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes() }}
+              onCancel={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)) }}
             />
           </div>
         </div>

@@ -184,8 +184,10 @@ export default function ImportScreen() {
 
   const selectedSupplier = suppliers.find(s => s.id === supplierId)
 
+  // Rendert KEIN eigenes `admin-page` — eingebettet als Tab in MaterialsScreen,
+  // der den Seitenrahmen + Tab-Leiste liefert (analog UnitsPanel).
   return (
-    <div className="admin-page">
+    <>
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Material-Import</div>
@@ -404,6 +406,6 @@ export default function ImportScreen() {
           <div className="admin-toast success">{toast}</div>
         </div>
       )}
-    </div>
+    </>
   )
 }

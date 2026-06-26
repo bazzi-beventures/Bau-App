@@ -18,12 +18,17 @@ import { fmtCHF } from '../utils/format'
  * Rendert KEIN eigenes `admin-page` — der Tab-Container in MaterialsScreen liefert
  * das Layout.
  */
+interface Supplier { id: string; name: string }
+
 export default function FrequentMaterialsPanel() {
   const [materials, setMaterials] = useState<MaterialOption[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [curated, setCurated] = useState<FrequentMaterial[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
 
   async function reloadCurated() {
     setCurated(await getFrequentMaterials())
@@ -37,6 +42,11 @@ export default function FrequentMaterialsPanel() {
       .then(([m, c]) => { setMaterials(m); setCurated(c) })
       .catch(() => setError('Laden fehlgeschlagen'))
       .finally(() => setLoading(false))
+    // Lieferanten nur für den optionalen Material-Filter — Fehler darf das Panel
+    // nicht blockieren (Filter bleibt dann leer). Analog QuoteCreateForm.
+    apiFetch('/pwa/admin/suppliers')
+      .then(s => setSuppliers(s as Supplier[]))
+      .catch(() => {})
   }, [])
 
   // Bereits kuratierte art_nr ausblenden, damit kein Doppel-Hinzufügen angeboten wird.
@@ -44,6 +54,16 @@ export default function FrequentMaterialsPanel() {
   const selectable = useMemo(
     () => materials.filter(m => !curatedArtNrs.has(m.art_nr)),
     [materials, curatedArtNrs],
+  )
+
+  // Lieferant-/Kategorie-Filter für die Combobox (analog Offerte) — Optionen aus
+  // dem Materialstamm ableiten: nur verwendete Lieferanten, vorhandene Kategorien.
+  const supplierMap = useMemo(() => Object.fromEntries(suppliers.map(s => [s.id, s.name])), [suppliers])
+  const usedSupplierIds = useMemo(() => new Set(materials.map(m => m.supplier_id).filter(Boolean)), [materials])
+  const supplierOptions = useMemo(() => suppliers.filter(s => usedSupplierIds.has(s.id)), [suppliers, usedSupplierIds])
+  const categories = useMemo(
+    () => [...new Set(materials.map(m => m.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
+    [materials],
   )
 
   async function add(artNr: string) {
@@ -91,65 +111,86 @@ export default function FrequentMaterialsPanel() {
     }
   }
 
-  if (loading) return <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
-
   return (
-    <div>
-      <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, maxWidth: 640 }}>
-        Diese Artikel werden dem Mitarbeiter beim Rapport-Abschluss als Schnellauswahl
-        angeboten (Mehrfachauswahl + Menge). Aktiviert via Workflow „Häufig benutzte
-        Ersatzteile beim Rapport abfragen" (Konfiguration → Workflows).
+    <>
+      <div className="admin-page-header">
+        <div>
+          <div className="admin-page-title">Häufig benutzte Produkte</div>
+          <div className="admin-page-subtitle" style={{ maxWidth: 640 }}>
+            Diese Artikel werden dem Mitarbeiter beim Rapport-Abschluss als Schnellauswahl
+            angeboten (Mehrfachauswahl + Menge). Aktiviert via Workflow „Häufig benutzte
+            Ersatzteile beim Rapport abfragen" (Konfiguration → Workflows).
+          </div>
+        </div>
       </div>
 
       {error && <div className="admin-form-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-        Produkt hinzufügen
-      </label>
-      <div style={{ display: 'flex', marginBottom: 20, maxWidth: 560 }}>
-        <MaterialCombobox
-          materials={selectable}
-          supplierMap={{}}
-          supplierFilter=""
-          categoryFilter=""
-          value=""
-          onChange={add}
-        />
-      </div>
-
-      {curated.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--muted)' }}>Noch keine Produkte ausgewählt.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 640 }}>
-          {curated.map((c, i) => (
-            <div
-              key={c.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                background: 'var(--surface2)', borderRadius: 6, fontSize: 13,
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button type="button" className="admin-btn admin-btn-secondary" disabled={busy || i === 0}
-                  onClick={() => move(i, -1)} style={{ fontSize: 10, padding: '0 6px', lineHeight: '14px' }}>▲</button>
-                <button type="button" className="admin-btn admin-btn-secondary" disabled={busy || i === curated.length - 1}
-                  onClick={() => move(i, 1)} style={{ fontSize: 10, padding: '0 6px', lineHeight: '14px' }}>▼</button>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--muted)' }}>{c.art_nr}</span> — {c.name}
-                {!c.is_active && (
-                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent-red)' }}>(inaktiv)</span>
-                )}
-              </div>
-              <div style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                {fmtCHF(c.calc_vk)} / {c.unit}
-              </div>
-              <button type="button" className="admin-btn admin-btn-secondary" disabled={busy}
-                onClick={() => remove(c.id)} style={{ fontSize: 12, padding: '2px 8px' }}>×</button>
-            </div>
-          ))}
+      <div className="admin-table-wrap">
+        <div className="admin-filter-bar">
+          <span style={{ fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>Produkt hinzufügen</span>
+          <MaterialCombobox
+            materials={selectable}
+            supplierMap={supplierMap}
+            supplierFilter={supplierFilter}
+            categoryFilter={categoryFilter}
+            value=""
+            onChange={add}
+          />
+          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)}>
+            <option value="">Alle Lieferanten</option>
+            {supplierOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+            <option value="">Alle Artikelgruppen</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-      )}
-    </div>
+
+        {loading ? (
+          <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th style={{ width: 90 }}>Reihenfolge</th>
+                <th>Art.-Nr.</th>
+                <th>Bezeichnung</th>
+                <th>VK-Preis</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {curated.length === 0 ? (
+                <tr><td colSpan={5} className="admin-table-empty">Noch keine Produkte ausgewählt.</td></tr>
+              ) : curated.map((c, i) => (
+                <tr key={c.id} style={{ cursor: 'default' }}>
+                  <td onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={busy || i === 0}
+                        onClick={() => move(i, -1)} style={{ padding: '2px 8px' }} aria-label="Nach oben">▲</button>
+                      <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={busy || i === curated.length - 1}
+                        onClick={() => move(i, 1)} style={{ padding: '2px 8px' }} aria-label="Nach unten">▼</button>
+                    </div>
+                  </td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{c.art_nr}</td>
+                  <td>
+                    <strong>{c.name}</strong>
+                    {!c.is_active && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent-red)' }}>(inaktiv)</span>
+                    )}
+                  </td>
+                  <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtCHF(c.calc_vk)} / {c.unit}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={busy}
+                      onClick={() => remove(c.id)}>Entfernen</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
   )
 }
