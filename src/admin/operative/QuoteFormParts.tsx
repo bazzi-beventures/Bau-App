@@ -54,7 +54,7 @@ export function DiscountsFieldset({ laborDiscount, materialDiscount, onLaborChan
           <input className="admin-form-input" placeholder="0" value={laborDiscount} onChange={e => onLaborChange(e.target.value)} />
         </div>
         <div style={{ flex: 1 }}>
-          <label className="admin-form-label">Rabatt auf Material (%)</label>
+          <label className="admin-form-label" title="Gilt auf Materialpositionen sowie auf Weitere Produkte / Freie Positionen (inkl. per PDF eingelesene Materialien)">Rabatt auf Material &amp; Produkte (%)</label>
           <input className="admin-form-input" placeholder="0" value={materialDiscount} onChange={e => onMaterialChange(e.target.value)} />
         </div>
       </div>
