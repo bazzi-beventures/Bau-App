@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Project } from './ProjectsScreen'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
-  parseDateStr, diffDays, shiftISO,
+  parseDateStr, diffDays, hhmmToMin, minToHHMM,
 } from '../utils/calendarHelpers'
 
-// Drag-Transfer payload format: "<projectId>|<grabDayISO>"
+// Drag-Transfer payload format: "<projectId>|<grabDayISO>|<grabOffsetY>"
+// grabOffsetY = Y-Position des Mauszeigers innerhalb der gegriffenen Pille (px),
+// damit beim Drop in das Zeitraster der Block-Anfang dort landet, wo der Block
+// (nicht der Cursor) hingehört.
 const DRAG_MIME = 'application/x-bau-project'
 
 interface StaffLite {
@@ -19,7 +22,10 @@ interface Props {
   loading: boolean
   canton?: string
   onSelect: (p: Project) => void
-  onShift: (id: string, deltaDays: number) => Promise<void> | void
+  // Verschiebt einen Einsatz im Kalender. deltaDays = Tagesversatz; startTime
+  // steuert die Uhrzeit: undefined = Zeit beibehalten (Monat / Ganztägig-Strip),
+  // 'HH:MM' = neue Startzeit (Drop ins Zeitraster), null = Zeit löschen (ganztägig).
+  onReschedule: (id: string, deltaDays: number, startTime?: string | null) => Promise<void> | void
   // Meldet die aktuell sichtbare Kalenderwoche (Mo, ISO-Datum) hoch — für PDF-Export.
   onVisibleWeekChange?: (mondayIso: string) => void
   // Meldet die aktuell im Filter aktiven Staff-IDs hoch (alle ohne Hide-Flag).
@@ -84,16 +90,18 @@ function projectMonteurNames(p: Project, staff: StaffLite[]): string {
 // ─── Drag-Handlers ────────────────────────────────────────────────────────────
 
 function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string) {
-  e.dataTransfer.setData(DRAG_MIME, `${projectId}|${grabDayISO}`)
-  e.dataTransfer.setData('text/plain', `${projectId}|${grabDayISO}`)
+  const grabOffsetY = Math.round(e.nativeEvent.offsetY) || 0
+  const raw = `${projectId}|${grabDayISO}|${grabOffsetY}`
+  e.dataTransfer.setData(DRAG_MIME, raw)
+  e.dataTransfer.setData('text/plain', raw)
   e.dataTransfer.effectAllowed = 'move'
 }
 
-function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string } | null {
+function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string; grabOffsetY: number } | null {
   const raw = e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')
   if (!raw || !raw.includes('|')) return null
-  const [projectId, grabDayISO] = raw.split('|')
-  return { projectId, grabDayISO }
+  const [projectId, grabDayISO, grabOffsetY] = raw.split('|')
+  return { projectId, grabDayISO, grabOffsetY: Number(grabOffsetY) || 0 }
 }
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
@@ -106,7 +114,7 @@ function CalendarLegend({ canton }: { canton: string }) {
         Feiertag {canton.toUpperCase()}
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
-        Tipp: Projekt-Pille greifen und auf neuen Tag ziehen, um den Einsatz zu verschieben.
+        Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit.
       </div>
     </div>
   )
@@ -115,12 +123,12 @@ function CalendarLegend({ canton }: { canton: string }) {
 // ─── Month View ───────────────────────────────────────────────────────────────
 
 function MonthView({
-  projects, currentDate, onSelect, onShift, holidays,
+  projects, currentDate, onSelect, onReschedule, holidays,
 }: {
   projects: Project[]
   currentDate: Date
   onSelect: (p: Project) => void
-  onShift: (id: string, delta: number) => void
+  onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
   holidays: Map<string, string>
 }) {
   const days = getMonthDays(currentDate)
@@ -135,8 +143,9 @@ function MonthView({
     if (!payload) return
     const proj = projById.get(payload.projectId)
     if (!proj) return
+    // Monatsansicht kennt keine Uhrzeit — nur Tagesversatz, Zeit bleibt erhalten.
     const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
-    if (delta !== 0) onShift(proj.id, delta)
+    if (delta !== 0) onReschedule(proj.id, delta)
   }
 
   return (
@@ -210,16 +219,24 @@ function blockHeightPx(start: string, end: string): number {
   return Math.max(22, timeOffsetPx(end) - timeOffsetPx(start))
 }
 
-function toMinutes(t: string): number {
-  const [h, m] = t.slice(0, 5).split(':').map(Number)
-  return h * 60 + m
+// Raster für Drop-Uhrzeiten: auf 15-Minuten runden.
+const WEEK_SNAP_MIN = 15
+
+// Wandelt eine spaltenrelative Y-Position (px ab Rasteroberkante = WEEK_HOURS_START)
+// in eine gerundete, auf das sichtbare Raster begrenzte Startzeit 'HH:MM'.
+function yToSnappedTime(topPx: number): string {
+  const minsFromTop = (topPx / WEEK_HOUR_HEIGHT) * 60
+  const abs = WEEK_HOURS_START * 60 + minsFromTop
+  const snapped = Math.round(abs / WEEK_SNAP_MIN) * WEEK_SNAP_MIN
+  const clamped = Math.max(WEEK_HOURS_START * 60, Math.min(WEEK_HOURS_END * 60, snapped))
+  return minToHHMM(clamped)
 }
 
 // Spalten-Layout für überlappende Events (Cluster-basiert, wie Google Calendar):
 // Events, die sich in der Zeit überlappen, werden auf parallele Lanes verteilt.
 function computeLanes(events: Project[]): Map<string, { col: number; total: number }> {
   const result = new Map<string, { col: number; total: number }>()
-  const sorted = [...events].sort((a, b) => toMinutes(a.start_time!) - toMinutes(b.start_time!))
+  const sorted = [...events].sort((a, b) => hhmmToMin(a.start_time!) - hhmmToMin(b.start_time!))
 
   let cluster: Project[] = []
   let clusterEnd = -1
@@ -229,8 +246,8 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
     const colEnds: number[] = []
     const assigns: number[] = []
     for (const ev of cluster) {
-      const s = toMinutes(ev.start_time!)
-      const e = ev.end_time ? toMinutes(ev.end_time) : s + 60
+      const s = hhmmToMin(ev.start_time!)
+      const e = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
       let placed = -1
       for (let i = 0; i < colEnds.length; i++) {
         if (colEnds[i] <= s) { colEnds[i] = e; placed = i; break }
@@ -245,8 +262,8 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
   }
 
   for (const ev of sorted) {
-    const s = toMinutes(ev.start_time!)
-    const e = ev.end_time ? toMinutes(ev.end_time) : s + 60
+    const s = hhmmToMin(ev.start_time!)
+    const e = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
     if (cluster.length === 0 || s >= clusterEnd) {
       flush()
       cluster.push(ev)
@@ -261,17 +278,22 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
 }
 
 function WeekView({
-  projects, staff, currentDate, onSelect, onShift, holidays,
+  projects, staff, currentDate, onSelect, onReschedule, holidays,
 }: {
   projects: Project[]
   staff: StaffLite[]
   currentDate: Date
   onSelect: (p: Project) => void
-  onShift: (id: string, delta: number) => void
+  onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
   holidays: Map<string, string>
 }) {
   const days = getWeekDays(currentDate)
   const [hoverDayISO, setHoverDayISO] = useState<string | null>(null)
+  // Live-Vorschau beim Ziehen ins Zeitraster: an welchem Tag/Höhe der Block landet.
+  const [dropPreview, setDropPreview] = useState<{ dayISO: string; topPx: number; time: string } | null>(null)
+  // Greif-Offset (px ab Block-Oberkante) des laufenden Drags. dataTransfer ist
+  // während dragover nicht lesbar, darum hier zwischengespeichert.
+  const dragGrabYRef = useRef(0)
   const projById = new Map(projects.map(p => [p.id, p]))
 
   const hours: number[] = []
@@ -280,7 +302,8 @@ function WeekView({
 
   const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
 
-  function handleDrop(e: React.DragEvent, dropDay: Date) {
+  // Drop auf den Ganztägig-Strip: Tag verschieben, Uhrzeit löschen (→ ganztägig).
+  function handleAllDayDrop(e: React.DragEvent, dropDay: Date) {
     e.preventDefault()
     setHoverDayISO(null)
     const payload = readDragPayload(e)
@@ -288,7 +311,21 @@ function WeekView({
     const proj = projById.get(payload.projectId)
     if (!proj) return
     const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
-    if (delta !== 0) onShift(proj.id, delta)
+    onReschedule(proj.id, delta, null)
+  }
+
+  // Drop ins Zeitraster: Tag verschieben + Startzeit aus der Y-Position setzen.
+  function handleTimedDrop(e: React.DragEvent, dropDay: Date) {
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    setDropPreview(null)
+    const payload = readDragPayload(e)
+    if (!payload) return
+    const proj = projById.get(payload.projectId)
+    if (!proj) return
+    const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
+    const time = yToSnappedTime(e.clientY - rect.top - payload.grabOffsetY)
+    onReschedule(proj.id, delta, time)
   }
 
   function renderBlock(
@@ -313,7 +350,7 @@ function WeekView({
         key={p.id}
         className={`project-cal-week-event${allDay ? ' allday' : ''}`}
         draggable
-        onDragStart={e => setDragPayload(e, p.id, dayISO)}
+        onDragStart={e => { dragGrabYRef.current = Math.round(e.nativeEvent.offsetY) || 0; setDragPayload(e, p.id, dayISO) }}
         onClick={() => onSelect(p)}
         title={`${p.name}${timeLabel ? ' · ' + timeLabel : ''}${monteurs ? ' · ' + monteurs : ''}`}
         style={
@@ -367,7 +404,7 @@ function WeekView({
                 className={`project-cal-week-allday-cell${hoverDayISO === dayISO ? ' project-cal-drop-hover' : ''}`}
                 onDragOver={e => { e.preventDefault(); setHoverDayISO(dayISO) }}
                 onDragLeave={() => setHoverDayISO(prev => prev === dayISO ? null : prev)}
-                onDrop={e => handleDrop(e, d)}
+                onDrop={e => handleAllDayDrop(e, d)}
               >
                 {allDayProjects.map(p => renderBlock(p, dayISO, true))}
               </div>
@@ -393,15 +430,32 @@ function WeekView({
           return (
             <div
               key={i}
-              className={`project-cal-week-day-col${hoverDayISO === dayISO ? ' project-cal-drop-hover' : ''}`}
-              onDragOver={e => { e.preventDefault(); setHoverDayISO(dayISO) }}
-              onDragLeave={() => setHoverDayISO(prev => prev === dayISO ? null : prev)}
-              onDrop={e => handleDrop(e, d)}
+              className={`project-cal-week-day-col${dropPreview?.dayISO === dayISO ? ' project-cal-drop-hover' : ''}`}
+              onDragOver={e => {
+                e.preventDefault()
+                const rect = e.currentTarget.getBoundingClientRect()
+                const topPx = e.clientY - rect.top - dragGrabYRef.current
+                setDropPreview({ dayISO, topPx, time: yToSnappedTime(topPx) })
+              }}
+              onDragLeave={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDropPreview(prev => prev?.dayISO === dayISO ? null : prev)
+                }
+              }}
+              onDrop={e => handleTimedDrop(e, d)}
             >
               {hours.slice(0, -1).map(h => (
                 <div key={h} className="project-cal-week-hour-cell" style={{ height: WEEK_HOUR_HEIGHT }} />
               ))}
               {timed.map(p => renderBlock(p, dayISO, false, lanes.get(p.id)))}
+              {dropPreview?.dayISO === dayISO && (
+                <div
+                  className="project-cal-week-drop-line"
+                  style={{ top: Math.max(0, Math.min(gridHeight, dropPreview.topPx)) }}
+                >
+                  <span className="project-cal-week-drop-time">{dropPreview.time}</span>
+                </div>
+              )}
             </div>
           )
         })}
@@ -413,7 +467,7 @@ function WeekView({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ProjectScheduleCalendar({
-  projects, staff, loading, canton = 'ZH', onSelect, onShift,
+  projects, staff, loading, canton = 'ZH', onSelect, onReschedule,
   onVisibleWeekChange, onVisibleStaffChange,
 }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
@@ -553,7 +607,7 @@ export default function ProjectScheduleCalendar({
           projects={visibleProjects}
           currentDate={currentDate}
           onSelect={onSelect}
-          onShift={(id, d) => { void onShift(id, d) }}
+          onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           holidays={holidays}
         />
       ) : (
@@ -562,7 +616,7 @@ export default function ProjectScheduleCalendar({
           staff={staff}
           currentDate={currentDate}
           onSelect={onSelect}
-          onShift={(id, d) => { void onShift(id, d) }}
+          onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           holidays={holidays}
         />
       )}
@@ -570,14 +624,4 @@ export default function ProjectScheduleCalendar({
       {!loading && <CalendarLegend canton={canton} />}
     </div>
   )
-}
-
-// Helper für optimistisches Update von außen
-export function shiftProjectDates(p: Project, deltaDays: number): Project {
-  if (!p.start_date || !p.end_date) return p
-  return {
-    ...p,
-    start_date: shiftISO(p.start_date, deltaDays),
-    end_date: shiftISO(p.end_date, deltaDays),
-  }
 }

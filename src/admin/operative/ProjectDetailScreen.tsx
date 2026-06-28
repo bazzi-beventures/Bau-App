@@ -17,6 +17,10 @@ import {
   CATEGORY_LABELS, formatDateTime,
 } from './projectDetail/tabs'
 
+// Kommentare sind nach 10 Minuten gesperrt (kein Bearbeiten/Löschen mehr) —
+// muss zur Backend-Sperre in db/project_comments.py (COMMENT_LOCK_SECONDS) passen.
+const COMMENT_LOCK_MS = 10 * 60 * 1000
+
 interface StaffMember {
   id: string
   name: string
@@ -95,7 +99,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<ProjectFileCategory | null>(null)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const uploadDialogFileRef = useRef<HTMLInputElement>(null)
   const [confirmDeleteFileId, setConfirmDeleteFileId] = useState<string | null>(null)
   const [deletingFile, setDeletingFile] = useState(false)
@@ -109,6 +113,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [savingCommentEdit, setSavingCommentEdit] = useState(false)
   const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<string | null>(null)
   const [deletingComment, setDeletingComment] = useState(false)
+  // Tickt im Minutentakt, damit die 10-Min-Sperre der Kommentare ohne Reload greift.
+  const [now, setNow] = useState(() => Date.now())
 
   // Offerten & Rechnungen
   const [quotes, setQuotes] = useState<ProjectQuote[]>([])
@@ -132,7 +138,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [tasks, setTasks] = useState<ProjectTask[]>([])
 
   // Tab-Auswahl
-  type ProjectTab = 'details' | 'documents' | 'supplier' | 'quotes' | 'reports' | 'invoices' | 'approvals' | 'tasks'
+  type ProjectTab = 'details' | 'documents' | 'supplier' | 'quotes' | 'reports' | 'invoices' | 'approvals' | 'tasks' | 'status'
   const [activeTab, setActiveTab] = useState<ProjectTab>('details')
 
   // Bestellfreigaben
@@ -151,6 +157,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   useEffect(() => {
     document.querySelector('.admin-content')?.scrollTo({ top: 0 })
+  }, [])
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
@@ -565,27 +576,30 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   }
 
   function openUploadDialog(category: ProjectFileCategory) {
-    setUploadFile(null)
+    setUploadFiles([])
     setUploadCategory(category)
   }
 
   function closeUploadDialog() {
     setUploadCategory(null)
-    setUploadFile(null)
+    setUploadFiles([])
     if (uploadDialogFileRef.current) uploadDialogFileRef.current.value = ''
   }
 
   async function handleConfirmUpload() {
-    if (!project || !uploadFile || !uploadCategory) return
-    const form = new FormData()
-    form.append('file', uploadFile)
-    form.append('category', uploadCategory)
+    if (!project || !uploadFiles.length || !uploadCategory) return
     setUploading(true)
     try {
-      await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form)
+      // Backend nimmt eine Datei pro Request → sequentiell hochladen
+      for (const file of uploadFiles) {
+        const form = new FormData()
+        form.append('file', file)
+        form.append('category', uploadCategory)
+        await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form)
+      }
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[]
       setFiles(updated)
-      showToast('Datei hochgeladen')
+      showToast(uploadFiles.length > 1 ? `${uploadFiles.length} Dateien hochgeladen` : 'Datei hochgeladen')
       closeUploadDialog()
     } catch {
       setError('Fehler beim Hochladen')
@@ -619,11 +633,17 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/comments`) as ProjectComment[]
       setComments(updated)
       setNewComment('')
-    } catch {
-      setError('Fehler beim Speichern des Kommentars')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Speichern des Kommentars')
     } finally {
       setAddingComment(false)
     }
+  }
+
+  // Kommentar älter als 10 Min → gesperrt (Bearbeiten/Löschen ausgeblendet,
+  // Backend lehnt es zusätzlich ab). now als State, damit die Sperre live greift.
+  function commentLocked(c: ProjectComment): boolean {
+    return now - new Date(c.created_at).getTime() > COMMENT_LOCK_MS
   }
 
   function startEditComment(c: ProjectComment) {
@@ -647,8 +667,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/comments`) as ProjectComment[]
       setComments(updated)
       cancelEditComment()
-    } catch {
-      setError('Fehler beim Aktualisieren des Kommentars')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Aktualisieren des Kommentars')
     } finally {
       setSavingCommentEdit(false)
     }
@@ -663,8 +683,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       })
       setComments(prev => prev.filter(c => c.id !== confirmDeleteCommentId))
       setConfirmDeleteCommentId(null)
-    } catch {
-      setError('Fehler beim Löschen des Kommentars')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Löschen des Kommentars')
+      setConfirmDeleteCommentId(null)
     } finally {
       setDeletingComment(false)
     }
@@ -720,11 +741,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <button type="button" className={`kpi-admin-tab ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => setActiveTab('reports')}>Rapporte</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>Rechnungen</button>
           <button type="button" className={`kpi-admin-tab ${activeTab === 'approvals' ? 'active' : ''}`} onClick={() => setActiveTab('approvals')}>Visierung</button>
+          <button type="button" className={`kpi-admin-tab ${activeTab === 'status' ? 'active' : ''}`} onClick={() => setActiveTab('status')}>Status</button>
         </div>
       )}
 
+      {/* ── Inhalt: aktiver Tab links, Kommentare immer rechts ──── */}
+      <div className={isNew ? undefined : 'project-detail-body'}>
+      <div className="project-detail-main">
+
       {(isNew || activeTab === 'details') && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20, alignItems: 'start' }}>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {error && <div className="admin-form-error">{error}</div>}
@@ -1012,42 +1038,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </button>
           </div>
         </form>
-
-        {/* ── Seitenleiste ──────────────────────────────────── */}
-        {!isNew && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="admin-table-wrap" style={{ padding: 20 }}>
-              <div className="admin-section-title">Status</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {!isClosed && (
-                  <button
-                    type="button"
-                    disabled={settingStatus}
-                    className="admin-btn admin-btn-danger"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => setConfirmClose(true)}
-                  >
-                    Abschliessen
-                  </button>
-                )}
-                {isClosed && (
-                  <button
-                    type="button"
-                    disabled={reopening}
-                    className="admin-btn admin-btn-secondary"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => setConfirmReopen(true)}
-                  >
-                    Wiedereröffnen
-                  </button>
-                )}
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
-                Abgeschlossene Projekte werden für Mitarbeiter ausgeblendet.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
       )}
 
@@ -1220,92 +1210,139 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         </div>
       )}
 
-      {/* ── Kommentare ───────────────────────────────────────── */}
-      {!isNew && activeTab === 'details' && (
-        <div className="admin-table-wrap" style={{ padding: 24, marginTop: 20 }}>
+      {/* ── Status (eigener Tab) ──────────────────────────────── */}
+      {/* Nur noch die Status-Aktion (Abschliessen/Wiedereröffnen).
+          Kommentare stehen tab-unabhängig in der rechten Seitenleiste. */}
+      {!isNew && activeTab === 'status' && (
+        <div className="admin-table-wrap" style={{ padding: 20, maxWidth: 360 }}>
+          <div className="admin-section-title">Status</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {!isClosed && (
+              <button
+                type="button"
+                disabled={settingStatus}
+                className="admin-btn admin-btn-danger"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => setConfirmClose(true)}
+              >
+                Abschliessen
+              </button>
+            )}
+            {isClosed && (
+              <button
+                type="button"
+                disabled={reopening}
+                className="admin-btn admin-btn-secondary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => setConfirmReopen(true)}
+              >
+                Wiedereröffnen
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
+            Abgeschlossene Projekte werden für Mitarbeiter ausgeblendet.
+          </p>
+        </div>
+      )}
+
+      </div>{/* /project-detail-main */}
+
+      {/* ── Kommentare: immer rechts, unabhängig vom aktiven Tab ── */}
+      {!isNew && (
+        <div className="admin-table-wrap project-detail-comments" style={{ padding: 24 }}>
           <div className="admin-section-title" style={{ marginBottom: 14 }}>Kommentare</div>
-          {comments.length === 0 && (
-            <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>Noch keine Kommentare.</div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            {comments.map(c => {
-              const isEditing = editingCommentId === c.id
-              return (
-                <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        {formatDateTime(c.created_at)}
-                        {c.updated_at ? ' · bearbeitet' : ''}
-                      </span>
-                      {!isEditing && (
-                        <>
+            {comments.length === 0 && (
+              <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 16 }}>Noch keine Kommentare.</div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              {comments.map(c => {
+                const isEditing = editingCommentId === c.id
+                const locked = commentLocked(c)
+                return (
+                  <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                          {formatDateTime(c.created_at)}
+                          {c.updated_at ? ' · bearbeitet' : ''}
+                        </span>
+                        {!isEditing && !locked && (
+                          <>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-sm admin-btn-secondary"
+                              onClick={() => startEditComment(c)}
+                            >Bearbeiten</button>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-sm admin-btn-danger"
+                              onClick={() => setConfirmDeleteCommentId(c.id)}
+                            >Löschen</button>
+                          </>
+                        )}
+                        {!isEditing && locked && (
+                          <span style={{ fontSize: 11, color: 'var(--muted)' }} title="Nach 10 Minuten gesperrt – fester Eintrag">🔒</span>
+                        )}
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <textarea
+                          className="admin-form-input"
+                          rows={2}
+                          value={editingCommentText}
+                          onChange={e => setEditingCommentText(e.target.value)}
+                          style={{ resize: 'vertical' }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <button
                             type="button"
                             className="admin-btn admin-btn-sm admin-btn-secondary"
-                            onClick={() => startEditComment(c)}
-                          >Bearbeiten</button>
+                            onClick={cancelEditComment}
+                            disabled={savingCommentEdit}
+                          >Abbrechen</button>
                           <button
                             type="button"
-                            className="admin-btn admin-btn-sm admin-btn-danger"
-                            onClick={() => setConfirmDeleteCommentId(c.id)}
-                          >Löschen</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {isEditing ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <textarea
-                        className="admin-form-input"
-                        rows={2}
-                        value={editingCommentText}
-                        onChange={e => setEditingCommentText(e.target.value)}
-                        style={{ resize: 'vertical' }}
-                      />
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-sm admin-btn-secondary"
-                          onClick={cancelEditComment}
-                          disabled={savingCommentEdit}
-                        >Abbrechen</button>
-                        <button
-                          type="button"
-                          className="admin-btn admin-btn-sm admin-btn-primary"
-                          onClick={handleSaveEditComment}
-                          disabled={savingCommentEdit || !editingCommentText.trim()}
-                        >{savingCommentEdit ? 'Speichern…' : 'Speichern'}</button>
+                            className="admin-btn admin-btn-sm admin-btn-primary"
+                            onClick={handleSaveEditComment}
+                            disabled={savingCommentEdit || !editingCommentText.trim()}
+                          >{savingCommentEdit ? 'Speichern…' : 'Speichern'}</button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{c.text}</div>
-                  )}
-                </div>
-              )
-            })}
+                    ) : (
+                      <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="admin-form-input"
+                style={{ flex: 1 }}
+                placeholder="Kommentar hinzufügen…"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddComment() } }}
+              />
+              <button
+                type="button"
+                className="admin-btn admin-btn-primary"
+                disabled={addingComment || !newComment.trim()}
+                onClick={handleAddComment}
+              >
+                {addingComment ? '…' : 'Speichern'}
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
+              Kommentare lassen sich 10 Minuten lang bearbeiten oder löschen – danach sind sie ein fester Eintrag.
+            </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              className="admin-form-input"
-              style={{ flex: 1 }}
-              placeholder="Kommentar hinzufügen…"
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddComment() } }}
-            />
-            <button
-              type="button"
-              className="admin-btn admin-btn-primary"
-              disabled={addingComment || !newComment.trim()}
-              onClick={handleAddComment}
-            >
-              {addingComment ? '…' : 'Senden'}
-            </button>
-          </div>
-        </div>
       )}
+
+      </div>{/* /project-detail-body */}
 
       {confirmDeleteFileId && (
         <ConfirmDialog
@@ -1438,13 +1475,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
               <div className="admin-form-group">
-                <label className="admin-form-label">Datei (PDF oder Bild) *</label>
+                <label className="admin-form-label">Dateien (PDF oder Bild) *</label>
                 <input
                   ref={uploadDialogFileRef}
                   type="file"
                   accept="image/*,application/pdf"
-                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                  multiple
+                  onChange={e => setUploadFiles(e.target.files ? Array.from(e.target.files) : [])}
                 />
+                {uploadFiles.length > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted, #888)', marginTop: 6 }}>
+                    {uploadFiles.length} {uploadFiles.length === 1 ? 'Datei' : 'Dateien'} ausgewählt
+                  </div>
+                )}
               </div>
             </div>
             <div className="admin-confirm-actions">
@@ -1460,7 +1503,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 type="button"
                 className="admin-btn admin-btn-primary"
                 onClick={handleConfirmUpload}
-                disabled={uploading || !uploadFile}
+                disabled={uploading || !uploadFiles.length}
               >
                 {uploading ? 'Wird hochgeladen…' : 'Hochladen'}
               </button>

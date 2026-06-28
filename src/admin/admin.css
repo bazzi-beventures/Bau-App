@@ -2207,6 +2207,30 @@ button.admin-list-item {
   background: rgba(59, 130, 246, 0.08);
 }
 
+/* Vorschau-Linie beim Ziehen ins Zeitraster: zeigt, wo der Block-Anfang (Uhrzeit) landet. */
+.project-cal-week-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--primary);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.project-cal-week-drop-time {
+  position: absolute;
+  top: -8px;
+  left: 2px;
+  padding: 0 4px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  line-height: 16px;
+}
+
 @media (max-width: 1100px) {
   .project-schedule-layout {
     grid-template-columns: 1fr;
@@ -2277,4 +2301,32 @@ button.admin-list-item {
 .admin-bericht-modal-close:hover {
   background: var(--surface-hover, var(--border));
   border-color: var(--primary);
+}
+
+/* Projekt-Detailseite: aktiver Tab links, Kommentare als feste rechte
+   Seitenleiste (tab-unabhängig sichtbar). Auf Mobile untereinander. */
+.project-detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+.project-detail-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Klebt unter dem Sticky-Header (≈88px). overflow-y überschreibt das
+   overflow-y: hidden von .admin-table-wrap, damit lange Kommentarlisten
+   innerhalb der Seitenleiste scrollen statt die Seite zu strecken. */
+.project-detail-comments {
+  position: sticky;
+  top: 92px;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+}
+@media (max-width: 767px) {
+  .project-detail-body { grid-template-columns: 1fr; }
+  .project-detail-comments { position: static; max-height: none; }
 }

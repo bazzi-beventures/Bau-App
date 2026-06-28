@@ -77,9 +77,9 @@ export interface QuoteDetail {
   quote_number: string
   project_name: string
   labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; hidden?: boolean }[]
-  material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; optional?: boolean }[]
   travel_items: { description: string; total_price: number }[]
-  extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
+  extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; optional?: boolean }[]
   extra_charge_items: { description: string; total_price: number }[]
   installation_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   special_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
@@ -108,7 +108,9 @@ interface Supplier {
 // Lohnzeile zeigen, sondern als Gesamtbetrag in die Produktpreise einrechnen (Backend
 // foldet beim PDF). Intern bleibt die Position als Lohn erhalten (Nachkalkulation).
 interface LaborRow { description: string; quantity: string; unit_price: number | null; hidden?: boolean }
-interface MaterialRow { art_nr: string; quantity: string; description?: string; unit_price?: number; unit?: string }
+// `optional` (Workflow "optionale_positionen"): Eventualposition — erscheint mit Preis
+// auf der Offerte, zählt aber NICHT ins Total (Backend rechnet sie raus).
+interface MaterialRow { art_nr: string; quantity: string; description?: string; unit_price?: number; unit?: string; optional?: boolean }
 interface ExtraProductRow {
   description: string
   quantity: string
@@ -120,6 +122,7 @@ interface ExtraProductRow {
   supplier_id?: string | null
   category?: string | null
   positions?: ConfirmedPosition[]  // Stobag: Auswahl-Breakdown der Produktzeile (Metadaten)
+  optional?: boolean  // Eventualposition (Workflow "optionale_positionen"): nicht im Total
 }
 interface ExtraChargeRow { description: string; total_price: string }
 interface InstallationRow { description: string; unit_price: string }
@@ -217,6 +220,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
   const [montageEnabled, setMontageEnabled] = useState(false)
+  // Eventualpositionen (Workflow "optionale_positionen"): "Option"-Häkchen pro Material-/
+  // Produktzeile; markierte Positionen erscheinen mit Preis, zählen aber nicht ins Total.
+  const [optionalEnabled, setOptionalEnabled] = useState(false)
+  // Offerten-Typ (tenant-spezifischer Workflow "richtofferte"). Der Umschalter erscheint
+  // nur, wenn das Feature aktiv ist; sonst bleibt es immer die normale Offerte.
+  const [richtoffAvailable, setRichtoffAvailable] = useState(false)
+  const [quoteType, setQuoteType] = useState<'offerte' | 'richtofferte'>('offerte')
   const [extraCharges, setExtraCharges] = useState<ExtraChargeRow[]>([])
   const [includeTravelCost, setIncludeTravelCost] = useState(true)
   const [installationRows, setInstallationRows] = useState<InstallationRow[]>([])
@@ -237,6 +247,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   // Gefundener, noch nicht abgeschlossener Entwurf aus einer früheren Sitzung.
   const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; data: QuoteDraft } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Per OCR hochgeladene Lieferanten-PDFs, deren Review bestätigt wurde. Werden
+  // beim Speichern der Offerte als Projekt-Datei unter "Lieferantendokumente >
+  // Bestellungen" abgelegt (Quelle der übernommenen Positionen, automatisch archiviert).
+  const [supplierDocsToFile, setSupplierDocsToFile] = useState<File[]>([])
+  // Das gerade im Review-Modal offene Quelle-PDF — erst bei "Übernehmen" wird es
+  // zur Ablage vorgemerkt, bei "Abbrechen" verworfen (kein ungenutztes PDF ablegen).
+  const pendingPdfFile = useRef<File | null>(null)
 
   // localStorage-Slot pro Projekt — im gesperrten Projekt-Modal konstant, im
   // freien Formular wechselt er mit der Projektauswahl.
@@ -273,6 +290,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
     getMe().then(me => {
       setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
+      setOptionalEnabled(isFeatureEnabled(me, 'optionale_positionen'))
+      setRichtoffAvailable(isFeatureEnabled(me, 'richtofferte'))
       if (!isFeatureEnabled(me, 'sonderpositionen')) return
       setSpecialEnabled(true)
       apiFetch('/pwa/admin/special-position-templates')
@@ -347,7 +366,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      if (pdfReview) { setPdfReview(null); return }
+      if (pdfReview) { pendingPdfFile.current = null; setPdfReview(null); return }
       onCancel()
     }
     window.addEventListener('keydown', onKey)
@@ -423,6 +442,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
         setError('Keine Produkte in der PDF erkannt.')
         return
       }
+      // Quelle-PDF merken, bis der Admin das Review bestätigt oder abbricht.
+      pendingPdfFile.current = file
       setPdfReview(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
@@ -445,7 +466,29 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       positions: c.positions,
     }))
     setExtraProducts(prev => [...prev, ...rows])
+    // Quelle-PDF zur Ablage vormerken — landet beim Speichern der Offerte im Projekt.
+    if (pendingPdfFile.current) {
+      const doc = pendingPdfFile.current
+      setSupplierDocsToFile(prev => [...prev, doc])
+      pendingPdfFile.current = null
+    }
     setPdfReview(null)
+  }
+
+  // Legt die vorgemerkten Lieferanten-PDFs als Projekt-Dateien ab (Kategorie
+  // 'bestellungen' → Tab "Lieferantendokumente > Bestellungen"). Best-effort:
+  // Fehler werden geschluckt, die Offerte ist zu diesem Zeitpunkt bereits gespeichert.
+  async function fileSupplierDocs(projectId: string, files: File[]) {
+    for (const f of files) {
+      try {
+        const form = new FormData()
+        form.append('file', f)
+        form.append('category', 'bestellungen')
+        await apiFormFetch(`/pwa/admin/projects/${projectId}/files`, form)
+      } catch (err) {
+        console.error('Lieferanten-PDF konnte nicht im Projekt abgelegt werden:', err)
+      }
+    }
   }
 
   // ── Submit ──
@@ -475,10 +518,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           unit_price: r.unit_price,
           hidden: !!r.hidden,
         })),
-        material_items: materialRows.filter(r => r.art_nr && parseNum(r.quantity) > 0).map(r => ({
-          art_nr: r.art_nr,
-          quantity: parseNum(r.quantity),
-        })),
+        material_items: materialRows.filter(r => r.art_nr && parseNum(r.quantity) > 0).map(r => {
+          const item: Record<string, unknown> = { art_nr: r.art_nr, quantity: parseNum(r.quantity) }
+          if (r.optional) item.optional = true  // Eventualposition (nur bei aktivem Feature serverseitig übernommen)
+          return item
+        }),
         travel_items: [],
         include_travel_cost: includeTravelCost,
         extra_product_items: extraProducts.filter(r => r.description).map(r => {
@@ -496,6 +540,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           if (r.supplier_id) item.supplier_id = r.supplier_id
           if (r.category) item.category = r.category
           if (r.positions) item.positions = r.positions
+          if (r.optional) item.optional = true  // Eventualposition (nur bei aktivem Feature serverseitig übernommen)
           return item
         }),
         extra_charge_items: extraCharges.filter(r => r.description && parseNum(r.total_price) > 0).map(r => ({
@@ -514,8 +559,16 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
         material_discount_pct: parseNum(materialDiscount),
         notes: notes || null,
         product_description: productDescription.trim() || null,
+        quote_type: quoteType,
       }
       await apiFetch('/pwa/admin/quotes', { method: 'POST', body: JSON.stringify(payload) })
+      // Quelle-PDF(s) der OCR-Extraktion ins Projekt ablegen (Lieferantendokumente >
+      // Bestellungen). Erst NACH erfolgreichem Speichern und best-effort — eine
+      // fehlgeschlagene Ablage darf die bereits gespeicherte Offerte nicht kippen.
+      if (supplierDocsToFile.length > 0 && selectedProject?.id) {
+        await fileSupplierDocs(selectedProject.id, supplierDocsToFile)
+        setSupplierDocsToFile([])
+      }
       try { localStorage.removeItem(draftKey) } catch { /* egal */ }
       onDone()
     } catch (err) {
@@ -548,12 +601,29 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       >
         ✕
       </button>
-      <h3 style={{ margin: '0 0 20px' }}>Neue Offerte erstellen</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 20px' }}>
+        <h3 style={{ margin: 0 }}>{quoteType === 'richtofferte' ? 'Neue Richtofferte erstellen' : 'Neue Offerte erstellen'}</h3>
+        {richtoffAvailable && (
+          <div role="group" aria-label="Offerten-Typ" style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            {(['offerte', 'richtofferte'] as const).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setQuoteType(t)}
+                className={`admin-btn admin-btn-sm ${quoteType === t ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                style={{ borderRadius: 0, border: 'none' }}
+              >
+                {t === 'offerte' ? 'Offerte' : 'Richtofferte'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {pdfReview && (
         <PdfExtractionReviewModal
           data={pdfReview}
-          onCancel={() => setPdfReview(null)}
+          onCancel={() => { pendingPdfFile.current = null; setPdfReview(null) }}
           onConfirm={handlePdfReviewConfirm}
         />
       )}
@@ -668,6 +738,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
               value={row.quantity}
               onChange={e => updateMaterial(i, { quantity: e.target.value })}
             />
+            {optionalEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
+                <input type="checkbox" checked={!!row.optional} onChange={e => updateMaterial(i, { optional: e.target.checked })} />
+                Option
+              </label>
+            )}
             {materialRows.length > 1 && (
               <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeMaterial(i)} title="Entfernen">✕</button>
             )}
@@ -685,6 +761,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
             <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity} onChange={e => updateExtraProduct(i, { quantity: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit} onChange={e => updateExtraProduct(i, { unit: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="Preis/Stk" value={row.unit_price} onChange={e => updateExtraProduct(i, { unit_price: e.target.value })} />
+            {optionalEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
+                <input type="checkbox" checked={!!row.optional} onChange={e => updateExtraProduct(i, { optional: e.target.checked })} />
+                Option
+              </label>
+            )}
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeExtraProduct(i)} title="Entfernen">✕</button>
           </div>
         ))}
@@ -824,7 +906,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       {/* Actions */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="admin-btn admin-btn-primary" onClick={handleSubmit} disabled={saving}>
-          {saving ? 'Wird erstellt…' : 'Offerte erstellen'}
+          {saving ? 'Wird erstellt…' : (quoteType === 'richtofferte' ? 'Richtofferte erstellen' : 'Offerte erstellen')}
         </button>
         <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>Abbrechen</button>
       </div>
@@ -837,7 +919,8 @@ function round2(n: number) { return Math.round(n * 100) / 100 }
 // ─── Edit Form ──────────────────────────────────────────────
 
 type EditLaborRow = { description: string; quantity: string; unit_price: string; hidden?: boolean }
-type EditFreeRow = { description: string; quantity: string; unit: string; unit_price: string }
+// `optional` (Workflow "optionale_positionen"): Eventualposition, nicht im Total.
+type EditFreeRow = { description: string; quantity: string; unit: string; unit_price: string; optional?: boolean }
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
 
@@ -847,10 +930,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price), hidden: !!i.hidden }))
   )
   const [materialRows, setMaterialRows] = useState<EditFreeRow[]>(() =>
-    quote.material_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price) }))
+    quote.material_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price), optional: !!i.optional }))
   )
   const [extraProducts, setExtraProducts] = useState<EditFreeRow[]>(() =>
-    quote.extra_product_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price) }))
+    quote.extra_product_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price), optional: !!i.optional }))
   )
   const [extraCharges, setExtraCharges] = useState<EditChargeRow[]>(() =>
     quote.extra_charge_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
@@ -863,6 +946,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   )
   const [installationTemplates, setInstallationTemplates] = useState<InstallationTemplate[]>([])
   const [montageEnabled, setMontageEnabled] = useState(false)
+  const [optionalEnabled, setOptionalEnabled] = useState(false)
   const [specialEnabled, setSpecialEnabled] = useState(false)
   const [specialTemplates, setSpecialTemplates] = useState<SpecialPositionTemplate[]>([])
   const [specialRows, setSpecialRows] = useState<SpecialRow[]>(() =>
@@ -888,6 +972,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     // Sonderpositionen-Sektion nur wenn Feature für den Tenant aktiv.
     getMe().then(me => {
       setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
+      setOptionalEnabled(isFeatureEnabled(me, 'optionale_positionen'))
       if (!isFeatureEnabled(me, 'sonderpositionen')) return
       setSpecialEnabled(true)
       apiFetch('/pwa/admin/special-position-templates')
@@ -906,13 +991,13 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: 'h', unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)), hidden: !!r.hidden })),
         material_items: materialRows
           .filter(r => r.description && parseNum(r.quantity) > 0)
-          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)), optional: !!r.optional })),
         travel_items: travelRows
           .filter(r => parseNum(r.total_price) > 0)
           .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
         extra_product_items: extraProducts
           .filter(r => r.description)
-          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)) })),
+          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)), optional: !!r.optional })),
         extra_charge_items: extraCharges
           .filter(r => r.description && parseNum(r.total_price) > 0)
           .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
@@ -992,6 +1077,12 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
               onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, unit: e.target.value } : r))} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="CHF/Stk" value={row.unit_price}
               onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            {optionalEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
+                <input type="checkbox" checked={!!row.optional} onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, optional: e.target.checked } : r))} />
+                Option
+              </label>
+            )}
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setMaterialRows(r => r.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}
@@ -1011,6 +1102,12 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
               onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit: e.target.value } : r))} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="Preis/Stk" value={row.unit_price}
               onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            {optionalEnabled && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
+                <input type="checkbox" checked={!!row.optional} onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, optional: e.target.checked } : r))} />
+                Option
+              </label>
+            )}
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExtraProducts(r => r.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}

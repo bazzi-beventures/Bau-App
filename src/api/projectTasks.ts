@@ -14,13 +14,19 @@ export interface ProjectTask {
 
 // Hakt eine Aufgabe ab bzw. setzt sie zurück. Geteilt zwischen direktem Klick
 // und dem Offline-Queue-Drain, damit die Call-Logik nur an einer Stelle lebt.
+// doneAt = echter Abhak-Zeitpunkt (ISO). Wichtig für offline gepufferte Aktionen,
+// die erst später synchronisiert werden — sonst würde der Server die Sync-Zeit
+// statt des realen Abhak-Moments stempeln.
 export async function toggleProjectTaskDone(
   projectId: string,
   taskId: string,
   isDone: boolean,
+  doneAt?: string | null,
 ): Promise<void> {
+  const body: { is_done: boolean; done_at?: string } = { is_done: isDone }
+  if (isDone && doneAt) body.done_at = doneAt
   await apiFetch(`/pwa/projects/${projectId}/tasks/${taskId}/done`, {
     method: 'PATCH',
-    body: JSON.stringify({ is_done: isDone }),
+    body: JSON.stringify(body),
   })
 }

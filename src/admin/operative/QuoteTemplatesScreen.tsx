@@ -65,14 +65,22 @@ export default function QuoteTemplatesScreen() {
   const [stdDiscSaved, setStdDiscSaved] = useState('')
   const [stdDiscIsDefault, setStdDiscIsDefault] = useState(true)
   const [savingDisc, setSavingDisc] = useState(false)
+  // Zweiter Disclaimer für den Typ "Richtofferte" — nur sichtbar/pflegbar bei aktivem
+  // Feature "richtofferte". Eigenes Tenant-Feld + eigener System-Default.
+  const [richtoffAvailable, setRichtoffAvailable] = useState(false)
+  const [stdDiscR, setStdDiscR] = useState('')
+  const [stdDiscRSaved, setStdDiscRSaved] = useState('')
+  const [stdDiscRIsDefault, setStdDiscRIsDefault] = useState(true)
+  const [savingDiscR, setSavingDiscR] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc] = await Promise.all([
+      const [data, notes, disc, discR] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
@@ -82,6 +90,9 @@ export default function QuoteTemplatesScreen() {
       setStdDisc(disc.disclaimer ?? '')
       setStdDiscSaved(disc.disclaimer ?? '')
       setStdDiscIsDefault(disc.is_default)
+      setStdDiscR(discR.disclaimer ?? '')
+      setStdDiscRSaved(discR.disclaimer ?? '')
+      setStdDiscRIsDefault(discR.is_default)
     } finally {
       setLoading(false)
     }
@@ -127,9 +138,31 @@ export default function QuoteTemplatesScreen() {
     }
   }
 
+  async function saveFooterDisclaimerRichtofferte(reset = false) {
+    setSavingDiscR(true)
+    setError('')
+    try {
+      const res = await apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte', {
+        method: 'PATCH',
+        body: JSON.stringify({ disclaimer: reset ? null : stdDiscR }),
+      }) as { disclaimer: string; is_default: boolean }
+      setStdDiscR(res.disclaimer ?? '')
+      setStdDiscRSaved(res.disclaimer ?? '')
+      setStdDiscRIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Disclaimer (Richtofferte) gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingDiscR(false)
+    }
+  }
+
   useEffect(() => { load() }, [])
   useEffect(() => {
-    getMe().then(me => setSpecialFeatureOn(isFeatureEnabled(me, 'sonderpositionen'))).catch(() => {})
+    getMe().then(me => {
+      setSpecialFeatureOn(isFeatureEnabled(me, 'sonderpositionen'))
+      setRichtoffAvailable(isFeatureEnabled(me, 'richtofferte'))
+    }).catch(() => {})
   }, [])
 
   function showToast(msg: string) {
@@ -346,9 +379,11 @@ export default function QuoteTemplatesScreen() {
           {/* ── Footer-Disclaimer ── */}
           <div className="admin-page-header" style={{ marginTop: 24 }}>
             <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer</div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer{richtoffAvailable ? ' — Offerte' : ''}</div>
               <div className="admin-page-subtitle">
-                Erscheint zuunterst auf jedem Offerten-PDF, unter den Bemerkungen.
+                {richtoffAvailable
+                  ? 'Erscheint zuunterst auf Offerten vom Typ „Offerte", unter den Bemerkungen.'
+                  : 'Erscheint zuunterst auf jedem Offerten-PDF, unter den Bemerkungen.'}
                 {stdDiscIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
                 {!stdDiscIsDefault && stdDiscSaved.trim() === '' &&
                   ' Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer.'}
@@ -384,6 +419,52 @@ export default function QuoteTemplatesScreen() {
               </span>
             </div>
           </div>
+
+          {/* ── Footer-Disclaimer Richtofferte (nur bei aktivem Feature "richtofferte") ── */}
+          {richtoffAvailable && (
+            <>
+              <div className="admin-page-header" style={{ marginTop: 24 }}>
+                <div>
+                  <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer — Richtofferte</div>
+                  <div className="admin-page-subtitle">
+                    Erscheint nur auf Offerten vom Typ „Richtofferte", unter den Bemerkungen.
+                    {stdDiscRIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+                    {!stdDiscRIsDefault && stdDiscRSaved.trim() === '' &&
+                      ' Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer.'}
+                  </div>
+                </div>
+              </div>
+              <div className="admin-table-wrap" style={{ padding: 16 }}>
+                <textarea
+                  className="admin-form-input"
+                  rows={4}
+                  value={stdDiscR}
+                  onChange={e => setStdDiscR(e.target.value)}
+                  placeholder="Schlusstext / Disclaimer für Richtofferten…"
+                  style={{ resize: 'vertical', lineHeight: 1.5 }}
+                />
+                <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={() => saveFooterDisclaimerRichtofferte(false)}
+                    disabled={savingDiscR || stdDiscR === stdDiscRSaved}
+                  >
+                    {savingDiscR ? 'Speichern…' : 'Disclaimer speichern'}
+                  </button>
+                  <button
+                    className="admin-btn admin-btn-secondary"
+                    onClick={() => saveFooterDisclaimerRichtofferte(true)}
+                    disabled={savingDiscR || stdDiscRIsDefault}
+                  >
+                    Auf Standardtext zurücksetzen
+                  </button>
+                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                    Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
 

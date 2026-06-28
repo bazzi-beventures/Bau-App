@@ -3,8 +3,9 @@ import { apiBlobFetch, apiFetch } from '../../api/client'
 import { upsertProject, updateProjectSchedule } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
-import ProjectScheduleCalendar, { shiftProjectDates } from './ProjectScheduleCalendar'
+import ProjectScheduleCalendar from './ProjectScheduleCalendar'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
+import { shiftISO, hhmmToMin, minToHHMM } from '../utils/calendarHelpers'
 
 interface StaffLite {
   id: string
@@ -148,20 +149,58 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     if (onNav) onNav('projects', 'new')
   }
 
-  async function handleShift(id: string, deltaDays: number) {
+  // Drag-Verschiebung aus dem Kalender. deltaDays = Tagesversatz; startTime
+  // steuert die Uhrzeit: undefined = beibehalten (Monat), 'HH:MM' = neue
+  // Startzeit (Dauer wird mitgezogen), null = Uhrzeit löschen (→ ganztägig).
+  async function handleReschedule(id: string, deltaDays: number, startTime?: string | null) {
     const proj = projects.find(p => p.id === id)
     if (!proj || !proj.start_date || !proj.end_date) return
-    const shifted = shiftProjectDates(proj, deltaDays)
-    setProjects(prev => prev.map(p => p.id === id ? shifted : p))
+
+    const newStartDate = shiftISO(proj.start_date, deltaDays)
+    const newEndDate = shiftISO(proj.end_date, deltaDays)
+
+    let newStartTime = proj.start_time ? proj.start_time.slice(0, 5) : null
+    let newEndTime = proj.end_time ? proj.end_time.slice(0, 5) : null
+    if (startTime === null) {
+      newStartTime = null
+      newEndTime = null
+    } else if (startTime !== undefined) {
+      const durMin = newStartTime && newEndTime ? hhmmToMin(newEndTime) - hhmmToMin(newStartTime) : null
+      newStartTime = startTime
+      newEndTime = durMin && durMin > 0 ? minToHHMM(hhmmToMin(startTime) + durMin) : null
+    }
+
+    // Nichts geändert → keinen Schreibzugriff/Audit-Eintrag auslösen.
+    if (
+      newStartDate === proj.start_date.slice(0, 10) &&
+      newEndDate === proj.end_date.slice(0, 10) &&
+      newStartTime === (proj.start_time?.slice(0, 5) ?? null) &&
+      newEndTime === (proj.end_time?.slice(0, 5) ?? null)
+    ) return
+
+    const optimistic: Project = {
+      ...proj,
+      start_date: newStartDate, end_date: newEndDate,
+      start_time: newStartTime, end_time: newEndTime,
+    }
+    setProjects(prev => prev.map(p => p.id === id ? optimistic : p))
     if (form?.id === id) {
-      setForm(f => f && ({ ...f, startDate: shifted.start_date!.slice(0, 10), endDate: shifted.end_date!.slice(0, 10) }))
+      setForm(f => f && ({
+        ...f,
+        startDate: newStartDate, endDate: newEndDate,
+        startTime: newStartTime ?? '', endTime: newEndTime ?? '',
+      }))
     }
     try {
-      await updateProjectSchedule(id, shifted.start_date, shifted.end_date)
+      await updateProjectSchedule(id, newStartDate, newEndDate, newStartTime, newEndTime)
     } catch {
       setProjects(prev => prev.map(p => p.id === id ? proj : p))
       if (form?.id === id) {
-        setForm(f => f && ({ ...f, startDate: proj.start_date!.slice(0, 10), endDate: proj.end_date!.slice(0, 10) }))
+        setForm(f => f && ({
+          ...f,
+          startDate: proj.start_date!.slice(0, 10), endDate: proj.end_date!.slice(0, 10),
+          startTime: proj.start_time?.slice(0, 5) ?? '', endTime: proj.end_time?.slice(0, 5) ?? '',
+        }))
       }
       showToast('Verschieben fehlgeschlagen.', 'error')
     }
@@ -360,7 +399,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             loading={loading}
             canton={canton}
             onSelect={selectProject}
-            onShift={handleShift}
+            onReschedule={handleReschedule}
             onVisibleWeekChange={setVisibleWeekIso}
             onVisibleStaffChange={setVisibleStaffIds}
           />

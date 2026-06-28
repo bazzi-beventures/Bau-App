@@ -45,6 +45,19 @@ export function shiftISO(iso: string, days: number): string {
   return toDateStr(addDays(parseDateStr(iso), days))
 }
 
+// ─── Uhrzeit-Helfer ('HH:MM' ⇄ Minuten ab Mitternacht) ───────────────────────
+
+export function hhmmToMin(t: string): number {
+  const [h, m] = t.slice(0, 5).split(':').map(Number)
+  return h * 60 + m
+}
+
+export function minToHHMM(min: number): string {
+  const clamped = ((Math.round(min) % 1440) + 1440) % 1440
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(Math.floor(clamped / 60))}:${pad(clamped % 60)}`
+}
+
 const CATHOLIC_CANTONS = new Set(['AG', 'AI', 'FR', 'JU', 'LU', 'NW', 'OW', 'SG', 'SO', 'SZ', 'TI', 'UR', 'VS', 'ZG'])
 const WITH_BERCHTOLDSTAG = new Set(['ZH', 'BE', 'AG', 'LU', 'SG', 'SH', 'TG', 'ZG', 'AR', 'AI', 'GL', 'GR', 'SZ', 'UR', 'NW', 'OW'])
 const WITH_TAG_DER_ARBEIT = new Set(['ZH', 'BL', 'BS', 'JU', 'NE', 'SH', 'TG'])

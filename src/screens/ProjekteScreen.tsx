@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError, apiFormFetch, apiUrl, isOfflineError } from '../api/client'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
+import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 
 // Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle).
@@ -220,7 +221,8 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     const remaining: QueuedTaskToggle[] = []
     for (const item of q) {
       try {
-        await toggleProjectTaskDone(item.project_id, item.task_id, item.is_done)
+        // queued_at = realer Abhak-Zeitpunkt von der Baustelle, nicht die Sync-Zeit.
+        await toggleProjectTaskDone(item.project_id, item.task_id, item.is_done, item.queued_at)
       } catch {
         remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
       }
@@ -236,31 +238,40 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   }, [drainTaskQueue])
 
   // Hakt eine Aufgabe ab: erst optimistisch lokal, dann Server bzw. Offline-Queue.
+  // checkedAt ist der echte Abhak-Moment — er wird mitgeschickt (auch offline via
+  // Queue), damit done_at den Zeitpunkt vom Feld zeigt und nicht die Sync-Zeit.
   async function toggleTask(task: ProjectTask) {
     if (!selected) return
     const next = !task.is_done
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_done: next } : t))
+    const checkedAt = next ? new Date().toISOString() : null
+    const myName = localStorage.getItem(SK.DISPLAY_NAME)
+    setTasks(prev => prev.map(t => t.id === task.id
+      ? { ...t, is_done: next, done_at: checkedAt, done_by_name: next ? (myName ?? t.done_by_name) : null }
+      : t))
     try {
-      await toggleProjectTaskDone(selected.id, task.id, next)
+      await toggleProjectTaskDone(selected.id, task.id, next, checkedAt)
     } catch (err) {
       if (isOfflineError(err)) {
-        enqueueTaskToggle({ project_id: selected.id, task_id: task.id, is_done: next, queued_at: new Date().toISOString() })
+        enqueueTaskToggle({ project_id: selected.id, task_id: task.id, is_done: next, queued_at: checkedAt ?? new Date().toISOString() })
       } else {
-        // Echter Fehler → optimistisches Update zurückrollen.
-        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_done: task.is_done } : t))
+        // Echter Fehler → optimistisches Update vollständig zurückrollen.
+        setTasks(prev => prev.map(t => t.id === task.id ? task : t))
       }
     }
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!selected || !e.target.files?.length) return
-    const file = e.target.files[0]
-    const form = new FormData()
-    form.append('file', file)
-    form.append('category', uploadCategory)
+    const filesToUpload = Array.from(e.target.files)
     setUploading(true)
     try {
-      await apiFormFetch(`/pwa/projects/${selected.id}/files`, form)
+      // Backend nimmt eine Datei pro Request → sequentiell hochladen
+      for (const file of filesToUpload) {
+        const form = new FormData()
+        form.append('file', file)
+        form.append('category', uploadCategory)
+        await apiFormFetch(`/pwa/projects/${selected.id}/files`, form)
+      }
       const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
       setFiles(updated)
     } catch {
@@ -364,9 +375,10 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                     }}>
                       {t.text}
                     </div>
-                    {t.is_done && t.done_by_name && (
+                    {t.is_done && (t.done_by_name || t.done_at) && (
                       <div style={{ fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 2 }}>
-                        erledigt von {t.done_by_name}
+                        {t.done_by_name ? `erledigt von ${t.done_by_name}` : 'erledigt'}
+                        {t.done_at ? ` · ${formatDateTime(t.done_at)}` : ''}
                       </div>
                     )}
                   </div>
@@ -516,6 +528,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,application/pdf"
+                    multiple
                     style={{ display: 'none' }}
                     onChange={handleUpload}
                   />
