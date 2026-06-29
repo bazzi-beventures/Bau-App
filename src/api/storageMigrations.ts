@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 9
+export const APP_DATA_VERSION = 10
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -150,7 +150,18 @@ const migration_8_to_9: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9]
+// v9 → v10: QuoteDraft bekommt skontoPct/skontoDays (Skonto-Hinweis auf der Offerte).
+// Felder sind additiv; applyDraft liest sie mit Fallback ('' bei fehlend) — kein Wipe
+// nötig. No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_9_to_10: Migration = {
+  from: 9,
+  to: 10,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

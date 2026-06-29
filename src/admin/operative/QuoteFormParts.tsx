@@ -61,3 +61,34 @@ export function DiscountsFieldset({ laborDiscount, materialDiscount, onLaborChan
     </fieldset>
   )
 }
+
+interface SkontoFieldsetProps {
+  skontoPct: string
+  skontoDays: string
+  onPctChange: (v: string) => void
+  onDaysChange: (v: string) => void
+}
+
+// Skonto = Abzug bei früher Zahlung. Reiner Hinweis auf der Offerte (ändert das Total
+// NICHT). Sind beide Felder leer/0, erscheint kein Hinweis im PDF. Der konkrete Satz
+// wird aus dem Begleittext der Offert-Vorlagen ({prozent}/{tage}/{betrag}) gebildet.
+export function SkontoFieldset({ skontoPct, skontoDays, onPctChange, onDaysChange }: SkontoFieldsetProps) {
+  return (
+    <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+      <legend style={{ fontWeight: 600, padding: '0 8px' }}>Skonto</legend>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <label className="admin-form-label" title="Abzug bei Zahlung innerhalb der Frist. Nur ein Hinweis auf der Offerte — das Total bleibt unverändert.">Skonto (%)</label>
+          <input className="admin-form-input" placeholder="0" value={skontoPct} onChange={e => onPctChange(e.target.value)} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="admin-form-label" title="Zahlungsfrist in Tagen, innerhalb der der Skonto gilt">Frist (Tage)</label>
+          <input className="admin-form-input" placeholder="z.B. 10" value={skontoDays} onChange={e => onDaysChange(e.target.value)} />
+        </div>
+      </div>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted, #888)', margin: '8px 8px 0' }}>
+        Nur ein Hinweis auf der Offerte — das Total bleibt unverändert. Der Begleittext stammt aus den Offert-Vorlagen.
+      </p>
+    </fieldset>
+  )
+}

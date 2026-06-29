@@ -14,7 +14,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
   ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval, ProjectTask,
-  CATEGORY_LABELS, formatDateTime,
+  formatDateTime,
 } from './projectDetail/tabs'
 
 // Kommentare sind nach 10 Minuten gesperrt (kein Bearbeiten/Löschen mehr) —
@@ -99,8 +99,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<ProjectFileCategory | null>(null)
-  const [uploadFiles, setUploadFiles] = useState<File[]>([])
-  const uploadDialogFileRef = useRef<HTMLInputElement>(null)
   const [confirmDeleteFileId, setConfirmDeleteFileId] = useState<string | null>(null)
   const [deletingFile, setDeletingFile] = useState(false)
 
@@ -575,36 +573,29 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
-  function openUploadDialog(category: ProjectFileCategory) {
-    setUploadFiles([])
-    setUploadCategory(category)
-  }
-
-  function closeUploadDialog() {
-    setUploadCategory(null)
-    setUploadFiles([])
-    if (uploadDialogFileRef.current) uploadDialogFileRef.current.value = ''
-  }
-
-  async function handleConfirmUpload() {
-    if (!project || !uploadFiles.length || !uploadCategory) return
+  // Lädt direkt in die gegebene Kategorie hoch — aufgerufen aus dem Drag-&-Drop-Feld
+  // bzw. dem Hochladen-Button der jeweiligen Sektion. uploadCategory dient hier nur
+  // noch als "Wird hochgeladen…"-Markierung für die richtige Sektion.
+  async function uploadFilesToCategory(category: ProjectFileCategory, filesToUpload: File[]) {
+    if (!project || !filesToUpload.length) return
     setUploading(true)
+    setUploadCategory(category)
     try {
       // Backend nimmt eine Datei pro Request → sequentiell hochladen
-      for (const file of uploadFiles) {
+      for (const file of filesToUpload) {
         const form = new FormData()
         form.append('file', file)
-        form.append('category', uploadCategory)
+        form.append('category', category)
         await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form)
       }
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[]
       setFiles(updated)
-      showToast(uploadFiles.length > 1 ? `${uploadFiles.length} Dateien hochgeladen` : 'Datei hochgeladen')
-      closeUploadDialog()
+      showToast(filesToUpload.length > 1 ? `${filesToUpload.length} Dateien hochgeladen` : 'Datei hochgeladen')
     } catch {
       setError('Fehler beim Hochladen')
     } finally {
       setUploading(false)
+      setUploadCategory(null)
     }
   }
 
@@ -1047,7 +1038,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           files={files}
           uploading={uploading}
           uploadingCategory={uploadCategory}
-          onRequestUpload={openUploadDialog}
+          onUpload={uploadFilesToCategory}
           onDelete={setConfirmDeleteFileId}
         />
       )}
@@ -1057,7 +1048,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           files={files}
           uploading={uploading}
           uploadingCategory={uploadCategory}
-          onRequestUpload={openUploadDialog}
+          onUpload={uploadFilesToCategory}
           onDelete={setConfirmDeleteFileId}
         />
       )}
@@ -1261,31 +1252,32 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 const locked = commentLocked(c)
                 return (
                   <div key={c.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>{c.author_name || 'Unbekannt'}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                          {formatDateTime(c.created_at)}
-                          {c.updated_at ? ' · bearbeitet' : ''}
-                        </span>
-                        {!isEditing && !locked && (
-                          <>
-                            <button
-                              type="button"
-                              className="admin-btn admin-btn-sm admin-btn-secondary"
-                              onClick={() => startEditComment(c)}
-                            >Bearbeiten</button>
-                            <button
-                              type="button"
-                              className="admin-btn admin-btn-sm admin-btn-danger"
-                              onClick={() => setConfirmDeleteCommentId(c.id)}
-                            >Löschen</button>
-                          </>
-                        )}
-                        {!isEditing && locked && (
-                          <span style={{ fontSize: 11, color: 'var(--muted)' }} title="Nach 10 Minuten gesperrt – fester Eintrag">🔒</span>
-                        )}
-                      </div>
+                    {/* Schmale Seitenleiste (340px): Name + Datum zusammenhalten,
+                        Aktionen als rechtsbündige Gruppe, die als Einheit in eine
+                        zweite Zeile umbricht – statt den Namen zu zerquetschen. */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{c.author_name || 'Unbekannt'}</span>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {formatDateTime(c.created_at)}
+                        {c.updated_at ? ' · bearbeitet' : ''}
+                      </span>
+                      {!isEditing && !locked && (
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-secondary"
+                            onClick={() => startEditComment(c)}
+                          >Bearbeiten</button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-sm admin-btn-danger"
+                            onClick={() => setConfirmDeleteCommentId(c.id)}
+                          >Löschen</button>
+                        </div>
+                      )}
+                      {!isEditing && locked && (
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }} title="Nach 10 Minuten gesperrt – fester Eintrag">🔒</span>
+                      )}
                     </div>
                     {isEditing ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1449,63 +1441,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sendingQuote}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sendingQuote}>
                 {sendingQuote ? 'Wird gesendet…' : 'Offerte senden'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {uploadCategory && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 480 }}>
-            <div className="admin-confirm-title">Hochladen zu</div>
-            <div style={{ marginTop: 10, marginBottom: 6 }}>
-              <span
-                className="admin-badge"
-                style={{
-                  background: 'var(--primary)',
-                  color: '#fff',
-                  fontSize: 13,
-                  padding: '6px 12px',
-                  fontWeight: 600,
-                }}
-              >
-                {CATEGORY_LABELS[uploadCategory]}
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Dateien (PDF oder Bild) *</label>
-                <input
-                  ref={uploadDialogFileRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  onChange={e => setUploadFiles(e.target.files ? Array.from(e.target.files) : [])}
-                />
-                {uploadFiles.length > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted, #888)', marginTop: 6 }}>
-                    {uploadFiles.length} {uploadFiles.length === 1 ? 'Datei' : 'Dateien'} ausgewählt
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="admin-confirm-actions">
-              <button
-                type="button"
-                className="admin-btn admin-btn-secondary"
-                onClick={closeUploadDialog}
-                disabled={uploading}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                className="admin-btn admin-btn-primary"
-                onClick={handleConfirmUpload}
-                disabled={uploading || !uploadFiles.length}
-              >
-                {uploading ? 'Wird hochgeladen…' : 'Hochladen'}
               </button>
             </div>
           </div>

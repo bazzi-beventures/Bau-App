@@ -6,7 +6,7 @@ import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
-import { DescPriceFieldset, DiscountsFieldset } from './QuoteFormParts'
+import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
 import { getMe } from '../../api/auth'
@@ -85,6 +85,8 @@ export interface QuoteDetail {
   special_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   labor_discount_pct: number
   material_discount_pct: number
+  skonto_pct: number | null
+  skonto_days: number | null
   notes: string | null
   product_description: string | null
 }
@@ -183,6 +185,8 @@ interface QuoteDraft {
   specialRows: SpecialRow[]
   laborDiscount: string
   materialDiscount: string
+  skontoPct: string
+  skontoDays: string
   notes: string
   productDescription: string
   useStandardNotes: boolean
@@ -202,6 +206,8 @@ function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
     !!d.productDescription.trim() ||
     !!d.laborDiscount.trim() ||
     !!d.materialDiscount.trim() ||
+    !!d.skontoPct?.trim() ||
+    !!d.skontoDays?.trim() ||
     (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
   )
 }
@@ -236,6 +242,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   const [specialRows, setSpecialRows] = useState<SpecialRow[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
+  // Skonto = Abzug bei früher Zahlung; nur Hinweistext auf der Offerte (Total bleibt gleich).
+  const [skontoPct, setSkontoPct] = useState('')
+  const [skontoDays, setSkontoDays] = useState('')
   const [notes, setNotes] = useState(STANDARD_NOTES)
   const [stdNotes, setStdNotes] = useState(STANDARD_NOTES)
   const [productDescription, setProductDescription] = useState('')
@@ -305,7 +314,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     return {
       projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, notes, productDescription, useStandardNotes,
+      materialDiscount, skontoPct, skontoDays, notes, productDescription, useStandardNotes,
     }
   }
 
@@ -326,6 +335,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     setSpecialRows(d.specialRows ?? [])
     setLaborDiscount(d.laborDiscount ?? '')
     setMaterialDiscount(d.materialDiscount ?? '')
+    setSkontoPct(d.skontoPct ?? '')
+    setSkontoDays(d.skontoDays ?? '')
     if (d.notes != null) setNotes(d.notes)
     setProductDescription(d.productDescription ?? '')
     setUseStandardNotes(d.useStandardNotes ?? true)
@@ -360,7 +371,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey, projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, notes, productDescription, useStandardNotes, stdNotes])
+      materialDiscount, skontoPct, skontoDays, notes, productDescription, useStandardNotes, stdNotes])
 
   // Esc schliesst das Fenster — ist das PDF-Review-Modal offen, zuerst dieses.
   useEffect(() => {
@@ -557,6 +568,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
         special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
+        skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
+        skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
         product_description: productDescription.trim() || null,
         quote_type: quoteType,
@@ -879,6 +892,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
         onMaterialChange={setMaterialDiscount}
       />
 
+      <SkontoFieldset
+        skontoPct={skontoPct}
+        skontoDays={skontoDays}
+        onPctChange={setSkontoPct}
+        onDaysChange={setSkontoDays}
+      />
+
       {/* Product description */}
       <div style={{ marginBottom: 20 }}>
         <label className="admin-form-label">Produktbeschreibung</label>
@@ -959,6 +979,8 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   )
   const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
+  const [skontoPct, setSkontoPct] = useState(quote.skonto_pct != null ? String(quote.skonto_pct) : '')
+  const [skontoDays, setSkontoDays] = useState(quote.skonto_days != null ? String(quote.skonto_days) : '')
   const [notes, setNotes] = useState(quote.notes || '')
   const [productDescription, setProductDescription] = useState(quote.product_description || '')
   const [saving, setSaving] = useState(false)
@@ -1007,6 +1029,8 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
+        skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
+        skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
         product_description: productDescription.trim() || null,
       }
@@ -1201,6 +1225,13 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         materialDiscount={materialDiscount}
         onLaborChange={setLaborDiscount}
         onMaterialChange={setMaterialDiscount}
+      />
+
+      <SkontoFieldset
+        skontoPct={skontoPct}
+        skontoDays={skontoDays}
+        onPctChange={setSkontoPct}
+        onDaysChange={setSkontoDays}
       />
 
       {/* Product description */}

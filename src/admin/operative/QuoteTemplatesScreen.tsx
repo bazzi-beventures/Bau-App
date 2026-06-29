@@ -72,15 +72,22 @@ export default function QuoteTemplatesScreen() {
   const [stdDiscRSaved, setStdDiscRSaved] = useState('')
   const [stdDiscRIsDefault, setStdDiscRIsDefault] = useState(true)
   const [savingDiscR, setSavingDiscR] = useState(false)
+  // Skonto-Begleittext (Hinweis "Abzug bei früher Zahlung" auf der Offerte). Eigenes
+  // Tenant-Feld + System-Default; immer pflegbar (kein Feature-Flag).
+  const [skontoTxt, setSkontoTxt] = useState('')
+  const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
+  const [skontoIsDefault, setSkontoIsDefault] = useState(true)
+  const [savingSkonto, setSavingSkonto] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR] = await Promise.all([
+      const [data, notes, disc, discR, skonto] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
@@ -93,6 +100,9 @@ export default function QuoteTemplatesScreen() {
       setStdDiscR(discR.disclaimer ?? '')
       setStdDiscRSaved(discR.disclaimer ?? '')
       setStdDiscRIsDefault(discR.is_default)
+      setSkontoTxt(skonto.text ?? '')
+      setSkontoTxtSaved(skonto.text ?? '')
+      setSkontoIsDefault(skonto.is_default)
     } finally {
       setLoading(false)
     }
@@ -154,6 +164,27 @@ export default function QuoteTemplatesScreen() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingDiscR(false)
+    }
+  }
+
+  async function saveQuoteSkontoText(reset = false) {
+    setSavingSkonto(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
+      // serverseitig ebenfalls als Reset behandelt — leerer Begleittext ergibt keinen Sinn).
+      const res = await apiFetch('/pwa/admin/quote-skonto-text', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : skontoTxt }),
+      }) as { text: string; is_default: boolean }
+      setSkontoTxt(res.text ?? '')
+      setSkontoTxtSaved(res.text ?? '')
+      setSkontoIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Begleittext gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingSkonto(false)
     }
   }
 
@@ -465,6 +496,49 @@ export default function QuoteTemplatesScreen() {
               </div>
             </>
           )}
+
+          {/* ── Skonto-Begleittext (Hinweis "Abzug bei früher Zahlung"; für alle Mandanten) ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Begleittext</div>
+              <div className="admin-page-subtitle">
+                Erscheint auf der Offerte unter dem Total, sobald bei einer Offerte ein Skonto-%
+                gesetzt ist. Platzhalter <code>{'{prozent}'}</code>, <code>{'{tage}'}</code> und{' '}
+                <code>{'{betrag}'}</code> werden beim PDF aus den Offert-Werten gefüllt
+                (<code>{'{betrag}'}</code> = Brutto-Skonto-Betrag).
+                {skontoIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={3}
+              value={skontoTxt}
+              onChange={e => setSkontoTxt(e.target.value)}
+              placeholder="Bei Zahlung innerhalb von {tage} Tagen {prozent}% Skonto."
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveQuoteSkontoText(false)}
+                disabled={savingSkonto || skontoTxt === skontoTxtSaved}
+              >
+                {savingSkonto ? 'Speichern…' : 'Begleittext speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveQuoteSkontoText(true)}
+                disabled={savingSkonto || skontoIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Leer lassen setzt auf den System-Standardtext zurück.
+              </span>
+            </div>
+          </div>
         </>
       )}
 

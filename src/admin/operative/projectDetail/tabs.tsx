@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { apiUrl } from '../../../api/client'
 import { fmtCHF, fmtDate } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { ActionRow } from '../../components/ActionRow'
 
 export type ProjectFileCategory =
   | 'fotos'
@@ -154,11 +155,146 @@ interface FileSectionsProps {
   sections: { key: ProjectFileCategory; title: string; legacyFallback?: boolean }[]
   uploading: boolean
   uploadingCategory: ProjectFileCategory | null
-  onRequestUpload: (category: ProjectFileCategory) => void
+  onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
 }
 
-function FileSections({ files, sections, uploading, uploadingCategory, onRequestUpload, onDelete }: FileSectionsProps) {
+interface FileSectionProps {
+  section: { key: ProjectFileCategory; title: string; legacyFallback?: boolean }
+  items: ProjectFile[]
+  uploading: boolean
+  isUploadingHere: boolean
+  onUpload: (category: ProjectFileCategory, files: File[]) => void
+  onDelete: (fileId: string) => void
+}
+
+// Eine Datei-Sektion (z.B. "Fotos") mit Drag-&-Drop-Feld + Hochladen-Button.
+// Sowohl Ablegen per Drag-&-Drop als auch Auswahl über den Button laden direkt
+// in DIESE Kategorie hoch — die Sektion bestimmt die Kategorie implizit.
+function FileSection({ section, items, uploading, isUploadingHere, onUpload, onDelete }: FileSectionProps) {
+  const [dragOver, setDragOver] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function pickFiles() {
+    if (!uploading) inputRef.current?.click()
+  }
+
+  function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files ? Array.from(e.target.files) : []
+    if (selected.length) onUpload(section.key, selected)
+    e.target.value = '' // gleiche Datei erneut auswählbar machen
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    if (uploading) return
+    const dropped = Array.from(e.dataTransfer.files || [])
+    if (dropped.length) onUpload(section.key, dropped)
+  }
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 11,
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--muted)',
+          padding: '6px 10px',
+          background: 'var(--surface-2)',
+          borderLeft: '3px solid var(--primary)',
+          borderRadius: 4,
+          marginBottom: 8,
+        }}
+      >
+        <span>{section.title}</span>
+        <span style={{ color: 'var(--muted)', fontWeight: 500 }}>· {items.length}</span>
+      </div>
+
+      {/* Drag-&-Drop-Feld: Datei reinziehen ODER klicken / Button → Datei-Auswahl */}
+      <div
+        onClick={pickFiles}
+        onDragOver={e => { e.preventDefault(); if (!uploading) setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+          padding: '14px 12px',
+          marginBottom: 8,
+          borderRadius: 8,
+          border: `2px dashed ${dragOver ? 'var(--primary)' : 'var(--border)'}`,
+          background: dragOver ? 'var(--surface-2)' : 'transparent',
+          color: 'var(--muted)',
+          fontSize: 12,
+          cursor: uploading ? 'default' : 'pointer',
+          transition: 'border-color 0.15s, background 0.15s',
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleSelect}
+        />
+        <span>
+          {isUploadingHere
+            ? 'Wird hochgeladen…'
+            : dragOver
+              ? 'Dateien hier ablegen'
+              : 'Dateien hierher ziehen oder klicken'}
+        </span>
+        <button
+          type="button"
+          className="admin-btn admin-btn-sm admin-btn-secondary"
+          style={{ textTransform: 'none', letterSpacing: 0 }}
+          disabled={uploading}
+          onClick={e => { e.stopPropagation(); pickFiles() }}
+        >
+          + Hochladen
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <div style={{ color: 'var(--muted)', fontSize: 12, padding: '4px 12px' }}>—</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {f.file_url
+                  ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
+                  : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
+                }
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
+              </div>
+              <button
+                type="button"
+                className="admin-btn admin-btn-sm admin-btn-danger"
+                onClick={() => onDelete(f.id)}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FileSections({ files, sections, uploading, uploadingCategory, onUpload, onDelete }: FileSectionsProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {sections.map(section => {
@@ -170,64 +306,16 @@ function FileSections({ files, sections, uploading, uploadingCategory, onRequest
           if (section.legacyFallback && (f.category == null || !ALL_CATEGORY_KEYS.has(f.category))) return true
           return false
         })
-        const isUploadingHere = uploading && uploadingCategory === section.key
         return (
-          <div key={section.key}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: 'var(--muted)',
-                padding: '6px 10px',
-                background: 'var(--surface-2)',
-                borderLeft: '3px solid var(--primary)',
-                borderRadius: 4,
-                marginBottom: 8,
-              }}
-            >
-              <span>{section.title}</span>
-              <span style={{ color: 'var(--muted)', fontWeight: 500 }}>· {items.length}</span>
-              <button
-                type="button"
-                className="admin-btn admin-btn-sm admin-btn-secondary"
-                style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0 }}
-                disabled={uploading}
-                onClick={() => onRequestUpload(section.key)}
-              >
-                {isUploadingHere ? 'Wird hochgeladen…' : '+ Hochladen'}
-              </button>
-            </div>
-            {items.length === 0 ? (
-              <div style={{ color: 'var(--muted)', fontSize: 12, padding: '4px 12px' }}>—</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {items.map(f => (
-                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                    <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {f.file_url
-                        ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
-                        : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
-                      }
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="admin-btn admin-btn-sm admin-btn-danger"
-                      onClick={() => onDelete(f.id)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <FileSection
+            key={section.key}
+            section={section}
+            items={items}
+            uploading={uploading}
+            isUploadingHere={uploading && uploadingCategory === section.key}
+            onUpload={onUpload}
+            onDelete={onDelete}
+          />
         )
       })}
     </div>
@@ -238,11 +326,11 @@ interface DocumentsTabProps {
   files: ProjectFile[]
   uploading: boolean
   uploadingCategory: ProjectFileCategory | null
-  onRequestUpload: (category: ProjectFileCategory) => void
+  onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
 }
 
-export function DocumentsTab({ files, uploading, uploadingCategory, onRequestUpload, onDelete }: DocumentsTabProps) {
+export function DocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete }: DocumentsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div className="admin-section-title" style={{ marginBottom: 14 }}>Dokumente & Fotos</div>
@@ -251,14 +339,14 @@ export function DocumentsTab({ files, uploading, uploadingCategory, onRequestUpl
         sections={PROJECT_DOC_SECTIONS}
         uploading={uploading}
         uploadingCategory={uploadingCategory}
-        onRequestUpload={onRequestUpload}
+        onUpload={onUpload}
         onDelete={onDelete}
       />
     </div>
   )
 }
 
-export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onRequestUpload, onDelete }: DocumentsTabProps) {
+export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete }: DocumentsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div className="admin-section-title" style={{ marginBottom: 14 }}>Lieferantendokumente</div>
@@ -267,7 +355,7 @@ export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onRe
         sections={SUPPLIER_DOC_SECTIONS}
         uploading={uploading}
         uploadingCategory={uploadingCategory}
-        onRequestUpload={onRequestUpload}
+        onUpload={onUpload}
         onDelete={onDelete}
       />
     </div>
@@ -342,47 +430,52 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                   // sollen NICHT ins Bearbeiten springen.
                   const editable = idx === 0 && q.status === 'entwurf'
                   return (
-                  <div
+                  <ActionRow
                     key={q.id}
                     onClick={editable ? (e) => { if (!(e.target as HTMLElement).closest('button, a')) onEdit(q.id) } : undefined}
                     title={editable ? 'Klicken zum Bearbeiten (z.B. Vertipper korrigieren)' : undefined}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', cursor: editable ? 'pointer' : 'default' }}
+                    style={{ padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', cursor: editable ? 'pointer' : 'default' }}
                   >
                     <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{q.version}</span>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, minWidth: 130 }}>{q.quote_number}</span>
                     <span className={`admin-badge ${QUOTE_STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>{QUOTE_STATUS_LABELS[q.status] || q.status}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(q.created_at)}</span>
                     {editable && <span style={{ fontSize: 12, color: 'var(--muted)' }} title="Klicken zum Bearbeiten">✎ bearbeiten</span>}
-                    <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
-                    {q.pdf_url && (
-                      <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
-                    )}
-                    {q.xlsx_url && (
-                      <a href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">XLSX</a>
-                    )}
-                    {idx === 0 && (
-                      <>
-                        {['entwurf', 'gesendet'].includes(q.status) && (
+                    {/* Summe + Aktionen als ein rechtsbündiger Block, der bei knappem
+                        Platz (Kommentar-Seitenleiste) als Einheit umbricht – statt die
+                        Summe vom Button-Cluster zu trennen. */}
+                    <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
+                      {q.pdf_url && (
+                        <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
+                      )}
+                      {q.xlsx_url && (
+                        <a href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">XLSX</a>
+                      )}
+                      {idx === 0 && (
+                        <>
+                          {['entwurf', 'gesendet'].includes(q.status) && (
+                            <button
+                              className="admin-btn admin-btn-primary admin-btn-sm"
+                              onClick={() => onSend(q)}
+                            >
+                              {q.status === 'gesendet' ? 'Erneut senden' : 'Senden'}
+                            </button>
+                          )}
+                          {q.status === 'entwurf' && (
+                            <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onUpdateStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
+                          )}
                           <button
-                            className="admin-btn admin-btn-primary admin-btn-sm"
-                            onClick={() => onSend(q)}
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            disabled={regeneratingQuoteId === q.id}
+                            onClick={() => onRegenerate(q.id)}
                           >
-                            {q.status === 'gesendet' ? 'Erneut senden' : 'Senden'}
+                            {regeneratingQuoteId === q.id ? '…' : 'Neue Version'}
                           </button>
-                        )}
-                        {q.status === 'entwurf' && (
-                          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onUpdateStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
-                        )}
-                        <button
-                          className="admin-btn admin-btn-secondary admin-btn-sm"
-                          disabled={regeneratingQuoteId === q.id}
-                          onClick={() => onRegenerate(q.id)}
-                        >
-                          {regeneratingQuoteId === q.id ? '…' : 'Neue Version'}
-                        </button>
-                      </>
-                    )}
-                  </div>
+                        </>
+                      )}
+                    </div>
+                  </ActionRow>
                   )
                 })}
               </div>
@@ -417,7 +510,7 @@ export function ReportsTab({ reports }: ReportsTabProps) {
             const signed = !!r.signature_timestamp
             const billed = !!r.invoice_id
             return (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <ActionRow key={r.id} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 18 }}>📋</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -441,7 +534,7 @@ export function ReportsTab({ reports }: ReportsTabProps) {
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
                 )}
-              </div>
+              </ActionRow>
             )
           })}
         </div>
@@ -538,7 +631,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
             return (
               <div key={latest.parent_id ?? latest.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
                 {group.map((inv, idx) => (
-                  <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
+                  <ActionRow key={inv.id} style={{ padding: '6px 4px', borderTop: idx > 0 ? '1px dashed var(--border)' : 'none' }}>
                     <span style={{ fontSize: 11, fontWeight: 700, minWidth: 32, color: idx === 0 ? 'var(--primary)' : 'var(--muted)' }}>V{inv.version}</span>
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 12, minWidth: 150 }}>{inv.invoice_number}</span>
                     <span className={`admin-badge ${INVOICE_STATUS_BADGE[inv.status] || 'admin-badge-draft'}`}>{INVOICE_STATUS_LABELS[inv.status] || inv.status}</span>
@@ -558,7 +651,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                         <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
                       </>
                     )}
-                  </div>
+                  </ActionRow>
                 ))}
               </div>
             )
