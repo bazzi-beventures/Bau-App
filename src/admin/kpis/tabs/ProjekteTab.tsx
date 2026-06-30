@@ -47,6 +47,7 @@ function presetTo(p: DatePreset): string | null {
 /* ── Table columns ────────────────────────────────────── */
 
 const COLUMNS: ColumnDef<KpiProjektRow>[] = [
+  { key: 'projekt_nummer', label: 'Nr.' },
   { key: 'projekt_name', label: 'Projekt' },
   {
     key: 'ist_abgeschlossen',
