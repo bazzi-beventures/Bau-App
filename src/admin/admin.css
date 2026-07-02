@@ -190,6 +190,30 @@
   gap: 8px;
 }
 
+.admin-powered-by {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 0 2px;
+}
+.powered-by-label {
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.powered-by-logo {
+  width: 50px;
+  height: 48px;
+  /* Default-Theme ist dunkel (:root) → weisses Logo */
+  background: center / contain no-repeat url('/logos/werkora_logo_white.png');
+  opacity: .92;
+}
+:root[data-theme="light"] .powered-by-logo {
+  background-image: url('/logos/werkora_logo.png');
+}
+
 .admin-switch-btn {
   display: flex;
   align-items: center;
@@ -951,7 +975,8 @@ button.admin-list-item {
   .admin-nav-group-label,
   .admin-nav-item span,
   .admin-nav-badge,
-  .admin-user-info {
+  .admin-user-info,
+  .admin-powered-by {
     display: none;
   }
 

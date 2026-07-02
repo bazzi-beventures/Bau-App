@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { apiFetch, apiFormFetch } from '../../api/client'
 import UnitsPanel from './UnitsPanel'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
 import ImportScreen from '../system/ImportScreen'
@@ -19,10 +19,13 @@ interface Material {
   supplier_id: string | null
   category: string | null
   unit: string | null
-  unit_price: number | null   // manueller VK-Override (0/leer = automatisch)
+  unit_price: number | null   // fixer VK-Override (nur noch Fallback ohne EK)
   cost_price: number | null   // EK (Einkaufspreis)
+  markup_pct: number | null   // Per-Artikel-Aufschlag % auf EK (null = Lieferanten-Default)
   calc_vk: number | null      // berechneter VK (EK x Aufschlag bzw. Override)
   is_active: boolean
+  image_path: string | null   // Objektpfad im privaten Bucket (nur intern)
+  image_url?: string | null   // transient: frisch signierte URL zum Anzeigen
   inventory: { quantity: number; min_quantity: number | null }[]
 }
 
@@ -110,11 +113,63 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
   const [isNewCategory, setIsNewCategory] = useState(!!(material?.category && !existingCategories.includes(material.category)))
   const [unit, setUnit] = useState(material?.unit ?? '')
   const [isNewUnit, setIsNewUnit] = useState(false)
-  const [unitPrice, setUnitPrice] = useState(material?.unit_price?.toString() ?? '')
   const [costPrice, setCostPrice] = useState(material?.cost_price?.toString() ?? '')
+  // Aufschlag % pro Artikel (Quelle der Wahrheit) + daraus abgeleiteter Ziel-VK.
+  // Beide Felder sind gekoppelt: Aufschlag ändern → VK folgt, VK eingeben → Aufschlag folgt.
+  const [markupPct, setMarkupPct] = useState(material?.markup_pct != null ? String(material.markup_pct) : '')
+  const [targetVk, setTargetVk] = useState(
+    material?.calc_vk != null && material.calc_vk > 0
+      ? String(material.calc_vk)
+      : (material?.unit_price != null && material.unit_price > 0 ? String(material.unit_price) : '')
+  )
   const [supplierId, setSupplierId] = useState(material?.supplier_id ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Bild: bestehendes (signierte URL aus der Liste) als Startvorschau; neue Auswahl
+  // wird erst nach dem Speichern der Stammdaten hochgeladen (art_nr muss existieren).
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(material?.image_url ?? null)
+  const [removeImage, setRemoveImage] = useState(false)
+
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null
+    if (!f) return
+    setImageFile(f)
+    setRemoveImage(false)
+    setImagePreview(URL.createObjectURL(f))
+  }
+
+  function onRemoveImage() {
+    setImageFile(null)
+    setImagePreview(null)
+    setRemoveImage(!!material?.image_path)  // nur löschen, wenn vorher ein Bild da war
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const ekNum = costPrice ? parseFloat(costPrice) : 0
+  const hasEk = !isNaN(ekNum) && ekNum > 0
+
+  // EK geändert → mit gehaltenem Aufschlag den VK neu rechnen (zeigt Teuerung live);
+  // falls nur ein Ziel-VK gesetzt war, daraus den Aufschlag ableiten.
+  function onChangeCost(v: string) {
+    setCostPrice(v)
+    const ek = v ? parseFloat(v) : 0
+    if (isNaN(ek) || ek <= 0) return
+    if (markupPct !== '') setTargetVk(String(round2(ek * (1 + parseFloat(markupPct) / 100))))
+    else if (targetVk !== '') setMarkupPct(String(round2((parseFloat(targetVk) / ek - 1) * 100)))
+  }
+
+  function onChangeMarkup(v: string) {
+    setMarkupPct(v)
+    if (!hasEk) return
+    setTargetVk(v !== '' ? String(round2(ekNum * (1 + parseFloat(v) / 100))) : '')
+  }
+
+  function onChangeTargetVk(v: string) {
+    setTargetVk(v)
+    if (!hasEk) return  // ohne EK ist der VK ein Fixpreis, kein Aufschlag ableitbar
+    setMarkupPct(v !== '' ? String(round2((parseFloat(v) / ekNum - 1) * 100)) : '')
+  }
 
   // Legacy-Einheit eines Materials, die (noch) nicht im Vokabular steht, trotzdem
   // als Auswahl anbieten — sonst ginge der Alt-Wert beim Speichern verloren.
@@ -131,6 +186,10 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
     setError('')
     try {
       const trimmedUnit = unit.trim()
+      // Mit EK: Aufschlag % ist die Quelle der Wahrheit → VK dynamisch (Teuerung).
+      // Ohne EK: kein Aufschlag berechenbar → Ziel-VK als fixer unit_price speichern.
+      const markup_pct = hasEk ? (markupPct !== '' ? round2(parseFloat(markupPct)) : null) : null
+      const unit_price = hasEk ? 0 : (targetVk ? round2(parseFloat(targetVk)) : 0)
       const method = isNew ? 'POST' : 'PATCH'
       const url = isNew ? '/pwa/admin/materials' : `/pwa/admin/materials/${encodeURIComponent(artNr)}`
       await apiFetch(url, {
@@ -140,11 +199,22 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
           name: name.trim(),
           category: category || null,
           unit: trimmedUnit || null,
-          unit_price: unitPrice ? parseFloat(unitPrice) : 0,
+          unit_price,
           cost_price: costPrice ? parseFloat(costPrice) : null,
+          markup_pct,
           supplier_id: supplierId || null,
         }),
       })
+      // Bild nach dem Speichern der Stammdaten verarbeiten (art_nr steht jetzt fest,
+      // Artikel existiert auch bei Neuanlage). Fehler hier nicht verschlucken.
+      const artNrEnc = encodeURIComponent(artNr.trim())
+      if (imageFile) {
+        const fd = new FormData()
+        fd.append('file', imageFile)
+        await apiFormFetch(`/pwa/admin/materials/${artNrEnc}/image`, fd)
+      } else if (removeImage) {
+        await apiFetch(`/pwa/admin/materials/${artNrEnc}/image`, { method: 'DELETE' })
+      }
       // Neue Einheit best-effort ins Vokabular aufnehmen (409 = existiert schon → egal).
       if (trimmedUnit && !existingUnits.includes(trimmedUnit)) {
         try { await apiFetch('/pwa/admin/units', { method: 'POST', body: JSON.stringify({ code: trimmedUnit }) }) } catch { /* ignore */ }
@@ -216,15 +286,20 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="admin-form-group">
               <label className="admin-form-label">EK-Preis (CHF)</label>
-              <input className="admin-form-input" type="number" step="0.01" min="0" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="Einkaufspreis" />
+              <input className="admin-form-input" type="number" step="0.01" min="0" value={costPrice} onChange={e => onChangeCost(e.target.value)} placeholder="Einkaufspreis" />
             </div>
             <div className="admin-form-group">
-              <label className="admin-form-label">VK-Preis (manuell)</label>
-              <input className="admin-form-input" type="number" step="0.01" min="0" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="leer = automatisch" />
-              <div className="admin-form-hint">
-                Leer = VK wird bei Offerte/Rechnung aus EK × Lieferanten-Aufschlag berechnet
-                {material?.calc_vk != null && !unitPrice ? ` (aktuell CHF ${material.calc_vk.toFixed(2)})` : ''}
-              </div>
+              <label className="admin-form-label">Aufschlag %</label>
+              <input className="admin-form-input" type="number" step="0.01" value={markupPct} onChange={e => onChangeMarkup(e.target.value)} placeholder={hasEk ? 'leer = Lieferanten-Aufschlag' : 'EK nötig'} disabled={!hasEk} />
+            </div>
+          </div>
+          <div className="admin-form-group">
+            <label className="admin-form-label">VK-Preis (CHF)</label>
+            <input className="admin-form-input" type="number" step="0.01" min="0" value={targetVk} onChange={e => onChangeTargetVk(e.target.value)} placeholder={hasEk ? 'aus EK × Aufschlag' : 'Fixpreis (kein EK)'} />
+            <div className="admin-form-hint">
+              {hasEk
+                ? 'VK = EK × Aufschlag und steigt automatisch mit dem EK (Teuerung). Direkt einen VK eingeben → der Aufschlag wird daraus bestimmt. Beide leer = Lieferanten-Aufschlag.'
+                : 'Ohne EK wird der VK als fixer Preis gespeichert (gibt keine Teuerung weiter).'}
             </div>
           </div>
           <div className="admin-form-group">
@@ -233,6 +308,27 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
               <option value="">— Kein —</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </div>
+          <div className="admin-form-group">
+            <label className="admin-form-label">Bild</label>
+            {imagePreview ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <img src={imagePreview} alt={name} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer' }}>
+                    Ändern
+                    <input type="file" accept="image/*" onChange={onPickImage} style={{ display: 'none' }} />
+                  </label>
+                  <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={onRemoveImage}>Entfernen</button>
+                </div>
+              </div>
+            ) : (
+              <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                Bild wählen…
+                <input type="file" accept="image/*" onChange={onPickImage} style={{ display: 'none' }} />
+              </label>
+            )}
+            <div className="admin-form-hint">JPEG/PNG/WebP — wird automatisch verkleinert (max. ~1024 px).</div>
           </div>
         </form>
         <div className="admin-modal-footer">
@@ -412,15 +508,22 @@ function MaterialInventoryPanel() {
                 return (
                   <tr key={m.id} onClick={() => setEditMaterial(m)}>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{m.art_nr}</td>
-                    <td><strong>{m.name}</strong>{supplierName ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{supplierName}</span> : null}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {m.image_url ? <img src={m.image_url} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 5, flexShrink: 0 }} /> : null}
+                        <span><strong>{m.name}</strong>{supplierName ? <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 12 }}>{supplierName}</span> : null}</span>
+                      </div>
+                    </td>
                     <td style={{ color: 'var(--muted)' }}>{m.category || '—'}</td>
                     <td>{m.unit || '—'}</td>
                     <td>{m.cost_price != null ? `CHF ${m.cost_price.toFixed(2)}` : '—'}</td>
                     <td>
                       {m.calc_vk != null && m.calc_vk > 0 ? `CHF ${m.calc_vk.toFixed(2)}` : '—'}
-                      {m.unit_price != null && m.unit_price > 0 && (
-                        <span style={{ color: 'var(--muted)', marginLeft: 4, fontSize: 11 }} title="Manueller VK-Override">✎</span>
-                      )}
+                      {m.markup_pct != null ? (
+                        <span style={{ color: 'var(--muted)', marginLeft: 4, fontSize: 11 }} title={`Per-Artikel-Aufschlag ${m.markup_pct}% (steigt mit dem EK)`}>+{m.markup_pct}%</span>
+                      ) : m.unit_price != null && m.unit_price > 0 ? (
+                        <span style={{ color: 'var(--muted)', marginLeft: 4, fontSize: 11 }} title="Fixer VK-Preis">✎</span>
+                      ) : null}
                     </td>
                     <td>
                       {stock !== null

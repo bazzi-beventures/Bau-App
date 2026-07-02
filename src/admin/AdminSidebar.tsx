@@ -155,6 +155,10 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
             <IconLogout />
           </button>
         </div>
+        <div className="admin-powered-by">
+          <span className="powered-by-label">powered by</span>
+          <span className="powered-by-logo" role="img" aria-label="Werkora" />
+        </div>
       </div>
     </aside>
   )

@@ -3,13 +3,14 @@ import { apiFetch, apiFormFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../components/AddressAutocomplete'
-import { Kontakt, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
+import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
+import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
@@ -68,6 +69,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [startTime, setStartTime] = useState(project?.start_time?.slice(0, 5) ?? '')
   const [endTime, setEndTime] = useState(project?.end_time?.slice(0, 5) ?? '')
   const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
+  // Eigentümer des Objekts — eigene Rolle, kein Kontakt. Kann pro Projekt ein Dritter sein.
+  const EMPTY_EIGENTUEMER: Eigentuemer = { name: '', adresse: '', telefon: '', email: '' }
+  const [eigentuemer, setEigentuemer] = useState<Eigentuemer>(project?.eigentuemer ?? EMPTY_EIGENTUEMER)
+  const updateEigentuemer = (field: keyof Eigentuemer, value: string) =>
+    setEigentuemer(prev => ({ ...prev, [field]: value }))
   const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
   const [disposal, setDisposal] = useState<DisposalDetails>(project?.disposal_details ?? EMPTY_DISPOSAL)
   const updateDisposal = (field: keyof DisposalDetails, value: string) => setDisposal(prev => ({ ...prev, [field]: value }))
@@ -184,13 +190,30 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   useEffect(() => {
     if (!project) return
     apiFetch(`/pwa/admin/projects/${project.id}/files`).then(d => setFiles(d as ProjectFile[])).catch(() => {})
-    apiFetch(`/pwa/admin/projects/${project.id}/comments`).then(d => setComments(d as ProjectComment[])).catch(() => {})
+    reloadComments()
     reloadQuotes()
     reloadInvoices()
     reloadReports()
     reloadApprovals()
     reloadTasks()
   }, [project?.id])
+
+  // Kommentare + Aufgaben bei jeder Rückkehr in die App (visibilitychange),
+  // beim Online-Werden und alle 30 s neu laden — so sieht der Projektleiter neue
+  // Einträge von Mitarbeitern ohne manuellen Reload. Die übrigen Projektdaten
+  // (Dateien, Offerten, Rechnungen …) laden bewusst nur beim Öffnen/Projektwechsel.
+  useVisibilityPolling(() => {
+    reloadComments()
+    reloadTasks()
+  }, 30_000)
+
+  async function reloadComments() {
+    if (!project) return
+    try {
+      const d = await apiFetch(`/pwa/admin/projects/${project.id}/comments`) as ProjectComment[]
+      setComments(d)
+    } catch { /* ignore */ }
+  }
 
   async function reloadTasks() {
     if (!project) return
@@ -520,6 +543,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           start_time: startTime || null,
           end_time: endTime || null,
           kontakte,
+          // Immer mitschicken (auch leer), damit ein geleertes Feld auch persistiert
+          // wird — das Backend filtert null-Werte weg (kein Clear möglich).
+          eigentuemer,
           disposal_details: hasEntsorgungsart && !disposalEmpty(disposal) ? disposal : null,
           wartung_interval_months: wartungInterval ? parseInt(wartungInterval, 10) : null,
           wartung_last_at: wartungLastAt || null,
@@ -886,6 +912,33 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </button>
               </div>
             ))}
+          </div>
+
+          {/* ── Eigentümer ────────────────────────────────────── */}
+          <div className="admin-table-wrap" style={{ padding: 24 }}>
+            <div className="admin-section-title">Eigentümer</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+              Optional: Eigentümer des Objekts — eine <strong>eigene Rolle</strong>, unabhängig von
+              Auftraggeber, Rechnungsempfänger und Baustellenkontakt. Wird auf Offerte und Rechnung gedruckt.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr', gap: 14 }}>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Name</label>
+                <input className="admin-form-input" autoComplete="new-eigentuemer-name" value={eigentuemer.name} onChange={e => updateEigentuemer('name', e.target.value)} placeholder="z.B. Erika Muster / Eigentümergemeinschaft" />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Adresse</label>
+                <input className="admin-form-input" autoComplete="new-eigentuemer-adresse" value={eigentuemer.adresse} onChange={e => updateEigentuemer('adresse', e.target.value)} placeholder="Strasse Nr, PLZ Ort" />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">Telefon</label>
+                <input className="admin-form-input" autoComplete="new-eigentuemer-telefon" value={eigentuemer.telefon} onChange={e => updateEigentuemer('telefon', e.target.value)} />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label className="admin-form-label">E-Mail</label>
+                <input className="admin-form-input" autoComplete="new-eigentuemer-email" type="email" value={eigentuemer.email} onChange={e => updateEigentuemer('email', e.target.value)} />
+              </div>
+            </div>
           </div>
 
           {/* ── Entsorgung (bei Demontage / Wiedermontage) ────── */}

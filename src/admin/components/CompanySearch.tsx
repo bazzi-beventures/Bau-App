@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { apiFetch } from '../../api/client'
 
-const SEARCH_CH_KEY = 'ad290fc75be73fc2834dac1ed6cc3176'
-
-interface SearchChEntry {
-  id: string
+// Suche läuft über den Backend-Proxy (/pwa/admin/suppliers/lookup),
+// damit der tel.search.ch-API-Key serverseitig bleibt (Railway-Env).
+interface LookupHit {
   name: string
   street?: string
-  streetno?: string
   zip?: string
   city?: string
   phone?: string
   email?: string
-}
-
-interface SearchChResponse {
-  result?: SearchChEntry[]
 }
 
 export interface CompanyResult {
@@ -31,7 +26,7 @@ interface Props {
 export function CompanySearch({ onSelect }: Props) {
   const [query, setQuery] = useState('')
   const [ort, setOrt] = useState('')
-  const [suggestions, setSuggestions] = useState<SearchChEntry[]>([])
+  const [suggestions, setSuggestions] = useState<LookupHit[]>([])
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const [loading, setLoading] = useState(false)
@@ -41,7 +36,7 @@ export function CompanySearch({ onSelect }: Props) {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
 
-    if (query.length < 2) {
+    if (query.trim().length < 3) {
       setSuggestions([])
       setOpen(false)
       return
@@ -50,17 +45,11 @@ export function CompanySearch({ onSelect }: Props) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const params = new URLSearchParams({
-          key: SEARCH_CH_KEY,
-          was: query,
-          maxnum: '6',
-          lang: 'de',
-        })
+        // firma=0: auch Privatpersonen — Kunden sind oft keine Firmen
+        const params = new URLSearchParams({ q: query.trim(), firma: '0' })
         if (ort.trim()) params.set('wo', ort.trim())
 
-        const res = await fetch(`https://tel.search.ch/api/?${params}`)
-        const data: SearchChResponse = await res.json()
-        const results = data.result ?? []
+        const results = await apiFetch(`/pwa/admin/suppliers/lookup?${params}`) as LookupHit[]
         setSuggestions(results)
         setOpen(results.length > 0)
         setHighlighted(-1)
@@ -87,10 +76,9 @@ export function CompanySearch({ onSelect }: Props) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  function select(entry: SearchChEntry) {
-    const street = [entry.street, entry.streetno].filter(Boolean).join(' ')
+  function select(entry: LookupHit) {
     const city = [entry.zip, entry.city].filter(Boolean).join(' ')
-    const address = [street, city].filter(Boolean).join(', ')
+    const address = [entry.street, city].filter(Boolean).join(', ')
 
     onSelect({
       name: entry.name,
@@ -162,11 +150,10 @@ export function CompanySearch({ onSelect }: Props) {
           overflowY: 'auto',
         }}>
           {suggestions.map((s, i) => {
-            const street = [s.street, s.streetno].filter(Boolean).join(' ')
             const city = [s.zip, s.city].filter(Boolean).join(' ')
             return (
               <li
-                key={s.id}
+                key={`${s.name}-${s.street ?? ''}-${i}`}
                 onMouseDown={() => select(s)}
                 onMouseEnter={() => setHighlighted(i)}
                 style={{
@@ -178,7 +165,7 @@ export function CompanySearch({ onSelect }: Props) {
               >
                 <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text, #e2e8f0)' }}>{s.name}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                  {[street, city].filter(Boolean).join(' · ')}
+                  {[s.street, city].filter(Boolean).join(' · ')}
                   {s.phone ? ` · ${s.phone}` : ''}
                 </div>
               </li>

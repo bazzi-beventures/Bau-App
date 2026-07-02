@@ -43,6 +43,12 @@ export default defineConfig(({ command }) => ({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registrierung passiert explizit in src/api/registerSW.ts (nicht via
+      // auto-injiziertem Script), damit wir bei jeder Rueckkehr in die App per
+      // r.update() aktiv auf ein neues sw.js pruefen koennen. Sonst prueft eine
+      // installierte PWA nur beim ~24h-Browser-Heartbeat → neue Deploys wurden
+      // oft erst nach manuellem Cache-Reset sichtbar.
+      injectRegister: false,
       // We manage manifest.json ourselves in public/
       manifest: false,
       workbox: {

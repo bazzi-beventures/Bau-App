@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { getMe } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
@@ -10,6 +12,15 @@ export interface Kontakt {
   telefon: string
   email: string
   is_site_contact?: boolean
+}
+
+// Eigentümer des Objekts — eigene Rolle, getrennt vom Auftraggeber (customer),
+// Rechnungsempfänger (customer.billing_*) und Baustellenkontakt (kontakte).
+export interface Eigentuemer {
+  name: string
+  adresse: string
+  telefon: string
+  email: string
 }
 
 export interface DisposalDetails {
@@ -69,6 +80,7 @@ export interface Project {
   projektleiter_id: string | null
   monteur_ids: string[]
   kontakte: Kontakt[]
+  eigentuemer: Eigentuemer | null
   disposal_details: DisposalDetails | null
   is_warranty?: boolean
   wartung_interval_months?: number | null
@@ -156,11 +168,17 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const [showNew, setShowNew] = useState(false)
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
   const [projektleiterOptions, setProjektleiterOptions] = useState<{ id: string; name: string }[]>([])
+  // id → Name für ALLE Mitarbeiter (nicht nur Projektleiter-geflaggte): löst
+  // projektleiter_id in der Spalte auf, auch wenn der PL kein PL-Flag (mehr) hat.
+  const [staffNameById, setStaffNameById] = useState<Record<string, string>>({})
+  // Tenant-spezifische Projektleiter-Spalte (Feature-Flag, Default aus).
+  const [showProjektleiterCol, setShowProjektleiterCol] = useState(false)
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff')
       .then(res => {
         const staff = res as { id: string; name: string; projektleiter: boolean }[]
+        setStaffNameById(Object.fromEntries(staff.map(s => [s.id, s.name])))
         setProjektleiterOptions(
           staff
             .filter(s => s.projektleiter)
@@ -168,7 +186,13 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
             .sort((a, b) => a.name.localeCompare(b.name))
         )
       })
-      .catch(() => setProjektleiterOptions([]))
+      .catch(() => { setProjektleiterOptions([]); setStaffNameById({}) })
+  }, [])
+
+  useEffect(() => {
+    getMe()
+      .then(me => setShowProjektleiterCol(isFeatureEnabled(me, 'projektleiter_spalte')))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -281,6 +305,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
                 <th style={thStyle} onClick={() => toggleSort('customer_name')}>
                   Kunde <SortIcon active={sortKey === 'customer_name'} dir={sortDir} />
                 </th>
+                {showProjektleiterCol && <th>Projektleiter</th>}
                 <th>Offerte</th>
                 <th>Rechnung</th>
                 <th style={thStyle} onClick={() => toggleSort('status')}>
@@ -293,7 +318,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
+                <tr><td colSpan={showProjektleiterCol ? 8 : 7} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
               ) : rows.map(p => {
                 const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
                 return (
@@ -303,6 +328,9 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
                     </td>
                     <td><strong>{p.name}</strong></td>
                     <td>{projectCustomerName(p) || '—'}</td>
+                    {showProjektleiterCol && (
+                      <td>{p.projektleiter_id ? (staffNameById[p.projektleiter_id] || '—') : '—'}</td>
+                    )}
                     <td>
                       {p.quote ? (
                         <span className={`admin-badge ${DOC_STATUS_BADGE[p.quote.status] || 'admin-badge-draft'}`}>

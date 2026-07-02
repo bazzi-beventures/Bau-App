@@ -78,16 +78,23 @@ export default function QuoteTemplatesScreen() {
   const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
   const [skontoIsDefault, setSkontoIsDefault] = useState(true)
   const [savingSkonto, setSavingSkonto] = useState(false)
+  // Skonto-Warnhinweis auf der Rechnung ("Ungerechtfertigte Skontoabzüge werden
+  // nachbelastet"). Erscheint bei Abrechnung einer Offerte mit Skonto. Eigenes Tenant-Feld.
+  const [skontoWarn, setSkontoWarn] = useState('')
+  const [skontoWarnSaved, setSkontoWarnSaved] = useState('')
+  const [skontoWarnIsDefault, setSkontoWarnIsDefault] = useState(true)
+  const [savingSkontoWarn, setSavingSkontoWarn] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto] = await Promise.all([
+      const [data, notes, disc, discR, skonto, skontoW] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/invoice-skonto-warning') as Promise<{ text: string; is_default: boolean }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
@@ -103,6 +110,9 @@ export default function QuoteTemplatesScreen() {
       setSkontoTxt(skonto.text ?? '')
       setSkontoTxtSaved(skonto.text ?? '')
       setSkontoIsDefault(skonto.is_default)
+      setSkontoWarn(skontoW.text ?? '')
+      setSkontoWarnSaved(skontoW.text ?? '')
+      setSkontoWarnIsDefault(skontoW.is_default)
     } finally {
       setLoading(false)
     }
@@ -185,6 +195,27 @@ export default function QuoteTemplatesScreen() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingSkonto(false)
+    }
+  }
+
+  async function saveInvoiceSkontoWarning(reset = false) {
+    setSavingSkontoWarn(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
+      // serverseitig ebenfalls als Reset behandelt).
+      const res = await apiFetch('/pwa/admin/invoice-skonto-warning', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : skontoWarn }),
+      }) as { text: string; is_default: boolean }
+      setSkontoWarn(res.text ?? '')
+      setSkontoWarnSaved(res.text ?? '')
+      setSkontoWarnIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Warnhinweis gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingSkontoWarn(false)
     }
   }
 
@@ -531,6 +562,48 @@ export default function QuoteTemplatesScreen() {
                 className="admin-btn admin-btn-secondary"
                 onClick={() => saveQuoteSkontoText(true)}
                 disabled={savingSkonto || skontoIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Leer lassen setzt auf den System-Standardtext zurück.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Warnhinweis (Rechnung)</div>
+              <div className="admin-page-subtitle">
+                Erscheint auf der Rechnung unter dem Total, sobald eine Offerte mit Skonto
+                abgerechnet wird — zusammen mit der wiederholten Skonto-Kondition. Standardsatz,
+                falls ein Kunde Skonto abzieht, ohne rechtzeitig zu zahlen.
+                {skontoWarnIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={2}
+              value={skontoWarn}
+              onChange={e => setSkontoWarn(e.target.value)}
+              placeholder="Ungerechtfertigte Skontoabzüge werden nachbelastet."
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveInvoiceSkontoWarning(false)}
+                disabled={savingSkontoWarn || skontoWarn === skontoWarnSaved}
+              >
+                {savingSkontoWarn ? 'Speichern…' : 'Warnhinweis speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveInvoiceSkontoWarning(true)}
+                disabled={savingSkontoWarn || skontoWarnIsDefault}
               >
                 Auf Standardtext zurücksetzen
               </button>
