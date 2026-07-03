@@ -34,6 +34,9 @@ export async function createProjectDraft(payload: ProjectDraftPayload): Promise<
   return apiFetch('/pwa/project-drafts', {
     method: 'POST',
     body: JSON.stringify(payload),
+    // Entwurf hat eine Offline-Queue: im Funkloch lieber nach 15s abbrechen
+    // und queuen, als minutenlang im Spinner zu hängen.
+    timeoutMs: 15_000,
   }) as Promise<ProjectDraft>
 }
 

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ApiError, isOfflineError } from '../api/client'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ApiError, isNetworkError } from '../api/client'
 import { createProjectDraft, ProjectDraftPayload } from '../api/projectDrafts'
 
 const OFFLINE_QUEUE_KEY = 'projektEntwurf_offline_queue'
@@ -62,30 +62,45 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
     loadQueue().some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS),
   )
 
+  // Re-Entrancy-Schutz: flatterndes Netz (mehrere online-Events kurz
+  // hintereinander) darf keine zwei Drains parallel starten — sonst wird
+  // jeder Entwurf doppelt gesendet.
+  const drainingRef = useRef(false)
+
   const drainQueue = useCallback(async () => {
+    if (drainingRef.current) return
+    if (!navigator.onLine) return // chancenlos — würde nur attempts hochzählen
     const q = loadQueue()
     if (q.length === 0) return
+    drainingRef.current = true
     setDraining(true)
     const remaining: QueuedDraft[] = []
-    for (const item of q) {
-      try {
-        await createProjectDraft(item.payload)
-      } catch {
-        remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+    try {
+      for (const item of q) {
+        try {
+          await createProjectDraft(item.payload)
+        } catch {
+          remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+        }
       }
-    }
-    saveQueue(remaining)
-    setQueueSize(remaining.length)
-    setQueueStuck(remaining.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
-    setDraining(false)
-    if (remaining.length === 0) {
-      setResult({ text: 'Offline-Entwürfe wurden gesendet.', isError: false })
+    } finally {
+      // Während des Drains kann handleSubmit neue Entwürfe angehängt haben
+      // (reines Append, kein Dedup) — die dürfen nicht überschrieben werden.
+      const merged = [...remaining, ...loadQueue().slice(q.length)]
+      saveQueue(merged)
+      setQueueSize(merged.length)
+      setQueueStuck(merged.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
+      setDraining(false)
+      drainingRef.current = false
+      if (merged.length === 0) {
+        setResult({ text: 'Offline-Entwürfe wurden gesendet.', isError: false })
+      }
     }
   }, [])
 
   useEffect(() => {
-    if (navigator.onLine) { drainQueue() }
-    const onOnline = () => { drainQueue() }
+    if (navigator.onLine) { void drainQueue() }
+    const onOnline = () => { void drainQueue() }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
   }, [drainQueue])
@@ -143,7 +158,10 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
       resetForm()
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      if (isOfflineError(err)) {
+      // isNetworkError statt isOfflineError: "verbunden, aber kein Durchkommen"
+      // (Funkloch, Timeout) meldet navigator.onLine === true — auf der Baustelle
+      // der Normalfall. Dauerfehler (CORS/Origin) fängt MAX_DRAIN_ATTEMPTS ab.
+      if (isNetworkError(err)) {
         const q = loadQueue()
         q.push({ payload, queued_at: new Date().toISOString() })
         saveQueue(q)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
-import { ApiError, isOfflineError } from '../api/client'
+import { ApiError, isNetworkError, isOfflineError } from '../api/client'
 import { BerichtType } from './BerichtScreen'
 
 const OFFLINE_QUEUE_KEY = 'zeit_offline_queue'
@@ -119,29 +119,48 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     loadQueue().some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS),
   )
 
+  // Re-Entrancy-Schutz: flatterndes Netz (mehrere online-Events kurz
+  // hintereinander) darf keine zwei Drains parallel starten — sonst wird
+  // jeder Stempel doppelt gesendet.
+  const drainingRef = useRef(false)
+
   const drainQueue = useCallback(async () => {
+    if (drainingRef.current) return
+    if (!navigator.onLine) return // chancenlos — würde nur attempts hochzählen
     const q = loadQueue()
     if (q.length === 0) return
+    drainingRef.current = true
     setDraining(true)
     const remaining: QueuedAction[] = []
-    for (const item of q) {
-      try {
-        await zeitAction(item.action, { recorded_at: item.recorded_at })
-      } catch {
-        remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+    try {
+      for (const item of q) {
+        try {
+          await zeitAction(item.action, { recorded_at: item.recorded_at })
+        } catch {
+          remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+        }
       }
-    }
-    saveQueue(remaining)
-    setQueueSize(remaining.length)
-    setQueueStuck(remaining.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
-    setDraining(false)
-    if (remaining.length === 0) {
-      setResult({ text: 'Offline-Aktionen wurden erfolgreich synchronisiert.', isError: false })
+    } finally {
+      // Während des Drains kann sendAction neue Stempel angehängt haben —
+      // die dürfen beim Zurückschreiben nicht überschrieben werden.
+      const merged = [...remaining, ...loadQueue().slice(q.length)]
+      saveQueue(merged)
+      setQueueSize(merged.length)
+      setQueueStuck(merged.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
+      setDraining(false)
+      drainingRef.current = false
+      if (merged.length === 0) {
+        setResult({ text: 'Offline-Aktionen wurden erfolgreich synchronisiert.', isError: false })
+      }
     }
   }, [])
 
   useEffect(() => {
-    const onOnline = () => { drainQueue() }
+    // Drain-on-Mount: das online-Event feuert nur beim Offline→Online-Wechsel
+    // bei offener App. Wer offline stempelt, die App schliesst und später
+    // online wieder öffnet, bekäme es nie — die Stempel blieben liegen.
+    if (navigator.onLine) { void drainQueue() }
+    const onOnline = () => { void drainQueue() }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
   }, [drainQueue])
@@ -217,7 +236,12 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
         onLoggedOut()
         return
       }
-      if (isOfflineError(err)) {
+      // Bewusst isNetworkError statt isOfflineError: "verbunden, aber kein
+      // Durchkommen" (Funkloch, Timeout) meldet navigator.onLine === true und
+      // ist auf der Baustelle der Normalfall — ein verlorener Stempel wäre
+      // verlorener Lohn. Den Dauerfehler-Fall (CORS/Origin, ebenfalls status 0)
+      // fängt der MAX_DRAIN_ATTEMPTS-Deckel der Queue ab.
+      if (isNetworkError(err)) {
         const q = loadQueue()
         q.push({ action, recorded_at })
         saveQueue(q)

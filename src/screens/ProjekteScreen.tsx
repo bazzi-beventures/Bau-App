@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch, ApiError, apiFormFetch, apiUrl, isOfflineError } from '../api/client'
+import { apiFetch, ApiError, apiFormFetch, apiUrl, isNetworkError } from '../api/client'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
@@ -32,6 +32,11 @@ function enqueueTaskToggle(item: QueuedTaskToggle) {
   q.push(item)
   saveTaskQueue(q)
 }
+
+// Identität eines Queue-Eintrags. task_id allein reicht nicht: wird eine
+// Aufgabe während des Drains neu getoggelt, ersetzt enqueueTaskToggle den alten
+// Eintrag durch einen mit neuem queued_at — beide unterscheiden sich nur darüber.
+const taskKey = (it: QueuedTaskToggle) => `${it.task_id}|${it.queued_at}`
 
 interface Kontakt {
   name: string
@@ -214,20 +219,45 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     }).finally(() => setLoadingDetail(false))
   }, [selected?.id])
 
+  // Re-Entrancy-Schutz: flatterndes Netz darf keine zwei Drains parallel
+  // starten. Der Server-Call ist zwar idempotent (Doppel-Toggle schadet nicht),
+  // aber der Guard spart überflüssige Requests und hält die Reconcile-Logik sauber.
+  const drainingRef = useRef(false)
+
   // Offline gepufferte Abhak-Aktionen synchronisieren, sobald wieder online.
   const drainTaskQueue = useCallback(async () => {
+    if (drainingRef.current) return
+    if (!navigator.onLine) return
     const q = loadTaskQueue()
     if (q.length === 0) return
+    drainingRef.current = true
     const remaining: QueuedTaskToggle[] = []
-    for (const item of q) {
-      try {
-        // queued_at = realer Abhak-Zeitpunkt von der Baustelle, nicht die Sync-Zeit.
-        await toggleProjectTaskDone(item.project_id, item.task_id, item.is_done, item.queued_at)
-      } catch {
-        remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+    const sent = new Set<string>()
+    try {
+      for (const item of q) {
+        try {
+          // queued_at = realer Abhak-Zeitpunkt von der Baustelle, nicht die Sync-Zeit.
+          await toggleProjectTaskDone(item.project_id, item.task_id, item.is_done, item.queued_at)
+          sent.add(taskKey(item))
+        } catch {
+          remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
+        }
       }
+    } finally {
+      // Reconcile gegen den aktuellen Stand statt blind zu überschreiben: ein
+      // während des Drains erfolgtes Re-Toggle (enqueueTaskToggle) darf nicht
+      // verlorengehen, und Fehlversuche müssen ihre attempts behalten.
+      const failedByTask = new Map(remaining.map(it => [it.task_id, it]))
+      const merged = loadTaskQueue().flatMap(it => {
+        if (sent.has(taskKey(it))) return []            // erfolgreich → raus
+        const failed = failedByTask.get(it.task_id)
+        // Gleicher Eintrag fehlgeschlagen → attempts-erhöhte Version; anderes
+        // queued_at heißt: während des Drains neu getoggelt → dieser gilt.
+        return [failed && failed.queued_at === it.queued_at ? failed : it]
+      })
+      saveTaskQueue(merged)
+      drainingRef.current = false
     }
-    saveTaskQueue(remaining)
   }, [])
 
   useEffect(() => {
@@ -251,7 +281,10 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     try {
       await toggleProjectTaskDone(selected.id, task.id, next, checkedAt)
     } catch (err) {
-      if (isOfflineError(err)) {
+      // isNetworkError statt isOfflineError: Funkloch (onLine === true) muss den
+      // Abhak-Vorgang queuen, sonst gilt er nur optimistisch und geht bei
+      // Reload verloren. Server-Toggle ist idempotent — Doppel-Sync unschädlich.
+      if (isNetworkError(err)) {
         enqueueTaskToggle({ project_id: selected.id, task_id: task.id, is_done: next, queued_at: checkedAt ?? new Date().toISOString() })
       } else {
         // Echter Fehler → optimistisches Update vollständig zurückrollen.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -255,9 +255,16 @@ function CustomerForm({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     getMe().then(me => setShowOwnerContact(isFeatureEnabled(me, 'eigentuemer_kontakt'))).catch(() => {})
+  }, [])
+
+  // Beim Klick auf eine Zeile weit unten in der Liste öffnet sich das
+  // Formular oberhalb des Sichtbereichs — deshalb beim Mounten hinscrollen.
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -298,7 +305,7 @@ function CustomerForm({
   }
 
   return (
-    <div className="admin-table-wrap" style={{ padding: 24, marginBottom: 20 }}>
+    <div ref={rootRef} className="admin-table-wrap" style={{ padding: 24, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <button
           type="button"
@@ -564,7 +571,7 @@ export default function CustomersScreen() {
               </thead>
               <tbody>
                 {rows.map(c => (
-                  <tr key={c.id}>
+                  <tr key={c.id} onClick={() => setEditing(c)}>
                     <td style={{ fontWeight: 500 }}>{c.name}</td>
                     <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
                     <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
@@ -572,18 +579,13 @@ export default function CustomersScreen() {
                     <td style={{ color: 'var(--muted)' }}>{c.phone_landline ?? '—'}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.object_address ?? '—'}</td>
-                    <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
-                        className="admin-btn admin-btn-sm admin-btn-secondary"
-                        onClick={() => setEditing(c)}
+                        className="admin-btn-icon danger"
+                        title="Kunde löschen"
+                        onClick={e => { e.stopPropagation(); setConfirmDelete(c) }}
                       >
-                        Bearbeiten
-                      </button>
-                      <button
-                        className="admin-btn admin-btn-sm admin-btn-danger"
-                        onClick={() => setConfirmDelete(c)}
-                      >
-                        Löschen
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
                       </button>
                     </td>
                   </tr>

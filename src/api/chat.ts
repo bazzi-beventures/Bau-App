@@ -65,6 +65,9 @@ export async function zeitAction(action: ZeitAction, opts: ZeitActionOptions = {
   return apiFetch(`/pwa/zeit/${action}`, {
     method: 'POST',
     body: JSON.stringify(opts),
+    // Stempel haben eine Offline-Queue: lieber nach 15s abbrechen und queuen,
+    // als im Funkloch minutenlang im Spinner zu hängen.
+    timeoutMs: 15_000,
   }) as Promise<ChatResponse>
 }
 

@@ -130,6 +130,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(material?.image_url ?? null)
   const [removeImage, setRemoveImage] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)  // Bild-Vollansicht per Klick
 
   function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null
@@ -228,6 +229,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
   }
 
   return (
+    <>
     <div className="admin-modal-overlay" onClick={onClose}>
       <div className="admin-modal" onClick={e => e.stopPropagation()}>
         <div className="admin-modal-header">
@@ -313,7 +315,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
             <label className="admin-form-label">Bild</label>
             {imagePreview ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img src={imagePreview} alt={name} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                <img src={imagePreview} alt={name} title="Zum Vergrössern klicken" onClick={() => setLightboxOpen(true)} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer' }}>
                     Ändern
@@ -339,6 +341,15 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
         </div>
       </div>
     </div>
+    {lightboxOpen && imagePreview && (
+      <div
+        onClick={() => setLightboxOpen(false)}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: 24 }}
+      >
+        <img src={imagePreview} alt={name} style={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain', borderRadius: 8 }} />
+      </div>
+    )}
+    </>
   )
 }
 

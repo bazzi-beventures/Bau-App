@@ -28,5 +28,8 @@ export async function toggleProjectTaskDone(
   await apiFetch(`/pwa/projects/${projectId}/tasks/${taskId}/done`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+    // Abhaken hat eine Offline-Queue: im Funkloch nach 15s abbrechen und
+    // queuen statt hängen. Server-Aktion ist idempotent, Retry ist harmlos.
+    timeoutMs: 15_000,
   })
 }

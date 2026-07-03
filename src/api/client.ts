@@ -32,6 +32,14 @@ export const isOfflineError = (e: unknown): boolean =>
   typeof navigator !== 'undefined' &&
   navigator.onLine === false
 
+// status 0 unabhängig vom onLine-Flag — fängt auch "verbunden, aber kein
+// Durchkommen" (Funkloch mit Empfangsbalken, Timeout). Kann aber genauso ein
+// CORS-/Cert-/Origin-Problem sein (siehe oben). Deshalb NUR in Flows verwenden,
+// die in eine Offline-Queue mit Versuchs-Deckel (MAX_DRAIN_ATTEMPTS) schreiben —
+// ohne Deckel droht wieder die Endlos-Queue vom Bevenetures-Domain-Wechsel.
+export const isNetworkError = (e: unknown): boolean =>
+  e instanceof ApiError && e.status === 0
+
 let sessionExpiredHandled = false
 
 // Wird von App.tsx aufgerufen sobald der User sich wieder einloggt,
@@ -58,14 +66,25 @@ async function parseErrorDetail(res: Response): Promise<string> {
   return detail
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+export interface ApiFetchOptions extends RequestInit {
+  // Bricht den Request nach dieser Zeit ab (wird zu ApiError status 0). Für
+  // Aktionen mit Offline-Queue: im Funkloch hängt fetch sonst minutenlang,
+  // bevor die Aktion überhaupt gequeued werden kann.
+  timeoutMs?: number
+}
+
+export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<unknown> {
+  const { timeoutMs, ...init } = options
+  const controller = timeoutMs !== undefined ? new AbortController() : null
+  const timer = controller !== null ? setTimeout(() => controller.abort(), timeoutMs) : null
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
-      ...options,
+      ...init,
+      ...(controller !== null ? { signal: controller.signal } : {}),
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(options.headers ?? {}),
+        ...(init.headers ?? {}),
       },
     })
 
@@ -81,6 +100,8 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   } catch (e) {
     if (e instanceof ApiError) throw e
     throw new ApiError(0, 'Keine Internetverbindung')
+  } finally {
+    if (timer !== null) clearTimeout(timer)
   }
 }
 

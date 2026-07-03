@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   ApiError,
+  isNetworkError,
   isOfflineError,
   parseDispositionFilename,
   apiFetch,
@@ -53,6 +54,23 @@ describe('isOfflineError', () => {
     setOnline(false)
     expect(isOfflineError(new Error('irgendwas'))).toBe(false)
     expect(isOfflineError(null)).toBe(false)
+  })
+})
+
+describe('isNetworkError', () => {
+  afterEach(() => setOnline(true))
+
+  it('ist true bei status 0 — unabhängig vom onLine-Flag (Funkloch-Fall)', () => {
+    setOnline(true)
+    expect(isNetworkError(new ApiError(0, 'Keine Internetverbindung'))).toBe(true)
+    setOnline(false)
+    expect(isNetworkError(new ApiError(0, 'Keine Internetverbindung'))).toBe(true)
+  })
+
+  it('ist false bei echten HTTP-Fehlern und Nicht-ApiError-Werten', () => {
+    expect(isNetworkError(new ApiError(500, 'serverfehler'))).toBe(false)
+    expect(isNetworkError(new Error('irgendwas'))).toBe(false)
+    expect(isNetworkError(null)).toBe(false)
   })
 })
 
@@ -130,5 +148,28 @@ describe('apiFetch — abgelaufene Session', () => {
   it('wirft ApiError(0) bei Netzwerkabbruch (fetch wirft)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     await expect(apiFetch('/pwa/projects')).rejects.toMatchObject({ status: 0 })
+  })
+})
+
+describe('apiFetch — timeoutMs', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('bricht einen hängenden Request nach timeoutMs mit ApiError(0) ab', async () => {
+    // fetch, das nie antwortet, aber auf das Abort-Signal reagiert —
+    // wie ein Request im Funkloch mit "online"-Flag.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError')))
+      })))
+    await expect(apiFetch('/pwa/zeit/clock_in', { method: 'POST', timeoutMs: 20 }))
+      .rejects.toMatchObject({ status: 0 })
+  })
+
+  it('lässt erfolgreiche Antworten innerhalb des Timeouts normal durch', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes({ ok: true, status: 200, body: { ok: true } })))
+    await expect(apiFetch('/pwa/projects', { timeoutMs: 5000 })).resolves.toEqual({ ok: true })
   })
 })
