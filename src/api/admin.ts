@@ -559,3 +559,62 @@ export async function reorderFrequentMaterials(orderedIds: string[]): Promise<{ 
     body: JSON.stringify({ ordered_ids: orderedIds }),
   }) as Promise<{ status: string }>
 }
+
+// ─── Materialdatenbereinigung (superadmin-only) ─────────────────────
+// Setzt Artikel auf Aktiv ↔ Löschvormerkung (is_active). NIE Hard-Delete —
+// nur Soft-Flag, jederzeit reversibel.
+
+export type MaterialSzenario =
+  | 'RECENTLY_USED' | 'QUOTED_AND_BILLED' | 'STALE_USED' | 'RAPPORT_MATERIAL'
+  | 'USED_PENDING' | 'QUOTE_ONLY_OLD' | 'QUOTE_ONLY_NEW' | 'NEVER_USED_OLD' | 'NEVER_USED_NEW'
+
+export interface MaterialCleanupRow {
+  art_nr: string
+  name: string
+  category: string | null
+  supplier_id: string | null
+  is_active: boolean
+  created_at: string | null
+  szenario: MaterialSzenario
+  in_quote: boolean
+  in_invoice: boolean
+  last_usage_date: string | null
+  age_days: number | null
+  dq_no_supplier: boolean
+  dq_no_price: boolean
+}
+
+export interface MaterialCleanupScan {
+  counts: Partial<Record<MaterialSzenario, number>>
+  total: number
+  rows: MaterialCleanupRow[]
+  blocked: MaterialSzenario[]
+  truncated: boolean
+  max_bulk: number
+}
+
+export interface BulkMaterialStatusResult {
+  updated: number
+  skipped_blocked: number
+}
+
+export async function scanMaterialCleanup(
+  p: { category?: string; supplier_id?: string; status?: string; szenario?: string } = {},
+): Promise<MaterialCleanupScan> {
+  const params = new URLSearchParams()
+  if (p.category) params.set('category', p.category)
+  if (p.supplier_id) params.set('supplier_id', p.supplier_id)
+  if (p.status) params.set('status', p.status)
+  if (p.szenario) params.set('szenario', p.szenario)
+  const qs = params.toString()
+  return apiFetch(`/pwa/admin/material-cleanup/scan${qs ? `?${qs}` : ''}`) as Promise<MaterialCleanupScan>
+}
+
+export async function bulkSetMaterialStatus(
+  artNrs: string[], isActive: boolean,
+): Promise<BulkMaterialStatusResult> {
+  return apiFetch('/pwa/admin/material-cleanup/bulk-status', {
+    method: 'POST',
+    body: JSON.stringify({ art_nrs: artNrs, is_active: isActive }),
+  }) as Promise<BulkMaterialStatusResult>
+}

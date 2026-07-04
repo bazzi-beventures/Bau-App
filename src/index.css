@@ -764,6 +764,136 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .ersatzteil-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
 .ersatzteil-artnr { color: var(--muted); font-variant-numeric: tabular-nums; }
 .ersatzteil-unit { font-size: 12px; color: var(--muted); }
+.ersatzteil-foto-btn { align-self: stretch; }
+
+/* Foto-Material-Picker (Popup, Rapport-Abschluss) — durch alle Artikel mit Bild
+   scrollen, mehrfach mit Menge wählen. Über Portal an document.body gerendert. */
+.photo-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.photo-picker {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 480px;   /* an die Phone-Breite der App (max-width: 480px) angelehnt */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.photo-picker-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.photo-picker-title { font-weight: 700; font-size: 16px; }
+.photo-picker-close {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.photo-picker-search {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: inherit;
+  font-size: 14px;
+  font-family: var(--font);
+}
+.photo-picker-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+.photo-picker-empty { color: var(--muted); font-size: 14px; text-align: center; padding: 32px 0; }
+.photo-picker-grid {
+  display: grid;
+  /* 120px min ⇒ 2 Spalten auch auf schmalen Handys (~320px), 3 auf grossen. */
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.photo-tile {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.photo-tile-zoom {
+  position: absolute; top: 6px; left: 6px;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: none; cursor: zoom-in;
+  background: rgba(0,0,0,0.55); color: #fff;
+  font-size: 15px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.photo-tile-zoom:active { opacity: 0.75; }
+.photo-tile.is-selected { border-color: var(--accent, #3b82f6); background: rgba(59,130,246,0.08); }
+.photo-tile-pick {
+  position: relative;
+  background: transparent; border: none; color: inherit; cursor: pointer;
+  padding: 0; text-align: left;
+  display: flex; flex-direction: column;
+}
+.photo-tile-img {
+  width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+  background: var(--surface2);
+}
+.photo-tile-noimg {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px;
+}
+.photo-tile-check {
+  position: absolute; top: 6px; right: 6px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent, #3b82f6); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+}
+.photo-tile-name {
+  font-size: 13px; font-weight: 600; line-height: 1.25;
+  padding: 6px 8px 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.photo-tile-meta { font-size: 11px; color: var(--muted); padding: 2px 8px 8px; }
+.photo-tile-artnr { font-variant-numeric: tabular-nums; }
+.photo-tile-stepper { justify-content: center; gap: 8px; padding: 0 8px 8px; }
+.photo-tile-stepper button { width: 32px; height: 32px; font-size: 16px; }
+.photo-picker-actions {
+  display: flex; gap: 8px; padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.photo-picker-actions .confirm-btn { flex: 1; }
+
+/* Lightbox über dem Picker: Bild in Vollansicht, Klick schliesst. */
+.photo-picker-lightbox {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(0,0,0,0.9);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; cursor: zoom-out;
+}
+.photo-picker-lightbox img {
+  max-width: 96vw; max-height: 96vh; object-fit: contain; border-radius: 8px;
+}
+
+/* Handy: Picker als Vollbild-Sheet (mehr Platz, Footer bleibt unten fixiert) —
+   passt zu den 100dvh-Screens der App. safe-area unten respektieren. */
+@media (max-width: 480px) {
+  .photo-picker-overlay { padding: 0; }
+  .photo-picker {
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: none;
+    border-radius: 0;
+  }
+  .photo-picker-actions { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+}
 .signature-pad-title {
   font-size: 15px;
   font-weight: 700;

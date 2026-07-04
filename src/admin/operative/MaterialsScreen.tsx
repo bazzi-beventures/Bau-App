@@ -132,13 +132,30 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
   const [removeImage, setRemoveImage] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)  // Bild-Vollansicht per Klick
 
-  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null
-    if (!f) return
+  // Ein Bild übernehmen — egal ob per Datei-Auswahl oder aus der Zwischenablage.
+  const acceptImageFile = useCallback((f: File | null) => {
+    if (!f || !f.type.startsWith('image/')) return
     setImageFile(f)
     setRemoveImage(false)
     setImagePreview(URL.createObjectURL(f))
+  }, [])
+
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    acceptImageFile(e.target.files?.[0] ?? null)
   }
+
+  // Bild per Strg+V aus der Zwischenablage einfügen (z.B. Screenshot oder kopiertes
+  // Bild), solange das Modal offen ist. Ergänzt den Datei-Upload, ersetzt ihn nicht.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'))
+      if (!item) return
+      const f = item.getAsFile()
+      if (f) { e.preventDefault(); acceptImageFile(f) }
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [acceptImageFile])
 
   function onRemoveImage() {
     setImageFile(null)
@@ -330,7 +347,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
                 <input type="file" accept="image/*" onChange={onPickImage} style={{ display: 'none' }} />
               </label>
             )}
-            <div className="admin-form-hint">JPEG/PNG/WebP — wird automatisch verkleinert (max. ~1024 px).</div>
+            <div className="admin-form-hint">JPEG/PNG/WebP — wird automatisch verkleinert (max. ~1024 px). Bild aus der Zwischenablage mit Strg+V einfügen.</div>
           </div>
         </form>
         <div className="admin-modal-footer">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fetchFrequentMaterials, FrequentMaterialOption } from '../api/chat'
+import { fetchFrequentMaterials, fetchMaterialGalleryCount, FrequentMaterialOption } from '../api/chat'
+import MaterialPhotoPicker from './MaterialPhotoPicker'
 
 export interface ErsatzteilSelection {
   art_nr: string
@@ -21,19 +22,44 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
   const [items, setItems] = useState<FrequentMaterialOption[]>([])
   const [qty, setQty] = useState<Record<string, number>>({})  // art_nr -> Menge (0 = nicht gewählt)
   const [loading, setLoading] = useState(true)
+  const [galleryCount, setGalleryCount] = useState(0)  // Anzahl Artikel mit Foto (>0 ⇒ Foto-Button)
+  const [showPicker, setShowPicker] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    fetchFrequentMaterials()
-      .then(list => {
+    // Kuratierte Liste UND Foto-Anzahl parallel laden. Der Schritt erscheint, sobald
+    // eines von beidem etwas hat; nur wenn beide leer sind, wird er übersprungen.
+    Promise.all([
+      fetchFrequentMaterials().catch(() => [] as FrequentMaterialOption[]),
+      fetchMaterialGalleryCount().catch(() => 0),
+    ])
+      .then(([list, count]) => {
         if (cancelled) return
-        if (!list.length) { onSubmit([]); return }   // nichts kuratiert → Schritt überspringen
+        if (!list.length && count === 0) { onSubmit([]); return }  // nichts verfügbar → überspringen
         setItems(list)
+        setGalleryCount(count)
       })
-      .catch(() => { if (!cancelled) onSubmit([]) })  // Fehler darf den Flow nicht blockieren
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  // Auswahl aus dem Foto-Popup übernehmen: neue Artikel (nicht in der kuratierten Liste)
+  // als Zeilen ergänzen, damit sie sichtbar/anpassbar sind; Menge setzen (überschreiben).
+  function applyPicked(picked: ErsatzteilSelection[]) {
+    setItems(prev => {
+      const known = new Set(prev.map(m => m.art_nr))
+      const additions: FrequentMaterialOption[] = picked
+        .filter(p => !known.has(p.art_nr))
+        .map(p => ({ id: p.art_nr, art_nr: p.art_nr, name: p.name, unit: p.unit, calc_vk: 0 }))
+      return additions.length ? [...prev, ...additions] : prev
+    })
+    setQty(prev => {
+      const next = { ...prev }
+      for (const p of picked) next[p.art_nr] = p.amount
+      return next
+    })
+    setShowPicker(false)
+  }
 
   function toggle(artNr: string) {
     setQty(prev => {
@@ -55,8 +81,9 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
     onSubmit(selected)
   }
 
-  // Während des Ladens und bei leerer Liste (onSubmit wurde dann schon gerufen) nichts zeigen.
-  if (loading || items.length === 0) return null
+  // Während des Ladens und wenn weder kuratierte Liste noch Foto-Artikel da sind
+  // (onSubmit wurde dann schon gerufen) nichts zeigen.
+  if (loading || (items.length === 0 && galleryCount === 0)) return null
 
   const selectedCount = Object.values(qty).filter(n => n > 0).length
 
@@ -66,6 +93,20 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
       <div className="kleinmaterial-sub">
         Wähle die verbauten Ersatzteile und gib die Menge an.
       </div>
+
+      {galleryCount > 0 && (
+        <button
+          type="button"
+          className="confirm-btn confirm-btn-no ersatzteil-foto-btn"
+          onClick={() => setShowPicker(true)}
+        >
+          📷 Nach Foto auswählen
+        </button>
+      )}
+
+      {showPicker && (
+        <MaterialPhotoPicker onCancel={() => setShowPicker(false)} onApply={applyPicked} />
+      )}
 
       <div className="ersatzteil-list">
         {items.map(m => {

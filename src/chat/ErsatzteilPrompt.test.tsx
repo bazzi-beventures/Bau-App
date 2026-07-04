@@ -2,13 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ErsatzteilPrompt from './ErsatzteilPrompt'
-import { fetchFrequentMaterials } from '../api/chat'
+import { fetchFrequentMaterials, fetchMaterialGalleryCount, fetchMaterialGallery } from '../api/chat'
 
 vi.mock('../api/chat', () => ({
   fetchFrequentMaterials: vi.fn(),
+  fetchMaterialGalleryCount: vi.fn(),
+  fetchMaterialGallery: vi.fn(),
 }))
 
 const mockFetch = vi.mocked(fetchFrequentMaterials)
+const mockCount = vi.mocked(fetchMaterialGalleryCount)
+const mockGallery = vi.mocked(fetchMaterialGallery)
 
 const LIST = [
   { id: 'f1', art_nr: 'A1', name: 'Motor', unit: 'Stk', calc_vk: 250 },
@@ -17,6 +21,8 @@ const LIST = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockCount.mockResolvedValue(0)   // Default: keine Foto-Artikel → wie bisher (kein Foto-Button)
+  mockGallery.mockResolvedValue([])
 })
 
 describe('ErsatzteilPrompt', () => {
@@ -78,5 +84,25 @@ describe('ErsatzteilPrompt', () => {
 
     const erfassen = await screen.findByRole('button', { name: /Erfassen/ })
     expect(erfassen).toBeDisabled()
+  })
+
+  it('zeigt keinen Foto-Button, wenn es keine Artikel mit Foto gibt', async () => {
+    mockFetch.mockResolvedValue(LIST)
+    mockCount.mockResolvedValue(0)
+    render(<ErsatzteilPrompt onSubmit={vi.fn()} />)
+
+    await screen.findByText('Ersatzteile verbraucht?')
+    expect(screen.queryByRole('button', { name: /Nach Foto/ })).not.toBeInTheDocument()
+  })
+
+  it('rendert den Schritt mit Foto-Button auch ohne kuratierte Liste, wenn Foto-Artikel existieren', async () => {
+    mockFetch.mockResolvedValue([])   // keine kuratierten Ersatzteile …
+    mockCount.mockResolvedValue(5)    // … aber 5 Artikel mit Foto
+    const onSubmit = vi.fn()
+    render(<ErsatzteilPrompt onSubmit={onSubmit} />)
+
+    expect(await screen.findByText('Ersatzteile verbraucht?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Nach Foto/ })).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()   // Schritt wird NICHT übersprungen
   })
 })

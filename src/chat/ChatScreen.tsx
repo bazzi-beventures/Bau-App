@@ -8,6 +8,7 @@ import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
 import KleinmaterialPrompt, { KleinmaterialSelection } from './KleinmaterialPrompt'
 import ErsatzteilPrompt, { ErsatzteilSelection } from './ErsatzteilPrompt'
+import { loadDraft, saveDraft } from './rapportDraft'
 
 interface Message {
   id: number
@@ -44,27 +45,69 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
-  // Vor dem Speichern gesammelte Zusatz-Positionen (werden beim Bestätigen mitgebucht).
-  const [kleinCollected, setKleinCollected] = useState(false)
-  const [ersatzCollected, setErsatzCollected] = useState(false)
-  const [collectedKlein, setCollectedKlein] = useState<KleinmaterialSelection | null>(null)
-  const [collectedErsatz, setCollectedErsatz] = useState<ErsatzteilSelection[]>([])
-  const [messages, setMessages] = useState<Message[]>([
-    {
+
+  function greetingMessage(): Message {
+    return {
       id: nextId(),
       role: 'bot',
       text: `Hallo ${displayName.split(' ')[0]}! Sage z.B. „Neuer Rapport", „Foto hochladen" oder stell eine Frage.`,
       timestamp: now(),
-    },
-  ])
+    }
+  }
+
+  // Zwischengespeicherten Rapport genau einmal (beim ersten Render) laden, damit
+  // ein angefangener Rapport nach Navigation/Reload nicht neu eingegeben werden
+  // muss. Den ID-Zähler über die wiederhergestellten IDs heben, sonst kollidieren
+  // neue Nachrichten-IDs mit den restaurierten.
+  const draftRef = useRef<ReturnType<typeof loadDraft> | undefined>(undefined)
+  if (draftRef.current === undefined) {
+    const d = loadDraft(user.authorized_user_id, Date.now())
+    if (d) for (const m of d.messages) { if (m.id > _idCounter) _idCounter = m.id }
+    draftRef.current = d
+  }
+  const draft = draftRef.current
+
+  // Vor dem Speichern gesammelte Zusatz-Positionen (werden beim Bestätigen mitgebucht).
+  const [kleinCollected, setKleinCollected] = useState(() => draft?.kleinCollected ?? false)
+  const [ersatzCollected, setErsatzCollected] = useState(() => draft?.ersatzCollected ?? false)
+  const [collectedKlein, setCollectedKlein] = useState<KleinmaterialSelection | null>(() => draft?.collectedKlein ?? null)
+  const [collectedErsatz, setCollectedErsatz] = useState<ErsatzteilSelection[]>(() => draft?.collectedErsatz ?? [])
+  const [messages, setMessages] = useState<Message[]>(() => draft?.messages ?? [greetingMessage()])
   const [loading, setLoading] = useState(false)
-  const [pendingConfirm, setPendingConfirm] = useState(false)
-  const [pendingDisambiguation, setPendingDisambiguation] = useState(false)
-  const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(false)
-  const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(null)
-  const [downloadReportId, setDownloadReportId] = useState<number | null>(null)
+  const [pendingConfirm, setPendingConfirm] = useState(() => draft?.pendingConfirm ?? false)
+  const [pendingDisambiguation, setPendingDisambiguation] = useState(() => draft?.pendingDisambiguation ?? false)
+  const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(() => draft?.pendingQuoteQuestion ?? false)
+  const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(() => draft?.pendingSignReportId ?? null)
+  const [downloadReportId, setDownloadReportId] = useState<number | null>(() => draft?.downloadReportId ?? null)
   const [pdfDownloading, setPdfDownloading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Rapport-Zwischenstand persistieren, sobald sich relevanter State ändert.
+  // Leere Zustände (nur Begrüssung) löschen den Draft automatisch (siehe saveDraft).
+  useEffect(() => {
+    saveDraft(user.authorized_user_id, {
+      messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
+      pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
+      pendingSignReportId, downloadReportId,
+    }, Date.now())
+  }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
+      collectedErsatz, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
+      pendingSignReportId, downloadReportId])
+
+  // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
+  // zurücksetzen — das löscht zugleich den Draft, weil der Zustand wieder leer ist.
+  function resetConversation() {
+    setMessages([greetingMessage()])
+    setKleinCollected(false)
+    setErsatzCollected(false)
+    setCollectedKlein(null)
+    setCollectedErsatz([])
+    setPendingConfirm(false)
+    setPendingDisambiguation(false)
+    setPendingQuoteQuestion(false)
+    setPendingSignReportId(null)
+    setDownloadReportId(null)
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -445,7 +488,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
             >
               {pdfDownloading ? 'PDF wird erstellt…' : '📄 Rapport als PDF'}
             </button>
-            <button className="confirm-btn confirm-btn-no" onClick={() => setDownloadReportId(null)}>
+            <button className="confirm-btn confirm-btn-no" onClick={resetConversation}>
               Schliessen
             </button>
           </div>

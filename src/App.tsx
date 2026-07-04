@@ -16,6 +16,7 @@ import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import HelpBubble from './shared/HelpBubble'
+import { consumeBack } from './shared/backButton'
 import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
 
@@ -171,6 +172,9 @@ export default function App() {
   useEffect(() => {
     const onPopState = () => {
       history.pushState(null, '', window.location.href) // re-add entry so next back press still works
+      // Erst offene Overlays (Material-Popup, Bild-Lightbox …) einen Schritt
+      // zurücknehmen; nur wenn keines offen ist, den Screen wechseln.
+      if (consumeBack()) return
       const s = screenRef.current
       if (s !== 'home' && s !== 'admin' && s !== 'pin' && s !== 'login' && s !== 'loading') {
         setScreen('home')

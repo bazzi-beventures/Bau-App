@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 10
+export const APP_DATA_VERSION = 11
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -25,6 +25,7 @@ function isKnownKey(k: string): boolean {
   if (k === 'projektEntwurf_offline_queue') return true
   if (k === 'hinweise_offline_queue') return true
   if (k.startsWith('quote-draft:')) return true  // lokaler Offert-Zwischenstand (pro Projekt)
+  if (k.startsWith('rapport-draft:')) return true  // lokaler Rapport-Zwischenstand (pro Mitarbeiter)
   if (k === 'admin-theme') return true
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true
@@ -161,7 +162,19 @@ const migration_9_to_10: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10]
+// v10 → v11: Neuer localStorage-Key-Prefix `rapport-draft:` für den lokalen
+// Rapport-Zwischenstand (pro Mitarbeiter). Rein additiv — der Key existiert nur,
+// wenn gerade ein Rapport in Arbeit ist, und wird per Staleness (12h) selbst
+// bereinigt. No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_10_to_11: Migration = {
+  from: 10,
+  to: 11,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

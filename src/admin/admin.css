@@ -24,7 +24,11 @@
 /* Layout */
 .admin-shell {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  /* minmax(0, 1fr): erlaubt der Inhaltsspalte, unter die Inhaltsbreite zu
+     schrumpfen. Ohne die 0-Untergrenze bläht eine breite Tabelle (z.B.
+     Kundenstamm) die Spalte über die Fensterbreite auf und overflow:hidden
+     schneidet sie rechts ab, statt dass .admin-table-wrap horizontal scrollt. */
+  grid-template-columns: 200px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
