@@ -30,6 +30,7 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   invoicing:        { label: 'Rechnungen',        desc: 'Rechnungen mit PDF-Generierung', category: 'operativ' },
   payment_matching: { label: 'Zahlungsabgleich',  desc: 'CAMT-Bankauszug einlesen und Zahlungseingänge automatisch mit Rechnungen abgleichen (benötigt Rechnungen)', category: 'operativ' },
   inventory:        { label: 'Lager',             desc: 'Bestände & Lagerbewegungen (Material-Katalog bleibt verfügbar)', category: 'operativ' },
+  aftersales:       { label: 'After Sales',       desc: 'Feedback- und saisonale Reparatur-/Service-Nachfassmails nach bezahlter Rechnung (benötigt Rechnungen)', category: 'operativ' },
   hr:               { label: 'HR',                desc: 'Absenzen, Ferien, HR-Berichte', category: 'hr' },
   arg_compliance:   { label: 'ArG-Compliance',    desc: 'Arbeitsgesetz-Verstoss-Erkennung (benötigt HR + Zeiterfassung)', category: 'hr' },
   kpis:             { label: 'Kennzahlen',        desc: 'KPI-Dashboard', category: 'analyse' },
@@ -1171,6 +1172,10 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
             <div style={{ display: 'grid', gap: 12 }}>
               {entries.map(entry => {
                 const current = draft[entry.key] ?? {}
+                // Nicht jedes Feature hat einen Aktiv-Schalter (z. B. aftersales_review_days
+                // ist ein reiner Parameter). Nur wenn ein enabled-Feld existiert, dürfen die
+                // übrigen Felder dahinter gesperrt werden — sonst blieben sie dauerhaft grau.
+                const hasEnabledToggle = entry.schema.some(f => f.key === 'enabled')
                 const enabled = !!current.enabled
                 const dirty = isDirty(entry.key)
                 return (
@@ -1203,7 +1208,7 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
                           field={field}
                           value={current[field.key]}
                           onChange={v => setField(entry.key, field.key, v)}
-                          disabled={field.key !== 'enabled' && !enabled}
+                          disabled={hasEnabledToggle && field.key !== 'enabled' && !enabled}
                         />
                       ))}
                     </div>

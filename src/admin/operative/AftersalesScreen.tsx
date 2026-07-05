@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
   listAftersales, updateAftersales, regenerateAftersalesBody,
-  sendAftersalesNow, cancelAftersales,
+  sendAftersalesNow, cancelAftersales, reactivateAftersales,
   AftersalesTask, AftersalesStatus, AftersalesSnapshot,
 } from '../../api/admin'
+import { apiUrl } from '../../api/client'
 import { fmtDate } from '../utils/format'
 
 type FilterKey = AftersalesStatus | 'all'
@@ -13,6 +14,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'scheduled', label: 'Geplant' },
   { key: 'sent', label: 'Gesendet' },
   { key: 'answered', label: 'Beantwortet' },
+  { key: 'cancelled', label: 'Deaktiviert' },
   { key: 'all', label: 'Alle' },
 ]
 
@@ -26,7 +28,7 @@ const STATUS_LABEL: Record<AftersalesStatus, string> = {
   review: 'Zu prüfen',
   sent: 'Gesendet',
   answered: 'Beantwortet',
-  cancelled: 'Abgebrochen',
+  cancelled: 'Deaktiviert',
   failed: 'Fehler',
 }
 
@@ -37,6 +39,12 @@ const STATUS_BADGE: Record<AftersalesStatus, string> = {
   answered: 'admin-badge-success',
   cancelled: 'admin-badge-draft',
   failed: 'admin-badge-danger',
+}
+
+// Geplante und zu prüfende Aufgaben lassen sich noch bearbeiten (Datum/Text/senden/
+// abbrechen); gesendete/beantwortete/abgebrochene sind nur noch Vorschau.
+function isEditable(status: AftersalesStatus): boolean {
+  return status === 'scheduled' || status === 'review'
 }
 
 function fmtChf(v: number | string | null | undefined): string {
@@ -85,7 +93,7 @@ export default function AftersalesScreen() {
   const [draft, setDraft] = useState<{ send_date: string; mail_subject: string; mail_body: string }>(
     { send_date: '', mail_subject: '', mail_body: '' },
   )
-  const [busy, setBusy] = useState<'save' | 'send' | 'regen' | 'cancel' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'send' | 'regen' | 'cancel' | 'reactivate' | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
@@ -115,7 +123,7 @@ export default function AftersalesScreen() {
     })
   }
 
-  const editable = selected != null && (selected.status === 'review' || selected.status === 'scheduled')
+  const editable = selected != null && isEditable(selected.status)
 
   async function handleSave() {
     if (!selected) return
@@ -178,11 +186,26 @@ export default function AftersalesScreen() {
     setBusy('cancel')
     try {
       await cancelAftersales(selected.id)
-      showToast('Abgebrochen.')
+      showToast('Deaktiviert. Du kannst sie unter «Deaktiviert» wieder reaktivieren.')
       setSelected(null)
       await load()
     } catch {
-      showToast('Abbrechen fehlgeschlagen.', 'error')
+      showToast('Deaktivieren fehlgeschlagen.', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleReactivate() {
+    if (!selected) return
+    setBusy('reactivate')
+    try {
+      await reactivateAftersales(selected.id)
+      showToast('Reaktiviert.')
+      setSelected(null)
+      await load()
+    } catch {
+      showToast('Reaktivieren fehlgeschlagen.', 'error')
     } finally {
       setBusy(null)
     }
@@ -194,7 +217,7 @@ export default function AftersalesScreen() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <div className="admin-page-title">Aftersales</div>
+          <div className="admin-page-title">After Sales</div>
           <div className="admin-page-subtitle">
             {tasks.length} Einträge{filter === 'review' && reviewCount > 0 ? ` · ${reviewCount} zu prüfen` : ''}
           </div>
@@ -230,7 +253,7 @@ export default function AftersalesScreen() {
             </thead>
             <tbody>
               {tasks.length === 0 ? (
-                <tr><td colSpan={6} className="admin-table-empty">Keine Aftersales-Einträge.</td></tr>
+                <tr><td colSpan={6} className="admin-table-empty">Keine After-Sales-Einträge.</td></tr>
               ) : tasks.map(t => (
                 <tr key={t.id}>
                   <td><strong>{t.customer_name || '—'}</strong></td>
@@ -243,8 +266,11 @@ export default function AftersalesScreen() {
                     </span>
                   </td>
                   <td>
-                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openDetail(t)}>
-                      {editable && selected?.id === t.id ? 'Offen' : 'Vorschau'}
+                    <button
+                      className={`admin-btn admin-btn-sm ${isEditable(t.status) ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                      onClick={() => openDetail(t)}
+                    >
+                      {isEditable(t.status) ? 'Bearbeiten' : 'Vorschau'}
                     </button>
                   </td>
                 </tr>
@@ -328,7 +354,19 @@ export default function AftersalesScreen() {
               )}
 
               <div>
-                <label className="admin-form-label">Rechnungspositionen (mitgesendet)</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                  <label className="admin-form-label" style={{ margin: 0 }}>Rechnungspositionen (mitgesendet)</label>
+                  {selected.invoice_id != null && (
+                    <a
+                      href={apiUrl(`/pwa/admin/invoices/${selected.invoice_id}/pdf`)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                    >
+                      Rechnung öffnen (PDF)
+                    </a>
+                  )}
+                </div>
                 <PositionsTable snapshot={selected.positions_snapshot} />
               </div>
             </div>
@@ -336,7 +374,7 @@ export default function AftersalesScreen() {
             {editable && (
               <div className="admin-confirm-actions" style={{ padding: '12px 20px', borderTop: '1px solid var(--border, #e2e8f0)', flexWrap: 'wrap' }}>
                 <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={handleCancel} disabled={busy != null}>
-                  {busy === 'cancel' ? '…' : 'Abbrechen (nicht senden)'}
+                  {busy === 'cancel' ? '…' : 'Deaktivieren'}
                 </button>
                 <div style={{ flex: 1 }} />
                 <button className="admin-btn admin-btn-secondary" onClick={handleSave} disabled={busy != null}>
@@ -349,6 +387,17 @@ export default function AftersalesScreen() {
                   title={!selected.customer_email ? 'Keine Empfänger-E-Mail hinterlegt' : undefined}
                 >
                   {busy === 'send' ? 'Sende…' : 'Sofort senden'}
+                </button>
+              </div>
+            )}
+
+            {selected.status === 'cancelled' && (
+              <div className="admin-confirm-actions" style={{ padding: '12px 20px', borderTop: '1px solid var(--border, #e2e8f0)', alignItems: 'center' }}>
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--muted)' }}>
+                  Diese Nachricht ist deaktiviert und wird nicht versendet.
+                </div>
+                <button className="admin-btn admin-btn-primary" onClick={handleReactivate} disabled={busy != null}>
+                  {busy === 'reactivate' ? 'Reaktiviere…' : 'Reaktivieren'}
                 </button>
               </div>
             )}

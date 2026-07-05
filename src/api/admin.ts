@@ -134,6 +134,7 @@ export interface StaffMember {
 export interface StaffRole {
   name: string
   hourly_rate: number
+  sort_order?: number | null
 }
 
 export async function getAdminStaff(): Promise<StaffMember[]> {
@@ -148,6 +149,20 @@ export async function upsertStaffRole(name: string, hourly_rate: number): Promis
   return apiFetch('/pwa/admin/staff-roles', {
     method: 'PUT',
     body: JSON.stringify({ name, hourly_rate }),
+  }) as Promise<{ status: string; message: string }>
+}
+
+export async function deleteStaffRole(name: string): Promise<{ status: string; message: string }> {
+  return apiFetch(`/pwa/admin/staff-roles/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  }) as Promise<{ status: string; message: string }>
+}
+
+// Neue Reihenfolge (Rang) der Funktionen speichern — names in Wunschreihenfolge.
+export async function reorderStaffRoles(names: string[]): Promise<{ status: string; message: string }> {
+  return apiFetch('/pwa/admin/staff-roles/order', {
+    method: 'PUT',
+    body: JSON.stringify({ names }),
   }) as Promise<{ status: string; message: string }>
 }
 
@@ -639,11 +654,14 @@ export interface AftersalesPositionItem {
   unit?: string
   unit_price?: number | string
   total_price?: number | string
+  category?: string
 }
 
 export interface AftersalesSnapshot {
   invoice_number?: string
   total_amount?: number | string | null
+  execution_period?: { from?: string; to?: string } | null
+  monteur?: string
   items?: AftersalesPositionItem[]
 }
 
@@ -701,4 +719,8 @@ export async function sendAftersalesNow(id: number): Promise<void> {
 
 export async function cancelAftersales(id: number): Promise<void> {
   await apiFetch(`/pwa/admin/aftersales/${id}/cancel`, { method: 'POST' })
+}
+
+export async function reactivateAftersales(id: number): Promise<{ new_status: AftersalesStatus }> {
+  return apiFetch(`/pwa/admin/aftersales/${id}/reactivate`, { method: 'POST' }) as Promise<{ new_status: AftersalesStatus }>
 }

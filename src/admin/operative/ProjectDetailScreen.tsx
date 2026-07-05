@@ -1056,11 +1056,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div className="admin-form-group" style={{ margin: 0 }}>
                     <label className="admin-form-label">Start (Datum)</label>
-                    <input className="admin-form-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                    <input className="admin-form-input" type="date" value={startDate} onChange={e => {
+                      const v = e.target.value
+                      setStartDate(v)
+                      // Enddatum vorbelegen bzw. nachziehen: leer oder vor dem Start → gleicher Tag.
+                      setEndDate(prev => (v && (!prev || prev < v)) ? v : prev)
+                    }} />
                   </div>
                   <div className="admin-form-group" style={{ margin: 0 }}>
                     <label className="admin-form-label">Ende (Datum)</label>
-                    <input className="admin-form-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    <input className="admin-form-input" type="date" value={endDate} min={startDate || undefined} onChange={e => setEndDate(e.target.value)} />
                   </div>
                   <div className="admin-form-group" style={{ margin: 0 }}>
                     <label className="admin-form-label">Startzeit</label>

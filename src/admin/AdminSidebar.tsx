@@ -107,20 +107,20 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           <NavItem label="Zahlungsabgleich" target="payment-reconciliation" current={screen} onNav={onNav} icon={<IconCash />} />
         )}
         {has('aftersales') && (
-          <NavItem label="Aftersales" target="aftersales" current={screen} onNav={onNav} icon={<IconAftersales />} />
+          <NavItem label="After Sales" target="aftersales" current={screen} onNav={onNav} icon={<IconAftersales />} />
         )}
 
         <div className="admin-nav-group-label">Stammdaten</div>
         <NavItem label="Lieferanten" target="suppliers" current={screen} onNav={onNav} icon={<IconTag />} />
         <NavItem label="Material / Lager" target="materials" current={screen} onNav={onNav} icon={<IconBox />} />
         {isManagement && (
-          <NavItem label="Funktionen" target="staff-roles" current={screen} onNav={onNav} icon={<IconUsers />} />
+          <NavItem label="Personal" target="staff-roles" current={screen} onNav={onNav} icon={<IconUsers />} />
         )}
         {isManagement && (
           <NavItem label="Preisregeln" target="pricing-rules" current={screen} onNav={onNav} icon={<IconTag />} />
         )}
         {isManagement && has('quotes') && (
-          <NavItem label="Offert-Vorlagen" target="quote-templates" current={screen} onNav={onNav} icon={<IconReceipt />} />
+          <NavItem label="Vorlagen" target="quote-templates" current={screen} onNav={onNav} icon={<IconReceipt />} />
         )}
 
         {isManagement && has('kpis') && (

@@ -31,6 +31,18 @@ interface FormState {
   startTime: string
   endTime: string
   bemerkung: string
+  // Beim Aufziehen eines neuen Termins gesetzt: mind. ein Monteur ist Pflicht.
+  requireMonteur?: boolean
+}
+
+// Ein per Drag im Kalender aufgezogener, noch nicht zugeordneter Termin. Wird
+// beim Wählen eines Projekts oder Anlegen eines internen Einsatzes übernommen.
+interface PendingSlot {
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  monteurIds: string[]
 }
 
 function projectToForm(p: Project): FormState {
@@ -47,6 +59,14 @@ function projectToForm(p: Project): FormState {
     endTime: p.end_time?.slice(0, 5) ?? '',
     bemerkung: p.bemerkung ?? '',
   }
+}
+
+// 'YYYY-MM-DD' → z.B. "Di, 30.06." für die Termin-Vorschau im Panel.
+function fmtSlotDate(iso: string): string {
+  if (!iso) return ''
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('de-CH', {
+    weekday: 'short', day: '2-digit', month: '2-digit',
+  })
 }
 
 function emptyInternalForm(kind: ProjectKind): FormState {
@@ -80,6 +100,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null)
   const [visibleWeekIso, setVisibleWeekIso] = useState<string>('')
   const [visibleStaffIds, setVisibleStaffIds] = useState<string[] | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -126,7 +147,23 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   }
 
   function selectProject(p: Project) {
-    setForm(projectToForm(p))
+    const base = projectToForm(p)
+    // Aus einem aufgezogenen Termin: Zeiten überschreiben und den (in der
+    // Mitarbeiteransicht) vorausgewählten Monteur ergänzen; Monteur wird Pflicht.
+    if (pendingSlot) {
+      setForm({
+        ...base,
+        startDate: pendingSlot.startDate,
+        endDate: pendingSlot.endDate,
+        startTime: pendingSlot.startTime,
+        endTime: pendingSlot.endTime,
+        monteurIds: Array.from(new Set([...base.monteurIds, ...pendingSlot.monteurIds])),
+        requireMonteur: true,
+      })
+      setPendingSlot(null)
+    } else {
+      setForm(base)
+    }
     setError(null)
     setPickerSearch('')
     setPickerOpen(false)
@@ -141,8 +178,26 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   function closePanel() {
     setPanelOpen(false)
     setForm(null)
+    setPendingSlot(null)
     setError(null)
     setPickerOpen(false)
+  }
+
+  // Neuer Termin per Aufziehen im Wochenkalender: Panel im Auswahlmodus öffnen
+  // (Projekt-Picker + interner Einsatz), Zeiten gemerkt, Monteur ggf. vorbelegt.
+  function handleCreateSlot(dateISO: string, startTime: string, endTime: string, monteurId: string | null) {
+    setForm(null)
+    setPendingSlot({
+      startDate: dateISO,
+      endDate: dateISO,
+      startTime,
+      endTime,
+      monteurIds: monteurId ? [monteurId] : [],
+    })
+    setPickerSearch('')
+    setPickerOpen(false)
+    setPanelOpen(true)
+    setError(null)
   }
 
   function handleCreateNew() {
@@ -218,6 +273,9 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     if (!form.name.trim()) {
       setError('Titel ist erforderlich.'); return
     }
+    if (form.requireMonteur && form.monteurIds.length === 0) {
+      setError('Mindestens ein Mitarbeiter ist erforderlich.'); return
+    }
     setSaving(true)
     const isInternal = form.kind !== 'project'
     try {
@@ -254,7 +312,20 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   }
 
   function handleNewInternal(kind: ProjectKind) {
-    setForm(emptyInternalForm(kind))
+    const base = emptyInternalForm(kind)
+    // Aus einem aufgezogenen Termin: Zeiten + vorausgewählten Monteur übernehmen.
+    setForm(pendingSlot
+      ? {
+          ...base,
+          startDate: pendingSlot.startDate,
+          endDate: pendingSlot.endDate,
+          startTime: pendingSlot.startTime,
+          endTime: pendingSlot.endTime,
+          monteurIds: [...pendingSlot.monteurIds],
+          requireMonteur: true,
+        }
+      : base)
+    setPendingSlot(null)
     setPickerSearch('')
     setPickerOpen(false)
     setPanelOpen(true)
@@ -348,6 +419,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     }))
   }
 
+  const slotMonteurNames = pendingSlot
+    ? pendingSlot.monteurIds.map(id => staff.find(s => s.id === id)?.name).filter(Boolean).join(', ')
+    : ''
+
   return (
     <div className="admin-page admin-page-wide">
       <div className="admin-page-header">
@@ -400,6 +475,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             canton={canton}
             onSelect={selectProject}
             onReschedule={handleReschedule}
+            onCreateSlot={handleCreateSlot}
             onVisibleWeekChange={setVisibleWeekIso}
             onVisibleStaffChange={setVisibleStaffIds}
           />
@@ -409,7 +485,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         <aside className="project-schedule-panel">
           <div className="project-schedule-panel-header">
             <div className="project-schedule-panel-title">
-              {form ? 'Einsatz planen' : 'Projekt wählen'}
+              {pendingSlot ? 'Neuer Termin' : form ? 'Einsatz planen' : 'Projekt wählen'}
             </div>
             <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={closePanel}>
               Schließen
@@ -417,6 +493,20 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           </div>
 
           <div className="project-schedule-panel-body">
+            {/* Vorschau des aufgezogenen Termins (Zeiten + ggf. vorgewählter Monteur) */}
+            {pendingSlot && (
+              <div className="project-schedule-slot-banner">
+                <div className="project-schedule-slot-banner-time">
+                  {fmtSlotDate(pendingSlot.startDate)} · {pendingSlot.startTime}–{pendingSlot.endTime}
+                </div>
+                <div className="project-schedule-slot-banner-staff">
+                  {slotMonteurNames
+                    ? `Mitarbeiter: ${slotMonteurNames}`
+                    : 'Mitarbeiter erforderlich – nach der Auswahl festlegen.'}
+                </div>
+              </div>
+            )}
+
             {/* Projekt-Picker */}
             <div className="project-schedule-field" ref={pickerWrapRef} style={{ position: 'relative' }}>
               <span>Projekt</span>
@@ -469,6 +559,18 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             >
               + Neues Projekt anlegen
             </button>
+
+            {pendingSlot && (
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                onClick={() => handleNewInternal('sonstiges')}
+                style={{ width: '100%' }}
+                title="Internen Einsatz (Lagerarbeit, Teamsitzung, …) mit diesen Zeiten anlegen"
+              >
+                + Interner Einsatz
+              </button>
+            )}
 
             {form && (
               <>
@@ -548,7 +650,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
 
                 <div className="project-schedule-field">
                   <div className="project-schedule-field-head">
-                    <span>Monteure</span>
+                    <span>
+                      Monteure
+                      {form.requireMonteur && <span className="project-schedule-req"> *</span>}
+                    </span>
                     {monteurOptions.length > 0 && (
                       <button
                         type="button"
@@ -586,7 +691,13 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                       type="date"
                       className="admin-input"
                       value={form.startDate}
-                      onChange={e => setForm(f => f && ({ ...f, startDate: e.target.value }))}
+                      onChange={e => setForm(f => {
+                        if (!f) return f
+                        const v = e.target.value
+                        // Enddatum vorbelegen bzw. nachziehen: leer oder vor dem Start → gleicher Tag.
+                        const endDate = (v && (!f.endDate || f.endDate < v)) ? v : f.endDate
+                        return { ...f, startDate: v, endDate }
+                      })}
                     />
                   </label>
                   <label className="project-schedule-field">
@@ -595,6 +706,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                       type="date"
                       className="admin-input"
                       value={form.endDate}
+                      min={form.startDate || undefined}
                       onChange={e => setForm(f => f && ({ ...f, endDate: e.target.value }))}
                     />
                   </label>

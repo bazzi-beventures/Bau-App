@@ -1918,6 +1918,33 @@ button.admin-list-item {
   border-radius: 4px;
 }
 
+/* Vorschau des aufgezogenen Termins oben im Panel. */
+.project-schedule-slot-banner {
+  padding: 8px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-schedule-slot-banner-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.project-schedule-slot-banner-staff {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.project-schedule-req {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .project-schedule-divider {
   height: 1px;
   background: var(--border);
@@ -2285,6 +2312,38 @@ button.admin-list-item {
   font-weight: 600;
   border-radius: 3px;
   line-height: 16px;
+}
+
+/* Freie Rasterfläche lädt zum Aufziehen eines neuen Termins ein. */
+.project-cal-week-day-col.creatable {
+  cursor: cell;
+}
+
+/* Vorschaubox beim Aufziehen eines neuen Termins. */
+.project-cal-week-create-box {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid var(--primary);
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+
+.project-cal-week-create-time {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  padding: 0 4px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 @media (max-width: 1100px) {

@@ -1,12 +1,39 @@
 import { useEffect, useState } from 'react'
-import { StaffRole, getStaffRoles, upsertStaffRole } from '../../api/admin'
+import {
+  StaffRole, getStaffRoles, upsertStaffRole, deleteStaffRole, reorderStaffRoles,
+} from '../../api/admin'
+
+// "Personal"-Screen: Tab-Layout analog zum Material-Screen. Vorerst nur der Tab
+// "Stundensätze" (die früheren "Funktionen"). Weitere Tabs können hier andocken.
+type PersonalTab = 'rates'
 
 export default function StaffRolesScreen() {
+  const [tab, setTab] = useState<PersonalTab>('rates')
+
+  return (
+    <div className="admin-page">
+      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+        <button
+          className={`kpi-admin-tab${tab === 'rates' ? ' active' : ''}`}
+          onClick={() => setTab('rates')}
+        >
+          Stundensätze
+        </button>
+      </div>
+
+      {tab === 'rates' && <StaffRatesPanel />}
+    </div>
+  )
+}
+
+function StaffRatesPanel() {
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [loading, setLoading] = useState(true)
   // Pro Funktion der aktuell im Eingabefeld stehende Satz (als String, damit man frei tippen kann)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [savingName, setSavingName] = useState<string | null>(null)
+  const [deletingName, setDeletingName] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
 
@@ -79,11 +106,52 @@ export default function StaffRolesScreen() {
     }
   }
 
+  async function removeRole(name: string) {
+    if (!window.confirm(
+      `Funktion "${name}" wirklich löschen?\n\n` +
+      'Sie verschwindet aus der Auswahl in Offerten. Bestehende Mitarbeiter und ' +
+      'Offerten bleiben unverändert.'
+    )) return
+    setError('')
+    setDeletingName(name)
+    try {
+      await deleteStaffRole(name)
+      showToast(`Funktion "${name}" gelöscht`)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
+    } finally {
+      setDeletingName(null)
+    }
+  }
+
+  // Rang ändern: Zeile mit ihrer Nachbarin tauschen, sofort optimistisch anzeigen
+  // und die neue Reihenfolge persistieren. Bei Fehler serverseitigen Stand laden.
+  async function moveRole(index: number, dir: -1 | 1) {
+    const j = index + dir
+    if (j < 0 || j >= roles.length || savingOrder) return
+    const next = [...roles]
+    ;[next[index], next[j]] = [next[j], next[index]]
+    setRoles(next)
+    setError('')
+    setSavingOrder(true)
+    try {
+      await reorderStaffRoles(next.map(r => r.name))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reihenfolge konnte nicht gespeichert werden')
+      await load()
+    } finally {
+      setSavingOrder(false)
+    }
+  }
+
+  const busy = savingOrder || deletingName !== null
+
   return (
-    <div className="admin-page">
+    <>
       <div className="admin-page-header">
         <div>
-          <div className="admin-page-title">Funktionen</div>
+          <div className="admin-page-title">Personal</div>
           <div className="admin-page-subtitle">Stundensätze pro Funktion — werden in Offerten als Lohnpositionen verwendet</div>
         </div>
       </div>
@@ -97,18 +165,37 @@ export default function StaffRolesScreen() {
           <table className="admin-table">
             <thead>
               <tr>
+                <th style={{ width: 64 }}>Rang</th>
                 <th>Funktion</th>
                 <th style={{ width: 200 }}>Stundensatz (CHF/h)</th>
-                <th style={{ width: 120 }}></th>
+                <th style={{ width: 160 }}></th>
               </tr>
             </thead>
             <tbody>
               {roles.length === 0 ? (
-                <tr><td colSpan={3} className="admin-table-empty">Noch keine Funktionen vorhanden.</td></tr>
-              ) : roles.map(r => {
+                <tr><td colSpan={4} className="admin-table-empty">Noch keine Funktionen vorhanden.</td></tr>
+              ) : roles.map((r, i) => {
                 const changed = (drafts[r.name] ?? '') !== String(r.hourly_rate ?? '')
                 return (
                   <tr key={r.name}>
+                    <td>
+                      <div style={{ display: 'inline-flex', gap: 4 }}>
+                        <button
+                          className="admin-btn-icon"
+                          title="Nach oben"
+                          aria-label={`"${r.name}" nach oben`}
+                          onClick={() => moveRole(i, -1)}
+                          disabled={i === 0 || busy}
+                        >↑</button>
+                        <button
+                          className="admin-btn-icon"
+                          title="Nach unten"
+                          aria-label={`"${r.name}" nach unten`}
+                          onClick={() => moveRole(i, 1)}
+                          disabled={i === roles.length - 1 || busy}
+                        >↓</button>
+                      </div>
+                    </td>
                     <td><strong>{r.name}</strong></td>
                     <td>
                       <input
@@ -120,13 +207,22 @@ export default function StaffRolesScreen() {
                         inputMode="decimal"
                       />
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
                         className="admin-btn admin-btn-primary admin-btn-sm"
                         onClick={() => saveRole(r.name)}
                         disabled={!changed || savingName === r.name}
                       >
                         {savingName === r.name ? 'Speichern…' : 'Speichern'}
+                      </button>
+                      <button
+                        className="admin-btn admin-btn-danger admin-btn-sm"
+                        style={{ marginLeft: 6 }}
+                        onClick={() => removeRole(r.name)}
+                        disabled={deletingName === r.name || busy}
+                        title="Funktion löschen"
+                      >
+                        {deletingName === r.name ? 'Löschen…' : 'Löschen'}
                       </button>
                     </td>
                   </tr>
@@ -168,6 +264,6 @@ export default function StaffRolesScreen() {
           <div className="admin-toast success">{toast}</div>
         </div>
       )}
-    </div>
+    </>
   )
 }

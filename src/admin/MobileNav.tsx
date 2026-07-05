@@ -200,7 +200,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 )}
                 {has('aftersales') && (
                   <button className={`admin-mobile-drawer-item${screen === 'aftersales' ? ' active' : ''}`} onClick={() => navigate('aftersales')}>
-                    <IconAftersales /><span>Aftersales</span>
+                    <IconAftersales /><span>After Sales</span>
                   </button>
                 )}
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
@@ -213,7 +213,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 )}
                 {isManagement && has('quotes') && (
                   <button className={`admin-mobile-drawer-item${screen === 'quote-templates' ? ' active' : ''}`} onClick={() => navigate('quote-templates')}>
-                    <IconReceipt /><span>Offert-Vorlagen</span>
+                    <IconReceipt /><span>Vorlagen</span>
                   </button>
                 )}
                 {isManagement && has('kpis') && (

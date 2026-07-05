@@ -44,7 +44,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { label: '', default_fee: '', pricing_mode: 'pauschal', default_hours: '', notes: '' }
 
-export default function QuoteTemplatesScreen() {
+function OffertenVorlagenPanel() {
   const [installation, setInstallation] = useState<InstallationTpl[]>([])
   const [special, setSpecial] = useState<SpecialTpl[]>([])
   const [specialFeatureOn, setSpecialFeatureOn] = useState(true)
@@ -314,7 +314,7 @@ export default function QuoteTemplatesScreen() {
   const isSpecialModal = editing?.kind === 'special'
 
   return (
-    <div className="admin-page">
+    <>
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Offert-Vorlagen</div>
@@ -345,7 +345,7 @@ export default function QuoteTemplatesScreen() {
                 ) : installation.map(t => (
                   <tr key={t.id} onClick={() => openEditInstallation(t)} style={{ cursor: 'pointer' }}>
                     <td><strong>{t.label}</strong></td>
-                    <td style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>CHF {t.default_fee.toFixed(2)}</td>
+                    <td style={{ fontWeight: 700 }}>CHF {t.default_fee.toFixed(2)}</td>
                     <td style={{ color: 'var(--muted)' }}>{t.notes || '—'}</td>
                     <td>
                       <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={e => { e.stopPropagation(); openEditInstallation(t) }}>Bearbeiten</button>
@@ -383,7 +383,7 @@ export default function QuoteTemplatesScreen() {
                   <tr key={t.id} onClick={() => openEditSpecial(t)} style={{ cursor: 'pointer' }}>
                     <td><strong>{t.label}</strong></td>
                     <td style={{ color: 'var(--muted)' }}>{t.pricing_mode === 'stunden' ? 'Stundenansatz' : 'Pauschale'}</td>
-                    <td style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>
+                    <td style={{ fontWeight: 700 }}>
                       {t.pricing_mode === 'stunden'
                         ? `CHF ${t.default_fee.toFixed(2)}/h${t.default_hours != null ? ` × ${t.default_hours}` : ''}`
                         : `CHF ${t.default_fee.toFixed(2)}`}
@@ -721,6 +721,48 @@ export default function QuoteTemplatesScreen() {
           <div className="admin-toast success">{toast}</div>
         </div>
       )}
+    </>
+  )
+}
+
+// Platzhalter — Rechnungs-Vorlagen sind noch nicht umgesetzt (Tab bewusst leer).
+function RechnungsVorlagenPanel() {
+  return (
+    <div className="admin-page-header">
+      <div>
+        <div className="admin-page-title">Rechnungs-Vorlagen</div>
+        <div className="admin-page-subtitle">Vorlagen für Rechnungen — kommt bald.</div>
+      </div>
+    </div>
+  )
+}
+
+type VorlagenTab = 'offerte' | 'rechnung'
+
+// "Vorlagen" bündelt die Offert- und (künftig) Rechnungs-Vorlagen unter einem Tab-Layout
+// analog zum Material-Screen.
+export default function QuoteTemplatesScreen() {
+  const [tab, setTab] = useState<VorlagenTab>('offerte')
+
+  return (
+    <div className="admin-page">
+      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+        <button
+          className={`kpi-admin-tab${tab === 'offerte' ? ' active' : ''}`}
+          onClick={() => setTab('offerte')}
+        >
+          Offerte
+        </button>
+        <button
+          className={`kpi-admin-tab${tab === 'rechnung' ? ' active' : ''}`}
+          onClick={() => setTab('rechnung')}
+        >
+          Rechnung
+        </button>
+      </div>
+
+      {tab === 'offerte' && <OffertenVorlagenPanel />}
+      {tab === 'rechnung' && <RechnungsVorlagenPanel />}
     </div>
   )
 }
