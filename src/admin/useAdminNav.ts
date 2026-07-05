@@ -15,6 +15,7 @@ export type AdminScreen =
   | 'customers'
   | 'quotes'
   | 'invoices'
+  | 'aftersales'
   | 'payment-reconciliation'
   | 'suppliers'
   | 'staff-roles'

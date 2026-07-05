@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 11
+export const APP_DATA_VERSION = 12
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -174,7 +174,19 @@ const migration_10_to_11: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11]
+// v11 → v12: RapportDraft bekommt `summaryItems` (Hauptmaterialien aus der
+// Zusammenfassung, für die Gesamt-Übersicht vor dem Speichern). Additiv —
+// loadDraft liest das Feld mit Fallback ([] bei fehlend), kein Wipe nötig.
+// No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_11_to_12: Migration = {
+  from: 11,
+  to: 12,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

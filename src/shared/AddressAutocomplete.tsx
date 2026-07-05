@@ -12,6 +12,7 @@ interface Props {
   value: string
   onChange: (value: string) => void
   className?: string
+  placeholder?: string
 }
 
 function stripHtml(html: string): string {
@@ -32,7 +33,7 @@ function formatLabel(html: string): string {
   return clean(html)
 }
 
-export function AddressAutocomplete({ value, onChange, className }: Props) {
+export function AddressAutocomplete({ value, onChange, className, placeholder }: Props) {
   const [suggestions, setSuggestions] = useState<SwisstopoResult[]>([])
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
@@ -111,6 +112,7 @@ export function AddressAutocomplete({ value, onChange, className }: Props) {
         value={value}
         onChange={e => { userTypedRef.current = true; onChange(e.target.value) }}
         onKeyDown={handleKeyDown}
+        placeholder={placeholder}
         autoComplete="off"
       />
       {open && (

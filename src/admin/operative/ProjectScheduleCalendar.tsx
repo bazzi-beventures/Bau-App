@@ -470,9 +470,19 @@ export default function ProjectScheduleCalendar({
   projects, staff, loading, canton = 'ZH', onSelect, onReschedule,
   onVisibleWeekChange, onVisibleStaffChange,
 }: Props) {
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'staff'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
+  // Mitarbeiteransicht: Index des aktuell fokussierten Mitarbeiters (in staff).
+  const [staffIndex, setStaffIndex] = useState(0)
+  // Index bei geänderter Staff-Liste in gültige Grenzen ziehen.
+  const curStaffIndex = staff.length ? Math.min(staffIndex, staff.length - 1) : 0
+  const focusedStaff = staff[curStaffIndex] ?? null
+
+  function stepStaff(delta: number) {
+    if (staff.length === 0) return
+    setStaffIndex(((curStaffIndex + delta) % staff.length + staff.length) % staff.length)
+  }
 
   // Wochenstart der aktuell sichtbaren Ansicht nach oben melden, damit der
   // PDF-Export-Button im Screen-Header weiß, welche Woche er anfordern muss.
@@ -482,11 +492,17 @@ export default function ProjectScheduleCalendar({
   }, [currentDate, onVisibleWeekChange])
 
   // Filter-Auswahl an den Screen melden: null = kein Filter (alle), sonst Liste der sichtbaren IDs.
+  // In der Mitarbeiteransicht ist das genau der fokussierte Mitarbeiter → dessen
+  // Woche landet auch im Wochenplan-PDF.
   useEffect(() => {
     if (!onVisibleStaffChange) return
+    if (viewMode === 'staff') {
+      onVisibleStaffChange(focusedStaff ? [focusedStaff.id] : [])
+      return
+    }
     if (hiddenStaff.size === 0) onVisibleStaffChange(null)
     else onVisibleStaffChange(staff.filter(s => !hiddenStaff.has(s.id)).map(s => s.id))
-  }, [hiddenStaff, staff, onVisibleStaffChange])
+  }, [hiddenStaff, staff, onVisibleStaffChange, viewMode, focusedStaff])
 
   function toggleStaff(id: string) {
     setHiddenStaff(prev => {
@@ -503,6 +519,12 @@ export default function ProjectScheduleCalendar({
   // das Filter aushebeln (hiddenStaff enthält nur bekannte Staff-IDs).
   const staffIds = new Set(staff.map(s => s.id))
   const visibleProjects = projects.filter(p => {
+    // Mitarbeiteransicht: nur Einsätze des fokussierten Mitarbeiters — als
+    // Monteur zugewiesen oder als Projektleiter verantwortlich.
+    if (viewMode === 'staff') {
+      if (!focusedStaff) return false
+      return (p.monteur_ids?.includes(focusedStaff.id) ?? false) || p.projektleiter_id === focusedStaff.id
+    }
     if (hiddenStaff.size === 0) return true
     if (!p.monteur_ids || p.monteur_ids.length === 0) return false
     return p.monteur_ids.some(id => staffIds.has(id) && !hiddenStaff.has(id))
@@ -552,6 +574,10 @@ export default function ProjectScheduleCalendar({
             className={`admin-btn admin-btn-sm ${viewMode === 'week' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
             onClick={() => setViewMode('week')}
           >Woche</button>
+          <button
+            className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setViewMode('staff')}
+          >Mitarbeiter</button>
         </div>
 
         <div className="absence-cal-title">{title}</div>
@@ -566,7 +592,40 @@ export default function ProjectScheduleCalendar({
         </div>
       </div>
 
-      {!loading && staff.length > 0 && (
+      {!loading && viewMode === 'staff' && staff.length > 0 && (
+        <div className="project-cal-staff-switcher">
+          <span className="project-cal-filter-label">Mitarbeiter</span>
+          <div className="project-cal-staff-switcher-nav">
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary admin-btn-sm"
+              onClick={() => stepStaff(-1)}
+              title="Vorheriger Mitarbeiter"
+            >←</button>
+            <select
+              className="admin-input project-cal-staff-switcher-select"
+              value={focusedStaff?.id ?? ''}
+              onChange={e => {
+                const idx = staff.findIndex(s => s.id === e.target.value)
+                if (idx >= 0) setStaffIndex(idx)
+              }}
+            >
+              {staff.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary admin-btn-sm"
+              onClick={() => stepStaff(1)}
+              title="Nächster Mitarbeiter"
+            >→</button>
+          </div>
+          <span className="project-cal-filter-count">{curStaffIndex + 1} / {staff.length}</span>
+        </div>
+      )}
+
+      {!loading && viewMode !== 'staff' && staff.length > 0 && (
         <div className="project-cal-filter">
           <div className="project-cal-filter-head">
             <span>
@@ -610,6 +669,8 @@ export default function ProjectScheduleCalendar({
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           holidays={holidays}
         />
+      ) : viewMode === 'staff' && !focusedStaff ? (
+        <div className="admin-empty">Keine Mitarbeiter verfügbar.</div>
       ) : (
         <WeekView
           projects={visibleProjects}

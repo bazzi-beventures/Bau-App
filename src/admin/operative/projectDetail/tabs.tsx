@@ -17,6 +17,7 @@ export interface ProjectFile {
   id: string
   filename: string
   file_url: string | null
+  storage_path?: string | null
   mime_type: string | null
   category: ProjectFileCategory | null
   created_at: string
@@ -52,6 +53,8 @@ export interface ProjectQuote {
   created_at: string
   pdf_url: string | null
   xlsx_url: string | null
+  storage_path?: string | null
+  xlsx_storage_path?: string | null
   customer_email: string | null
 }
 
@@ -65,6 +68,7 @@ export interface ProjectInvoice {
   created_at: string
   paid_at: string | null
   pdf_url: string | null
+  storage_path?: string | null
   created_without_report?: boolean
 }
 
@@ -74,6 +78,7 @@ export interface ProjectReport {
   description: string | null
   created_by: string | null
   pdf_url: string | null
+  storage_path?: string | null
   signature_timestamp: string | null
   invoice_id: number | null
   created_at: string
@@ -94,6 +99,7 @@ export interface ProjectApproval {
   title: string
   filename: string
   file_url: string | null
+  storage_path?: string | null
   mime_type: string | null
   requested_by_user_id: string | null
   requested_by_name: string | null
@@ -273,7 +279,7 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {f.file_url
+                {(f.storage_path || f.file_url)
                   ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
                   : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
                 }
@@ -446,10 +452,10 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                         Summe vom Button-Cluster zu trennen. */}
                     <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
                       <span style={{ fontWeight: 600, fontSize: 13 }}>{fmtCHF(q.total_amount)}</span>
-                      {q.pdf_url && (
+                      {(q.storage_path || q.pdf_url) && (
                         <a href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
                       )}
-                      {q.xlsx_url && (
+                      {(q.xlsx_storage_path || q.xlsx_url) && (
                         <a href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">XLSX</a>
                       )}
                       {idx === 0 && (
@@ -527,7 +533,7 @@ export function ReportsTab({ reports }: ReportsTabProps) {
                     {r.description ? ` · ${r.description}` : ''}
                   </div>
                 </div>
-                {r.pdf_url ? (
+                {(r.storage_path || r.pdf_url) ? (
                   <a href={apiUrl(`/pwa/admin/reports/${r.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">
                     PDF
                   </a>
@@ -637,7 +643,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                     <span className={`admin-badge ${INVOICE_STATUS_BADGE[inv.status] || 'admin-badge-draft'}`}>{INVOICE_STATUS_LABELS[inv.status] || inv.status}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(inv.created_at)}</span>
                     <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, fontSize: 13 }}>{fmtCHF(inv.total_amount)}</span>
-                    {inv.pdf_url && (
+                    {(inv.storage_path || inv.pdf_url) && (
                       <a href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">PDF</a>
                     )}
                     {idx === 0 && (inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
@@ -746,7 +752,7 @@ export function ApprovalsTab({ approvals, currentUserId, decidingApprovalId, onS
                   <span style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</span>
                   <span className={`admin-badge ${APPROVAL_STATUS_BADGE[a.status]}`}>{APPROVAL_STATUS_LABELS[a.status]}</span>
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(a.created_at)}</span>
-                  {a.file_url && (
+                  {(a.storage_path || a.file_url) && (
                     <a href={apiUrl(`/pwa/admin/approvals/${a.id}/download`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm" style={{ marginLeft: 'auto' }}>
                       📎 {a.filename}
                     </a>

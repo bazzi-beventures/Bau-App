@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption } from '../api/chat'
+import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption, SummaryItem } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { UserInfo } from '../api/auth'
 import { getFeature, isFeatureEnabled, KleinmaterialPromptConfig } from '../api/modules'
@@ -72,6 +72,9 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const [ersatzCollected, setErsatzCollected] = useState(() => draft?.ersatzCollected ?? false)
   const [collectedKlein, setCollectedKlein] = useState<KleinmaterialSelection | null>(() => draft?.collectedKlein ?? null)
   const [collectedErsatz, setCollectedErsatz] = useState<ErsatzteilSelection[]>(() => draft?.collectedErsatz ?? [])
+  // Hauptmaterialien der aktuellen Zusammenfassung — damit die Übersicht vor dem
+  // Speichern ALLE Positionen (Haupt + Klein + Ersatzteile) zeigt, wie im PDF.
+  const [summaryItems, setSummaryItems] = useState<SummaryItem[]>(() => draft?.summaryItems ?? [])
   const [messages, setMessages] = useState<Message[]>(() => draft?.messages ?? [greetingMessage()])
   const [loading, setLoading] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState(() => draft?.pendingConfirm ?? false)
@@ -87,11 +90,11 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   useEffect(() => {
     saveDraft(user.authorized_user_id, {
       messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
-      pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
+      summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId,
     }, Date.now())
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
-      collectedErsatz, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
+      collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId])
 
   // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
@@ -102,6 +105,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     setErsatzCollected(false)
     setCollectedKlein(null)
     setCollectedErsatz([])
+    setSummaryItems([])
     setPendingConfirm(false)
     setPendingDisambiguation(false)
     setPendingQuoteQuestion(false)
@@ -130,6 +134,8 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingConfirm(true)
       setPendingDisambiguation(false)
       setPendingQuoteQuestion(false)
+      // Hauptmaterialien der Zusammenfassung merken (für die Gesamt-Übersicht)
+      setSummaryItems(res.pending_summary?.items ?? [])
       // Neue Bestätigung → Zusatz-Material-Schritte zurücksetzen
       setKleinCollected(false)
       setErsatzCollected(false)
@@ -421,8 +427,20 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
           <>
             {hasExtras && (
               <div className="kleinmaterial-prompt">
-                <div className="kleinmaterial-title">Zusätzlich zum Rapport erfasst</div>
+                {/* Komplette Material-Übersicht (Haupt + Klein + Ersatzteile) —
+                    entspricht dem, was auf dem PDF/Rapport landet. Die
+                    Zusammenfassung oben zeigt nur die Hauptmaterialien; die
+                    Zusatz-Positionen kommen erst danach dazu. */}
+                <div className="kleinmaterial-title">Material im Rapport</div>
                 <div className="ersatzteil-list">
+                  {summaryItems.map((it, i) => (
+                    <div key={`main-${i}`} className="ersatzteil-row">
+                      <span className="ersatzteil-name">
+                        {it.art_nr ? <span className="ersatzteil-artnr">{it.art_nr}</span> : null} {it.name}
+                      </span>
+                      <span>{it.amount} {it.unit ?? ''}</span>
+                    </div>
+                  ))}
                   {collectedKlein?.amount_chf ? (
                     <div className="ersatzteil-row">
                       <span className="ersatzteil-name">Klein-/Schmiermaterial</span>

@@ -6,6 +6,7 @@ import {
   IconDashboard, IconFolder, IconClock, IconCash,
   IconUsers, IconAddressBook, IconReceipt, IconCalendar,
   IconDocument, IconBox, IconTag, IconChart, IconKey, IconLogout, IconSettings,
+  IconAftersales,
 } from './AdminIcons'
 
 interface Props {
@@ -196,6 +197,11 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                       <IconCalendar /><span>Ferien</span>
                     </button>
                   </>
+                )}
+                {has('aftersales') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'aftersales' ? ' active' : ''}`} onClick={() => navigate('aftersales')}>
+                    <IconAftersales /><span>Aftersales</span>
+                  </button>
                 )}
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>

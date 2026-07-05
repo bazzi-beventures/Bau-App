@@ -10,6 +10,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 // später in einer Zeile austauschbar bleibt (z.B. auf 'Gesperrt').
 const STATUS_TERMS = { active: 'Aktiv', inactive: 'Löschvormerkung' }
 
+const PAGE_SIZE = 50   // analog zur Material-Übersicht
+
 interface Supplier { id: string; name: string; prefix: string }
 
 // Kandidat-Buckets (Bereinigungs-Vorschläge) zuerst; die geschützten danach.
@@ -33,6 +35,7 @@ export default function MaterialCleanupScreen() {
   const [supplierId, setSupplierId] = useState('')
   const [status, setStatus] = useState('')            // '' = alle, 'active', 'inactive'
   const [szenario, setSzenario] = useState<MaterialSzenario | ''>('')
+  const [page, setPage] = useState(1)
 
   const [scan, setScan] = useState<MaterialCleanupScan | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -55,21 +58,27 @@ export default function MaterialCleanupScreen() {
     })()
   }, [])
 
+  // Filter/Szenario-Wechsel → zurück auf Seite 1.
+  useEffect(() => { setPage(1) }, [category, supplierId, status, szenario])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await scanMaterialCleanup({ category, supplier_id: supplierId, status, szenario })
+      const res = await scanMaterialCleanup({
+        category, supplier_id: supplierId, status, szenario,
+        page, page_size: PAGE_SIZE,
+      })
       setScan(res)
     } catch (e) {
       setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung.' : 'Scan fehlgeschlagen.' })
     } finally {
       setLoading(false)
     }
-  }, [category, supplierId, status, szenario])
+  }, [category, supplierId, status, szenario, page])
 
   useEffect(() => { load() }, [load])
-  // Filter/Szenario-Wechsel → Auswahl verwerfen.
-  useEffect(() => { setSelected(new Set()) }, [category, supplierId, status, szenario])
+  // Filter/Szenario/Seiten-Wechsel → Auswahl verwerfen (Massenaktion bleibt pro Seite).
+  useEffect(() => { setSelected(new Set()) }, [category, supplierId, status, szenario, page])
 
   const supplierMap = useMemo(
     () => Object.fromEntries(suppliers.map(s => [s.id, s.name])) as Record<string, string>,
@@ -77,8 +86,13 @@ export default function MaterialCleanupScreen() {
   )
   const counts = scan?.counts ?? {}
   const blocked = scan?.blocked ?? []
-  const rows: MaterialCleanupRow[] = szenario ? (scan?.rows ?? []) : []
-  const selectable = useMemo(() => rows.filter(r => !blocked.includes(r.szenario)), [rows, blocked])
+  const rows: MaterialCleanupRow[] = scan?.rows ?? []
+
+  // Nicht auswählbar = aktiver Bestand in einem gesperrten Szenario (kann weder
+  // deaktiviert werden noch reaktiviert — er ist schon aktiv). Inaktive Zeilen
+  // bleiben immer wählbar (Reaktivierung).
+  const isProtected = (r: MaterialCleanupRow) => blocked.includes(r.szenario) && r.is_active
+  const selectable = useMemo(() => rows.filter(r => !isProtected(r)), [rows, blocked])
   const allSelected = selectable.length > 0 && selectable.every(r => selected.has(r.art_nr))
 
   function toggle(artNr: string) {
@@ -110,7 +124,15 @@ export default function MaterialCleanupScreen() {
     }
   }
 
-  const szenarioBlocked = szenario ? blocked.includes(szenario) : false
+  const rowTotal = scan?.row_total ?? 0
+  const totalPages = scan?.total_pages ?? 1
+  const rangeStart = rowTotal === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, rowTotal)
+
+  // Kontextabhängige Aktions-Buttons: im Inaktiv-Filter nur „Reaktivieren",
+  // im Aktiv-Filter nur „Auf Löschvormerkung setzen", sonst beide.
+  const showDeactivate = status !== 'inactive'
+  const showReactivate = status !== 'active'
 
   return (
     <div className="admin-page">
@@ -136,12 +158,17 @@ export default function MaterialCleanupScreen() {
           </select>
           <select className="admin-form-select" style={{ width: 'auto', flexShrink: 0 }} value={status} onChange={e => setStatus(e.target.value)}>
             <option value="">Alle Status</option>
-            <option value="active">{STATUS_TERMS.active}</option>
-            <option value="inactive">{STATUS_TERMS.inactive}</option>
+            <option value="active">Nur {STATUS_TERMS.active}</option>
+            <option value="inactive">Nur {STATUS_TERMS.inactive}</option>
           </select>
+          {szenario && (
+            <button className="admin-btn admin-btn-secondary" onClick={() => setSzenario('')}>
+              Szenario-Filter aufheben
+            </button>
+          )}
         </div>
 
-        {/* Szenario-Karten */}
+        {/* Szenario-Karten (optionaler Filter) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '4px 2px 14px' }}>
           {SZENARIOS.map(s => {
             const n = counts[s.code] ?? 0
@@ -168,21 +195,8 @@ export default function MaterialCleanupScreen() {
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
-        ) : !szenario ? (
-          <div className="admin-table-empty" style={{ padding: 24 }}>
-            Szenario oben wählen, um die Artikel zu laden und zu bereinigen.
-          </div>
-        ) : szenarioBlocked ? (
-          <div className="admin-table-empty" style={{ padding: 24 }}>
-            Aktiver Bestand ({SZ_LABEL[szenario]}) — Deaktivierung ist gesperrt.
-          </div>
         ) : (
           <>
-            {scan?.truncated && (
-              <div className="admin-page-subtitle" style={{ padding: '0 2px 8px', color: '#b45309' }}>
-                Anzeige auf {scan.max_bulk} Artikel begrenzt — Filter enger setzen, um alle zu sehen.
-              </div>
-            )}
             <table className="admin-table">
               <thead>
                 <tr>
@@ -192,13 +206,14 @@ export default function MaterialCleanupScreen() {
                       checked={allSelected}
                       onChange={e => toggleAll(e.target.checked)}
                       disabled={selectable.length === 0 || submitting}
-                      title="Alle auswählen"
+                      title="Seite auswählen"
                     />
                   </th>
                   <th>Art.-Nr.</th>
                   <th>Bezeichnung</th>
                   <th>Lieferant</th>
                   <th>Artikelgruppe</th>
+                  <th>Szenario</th>
                   <th>Alter</th>
                   <th>Letzte Nutzung</th>
                   <th>Status</th>
@@ -206,52 +221,78 @@ export default function MaterialCleanupScreen() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="admin-table-empty">Keine Artikel in diesem Szenario.</td></tr>
-                ) : rows.map(r => (
-                  <tr key={r.art_nr} style={{ cursor: 'pointer' }} onClick={() => !submitting && toggle(r.art_nr)}>
-                    <td onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(r.art_nr)}
-                        onChange={() => toggle(r.art_nr)}
-                        disabled={submitting}
-                      />
-                    </td>
-                    <td className="primary">{r.art_nr}</td>
-                    <td>
-                      {r.name}
-                      {r.dq_no_supplier && <span className="admin-badge admin-badge-admin" style={{ marginLeft: 6 }}>kein Lieferant</span>}
-                      {r.dq_no_price && <span className="admin-badge admin-badge-admin" style={{ marginLeft: 6 }}>kein Preis</span>}
-                    </td>
-                    <td>{r.supplier_id ? (supplierMap[r.supplier_id] ?? '—') : '—'}</td>
-                    <td>{r.category ?? '—'}</td>
-                    <td>{r.age_days != null ? `${r.age_days} T` : '—'}</td>
-                    <td>{r.last_usage_date ?? '—'}</td>
-                    <td>
-                      <span className={`admin-badge ${r.is_active ? 'admin-badge-active' : 'admin-badge-draft'}`}>
-                        {r.is_active ? STATUS_TERMS.active : STATUS_TERMS.inactive}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={9} className="admin-table-empty">Keine Artikel im Filter.</td></tr>
+                ) : rows.map(r => {
+                  const prot = isProtected(r)
+                  return (
+                    <tr
+                      key={r.art_nr}
+                      style={prot ? { opacity: 0.55 } : { cursor: 'pointer' }}
+                      onClick={() => !prot && !submitting && toggle(r.art_nr)}
+                    >
+                      <td onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.art_nr)}
+                          onChange={() => toggle(r.art_nr)}
+                          disabled={prot || submitting}
+                          title={prot ? 'Aktiver Bestand — geschützt' : undefined}
+                        />
+                      </td>
+                      <td className="primary">{r.art_nr}</td>
+                      <td>
+                        {r.name}
+                        {r.dq_no_supplier && <span className="admin-badge admin-badge-admin" style={{ marginLeft: 6 }}>kein Lieferant</span>}
+                        {r.dq_no_price && <span className="admin-badge admin-badge-admin" style={{ marginLeft: 6 }}>kein Preis</span>}
+                      </td>
+                      <td>{r.supplier_id ? (supplierMap[r.supplier_id] ?? '—') : '—'}</td>
+                      <td>{r.category ?? '—'}</td>
+                      <td><span className="admin-badge admin-badge-draft">{SZ_LABEL[r.szenario] ?? r.szenario}</span></td>
+                      <td>{r.age_days != null ? `${r.age_days} T` : '—'}</td>
+                      <td>{r.last_usage_date ?? '—'}</td>
+                      <td>
+                        <span className={`admin-badge ${r.is_active ? 'admin-badge-active' : 'admin-badge-draft'}`}>
+                          {r.is_active ? STATUS_TERMS.active : STATUS_TERMS.inactive}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
 
-            <div style={{ display: 'flex', gap: 10, padding: '12px 2px' }}>
-              <button
-                className="admin-btn admin-btn-danger"
-                onClick={() => setConfirm({ targetActive: false })}
-                disabled={submitting || selected.size === 0}
-              >
-                Auf {STATUS_TERMS.inactive} setzen ({selected.size})
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => setConfirm({ targetActive: true })}
-                disabled={submitting || selected.size === 0}
-              >
-                Reaktivieren ({selected.size})
-              </button>
+            {/* Paginierung (50 / Seite) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 2px' }}>
+              <div className="admin-page-subtitle" style={{ margin: 0 }}>
+                {rowTotal === 0 ? '0 Artikel' : `${rangeStart}–${rangeEnd} von ${rowTotal}`}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button className="admin-btn admin-btn-secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || submitting}>Zurück</button>
+                <span className="admin-page-subtitle" style={{ margin: 0 }}>Seite {page} / {totalPages}</span>
+                <button className="admin-btn admin-btn-secondary" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || submitting}>Weiter</button>
+              </div>
+            </div>
+
+            {/* Massenaktionen (kontextabhängig; wirken auf die Auswahl der aktuellen Seite) */}
+            <div style={{ display: 'flex', gap: 10, padding: '4px 2px 12px' }}>
+              {showDeactivate && (
+                <button
+                  className="admin-btn admin-btn-danger"
+                  onClick={() => setConfirm({ targetActive: false })}
+                  disabled={submitting || selected.size === 0}
+                >
+                  Auf {STATUS_TERMS.inactive} setzen ({selected.size})
+                </button>
+              )}
+              {showReactivate && (
+                <button
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setConfirm({ targetActive: true })}
+                  disabled={submitting || selected.size === 0}
+                >
+                  Reaktivieren ({selected.size})
+                </button>
+              )}
             </div>
           </>
         )}

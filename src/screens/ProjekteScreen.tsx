@@ -117,6 +117,7 @@ interface ProjectFile {
   id: string
   filename: string
   file_url: string | null
+  storage_path?: string | null
   mime_type: string | null
   category: string | null
   created_at: string
@@ -583,7 +584,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
                   <span style={{ fontSize: 16 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
                   <span className="projekte-detail-value" style={{ flex: 1 }}>
-                    {f.file_url
+                    {(f.storage_path || f.file_url)
                       ? <a href={apiUrl(`/pwa/projects/${selected.id}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
                       : f.filename
                     }

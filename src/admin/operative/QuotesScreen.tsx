@@ -34,6 +34,8 @@ interface Quote {
   created_at: string
   pdf_url: string | null
   xlsx_url: string | null
+  storage_path?: string | null
+  xlsx_storage_path?: string | null
   reminder_sent_at: string | null
   projektleiter_id: string | null
 }
@@ -1462,7 +1464,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(q.created_at)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {q.pdf_url && (
+                      {(q.storage_path || q.pdf_url) && (
                         <a
                           href={apiUrl(`/pwa/admin/quotes/${q.id}/pdf`)}
                           target="_blank"
@@ -1473,7 +1475,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                           PDF
                         </a>
                       )}
-                      {q.xlsx_url && (
+                      {(q.xlsx_storage_path || q.xlsx_url) && (
                         <a
                           href={apiUrl(`/pwa/admin/quotes/${q.id}/xlsx`)}
                           target="_blank"

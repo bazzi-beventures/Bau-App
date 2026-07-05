@@ -12,6 +12,7 @@ interface Quote {
   valid_until: string | null
   created_at: string
   pdf_url: string | null
+  storage_path?: string | null
 }
 
 interface Props {
@@ -135,7 +136,7 @@ export default function OffertenScreen({ logoUrl, onNavHome, onNavArbeitszeit, o
                     <span className="projekte-detail-value">{formatDate(q.valid_until)}</span>
                   </div>
                 )}
-                {q.pdf_url ? (
+                {(q.storage_path || q.pdf_url) ? (
                   <a
                     href={apiUrl(`/pwa/quotes/${q.id}/pdf`)}
                     target="_blank"

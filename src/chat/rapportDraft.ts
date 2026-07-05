@@ -1,6 +1,6 @@
 import { KleinmaterialSelection } from './KleinmaterialPrompt'
 import { ErsatzteilSelection } from './ErsatzteilPrompt'
-import { DisambiguationOption } from '../api/chat'
+import { DisambiguationOption, SummaryItem } from '../api/chat'
 
 // Zwischenspeicher für einen in Arbeit befindlichen Rapport. Der ChatScreen hält
 // seinen State sonst nur im Speicher und verliert alles beim Unmount (Navigation
@@ -23,6 +23,9 @@ export interface RapportDraftState {
   ersatzCollected: boolean
   collectedKlein: KleinmaterialSelection | null
   collectedErsatz: ErsatzteilSelection[]
+  // Hauptmaterialien aus der Zusammenfassung — für die Gesamt-Übersicht vor dem
+  // Speichern (zusammen mit Klein-/Ersatzteilen), damit die Anzeige dem PDF entspricht.
+  summaryItems: SummaryItem[]
   pendingConfirm: boolean
   pendingDisambiguation: boolean
   pendingQuoteQuestion: boolean

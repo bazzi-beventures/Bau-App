@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
-import { AddressAutocomplete } from '../components/AddressAutocomplete'
-import { CompanySearch } from '../components/CompanySearch'
+import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
+import { CompanySearch } from '../../shared/CompanySearch'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { formatDateTime } from './projectDetail/tabs'
 
@@ -186,7 +186,7 @@ function CustomerComments({ customerId }: { customerId: string }) {
               disabled={adding || !newComment.trim()}
               onClick={handleAdd}
             >
-              {adding ? '…' : 'Senden'}
+              {adding ? '…' : 'Speichern'}
             </button>
           </div>
         </>

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { apiFetch } from '../api/client'
 
-// Suche läuft über den Backend-Proxy (/pwa/admin/suppliers/lookup),
-// damit der tel.search.ch-API-Key serverseitig bleibt (Railway-Env).
+// Suche läuft über einen Backend-Proxy (tel.search.ch), damit der API-Key
+// serverseitig bleibt (Railway-Env). Default-Endpoint ist der Admin-Lookup;
+// die Mitarbeiter-PWA reicht via `endpoint` ihren eigenen (nicht-Admin) durch.
 interface LookupHit {
   name: string
   street?: string
@@ -21,9 +22,18 @@ export interface CompanyResult {
 
 interface Props {
   onSelect: (result: CompanyResult) => void
+  /** Backend-Proxy-Endpoint. Default: Admin-Lookup. Die Mitarbeiter-PWA nutzt
+   *  /pwa/project-drafts/company-lookup (ohne Admin-Rechte). */
+  endpoint?: string
+  /** CSS-Klasse der Eingabefelder — passt die Komponente an Admin- vs. PWA-Style an. */
+  inputClassName?: string
 }
 
-export function CompanySearch({ onSelect }: Props) {
+export function CompanySearch({
+  onSelect,
+  endpoint = '/pwa/admin/suppliers/lookup',
+  inputClassName = 'admin-form-input',
+}: Props) {
   const [query, setQuery] = useState('')
   const [ort, setOrt] = useState('')
   const [suggestions, setSuggestions] = useState<LookupHit[]>([])
@@ -49,7 +59,7 @@ export function CompanySearch({ onSelect }: Props) {
         const params = new URLSearchParams({ q: query.trim(), firma: '0' })
         if (ort.trim()) params.set('wo', ort.trim())
 
-        const results = await apiFetch(`/pwa/admin/suppliers/lookup?${params}`) as LookupHit[]
+        const results = await apiFetch(`${endpoint}?${params}`) as LookupHit[]
         setSuggestions(results)
         setOpen(results.length > 0)
         setHighlighted(-1)
@@ -64,7 +74,7 @@ export function CompanySearch({ onSelect }: Props) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [query, ort])
+  }, [query, ort, endpoint])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -113,7 +123,7 @@ export function CompanySearch({ onSelect }: Props) {
     <div ref={containerRef} style={{ position: 'relative' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
         <input
-          className="admin-form-input"
+          className={inputClassName}
           placeholder="Firmaname oder Name…"
           value={query}
           onChange={e => setQuery(e.target.value)}
@@ -121,7 +131,7 @@ export function CompanySearch({ onSelect }: Props) {
           autoComplete="off"
         />
         <input
-          className="admin-form-input"
+          className={inputClassName}
           placeholder="Ort"
           value={ort}
           onChange={e => setOrt(e.target.value)}

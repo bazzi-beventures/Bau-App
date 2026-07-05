@@ -14,6 +14,7 @@ function baseState(overrides: Partial<RapportDraftState> = {}): RapportDraftStat
     ersatzCollected: false,
     collectedKlein: null,
     collectedErsatz: [],
+    summaryItems: [],
     pendingConfirm: false,
     pendingDisambiguation: false,
     pendingQuoteQuestion: false,
@@ -58,6 +59,17 @@ describe('rapportDraft', () => {
     const loaded = loadDraft(USER, NOW)
     expect(loaded?.pendingConfirm).toBe(true)
     expect(loaded?.messages).toHaveLength(2)
+  })
+
+  it('persistiert summaryItems (Hauptmaterialien) über Save/Load', () => {
+    const s = baseState({
+      pendingConfirm: true,
+      summaryItems: [{ name: 'Sonnentuch Grün', amount: 40, unit: 'm²', art_nr: '7' }],
+    })
+    saveDraft(USER, s, NOW)
+
+    const loaded = loadDraft(USER, NOW)
+    expect(loaded?.summaryItems).toEqual([{ name: 'Sonnentuch Grün', amount: 40, unit: 'm²', art_nr: '7' }])
   })
 
   it('löscht bei leerem Zustand einen bestehenden Draft', () => {

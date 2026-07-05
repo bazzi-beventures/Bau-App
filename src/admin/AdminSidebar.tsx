@@ -4,7 +4,7 @@ import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
   IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
-  IconLogout, IconAddressBook, IconSettings,
+  IconLogout, IconAddressBook, IconSettings, IconAftersales,
 } from './AdminIcons'
 
 interface Props {
@@ -105,6 +105,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
         )}
         {has('payment_matching') && (
           <NavItem label="Zahlungsabgleich" target="payment-reconciliation" current={screen} onNav={onNav} icon={<IconCash />} />
+        )}
+        {has('aftersales') && (
+          <NavItem label="Aftersales" target="aftersales" current={screen} onNav={onNav} icon={<IconAftersales />} />
         )}
 
         <div className="admin-nav-group-label">Stammdaten</div>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, isNetworkError } from '../api/client'
 import { createProjectDraft, ProjectDraftPayload } from '../api/projectDrafts'
+import { AddressAutocomplete } from '../shared/AddressAutocomplete'
+import { CompanySearch, CompanyResult } from '../shared/CompanySearch'
 
 const OFFLINE_QUEUE_KEY = 'projektEntwurf_offline_queue'
 
@@ -127,6 +129,15 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
     setMaterials(prev => prev.filter((_, i) => i !== idx))
   }
 
+  // Kunde aus tel.search.ch übernehmen — füllt Name/Adresse/Telefon/Mail vor,
+  // alles bleibt danach manuell editierbar. Leere Felder überschreiben nichts.
+  function applyCompany(r: CompanyResult) {
+    if (r.name) setCustomerName(r.name)
+    if (r.address) setCustomerAddress(r.address)
+    if (r.phone) setCustomerPhone(r.phone)
+    if (r.email) setCustomerEmail(r.email)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const cleanTitle = title.trim()
@@ -239,11 +250,10 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
           </label>
           <label className="entwurf-label">
             <span>Objekt-Adresse (wo gearbeitet wird)</span>
-            <input
-              type="text"
+            <AddressAutocomplete
               className="entwurf-input"
               value={objectAddress}
-              onChange={e => setObjectAddress(e.target.value)}
+              onChange={setObjectAddress}
               placeholder="Strasse, PLZ Ort"
             />
           </label>
@@ -251,6 +261,14 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
 
         <section className="entwurf-section">
           <div className="entwurf-section-title">Kunde</div>
+          <div className="entwurf-label">
+            <span>Kunde suchen (search.ch)</span>
+            <CompanySearch
+              endpoint="/pwa/project-drafts/company-lookup"
+              inputClassName="entwurf-input"
+              onSelect={applyCompany}
+            />
+          </div>
           <label className="entwurf-label">
             <span>Name *</span>
             <input
@@ -284,11 +302,10 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
           </label>
           <label className="entwurf-label">
             <span>Adresse Kunde</span>
-            <input
-              type="text"
+            <AddressAutocomplete
               className="entwurf-input"
               value={customerAddress}
-              onChange={e => setCustomerAddress(e.target.value)}
+              onChange={setCustomerAddress}
               placeholder="Strasse, PLZ Ort"
             />
           </label>

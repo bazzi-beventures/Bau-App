@@ -21,6 +21,7 @@ import CustomersScreen from './operative/CustomersScreen'
 import MaterialsScreen from './operative/MaterialsScreen'
 import QuotesScreen from './operative/QuotesScreen'
 import InvoicesScreen from './operative/InvoicesScreen'
+import AftersalesScreen from './operative/AftersalesScreen'
 import PaymentReconciliationScreen from './operative/PaymentReconciliationScreen'
 import PricingRulesScreen from './operative/PricingRulesScreen'
 import QuoteTemplatesScreen from './operative/QuoteTemplatesScreen'
@@ -79,6 +80,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'customers': 'Kundenstamm',
   'quotes': 'Offerten',
   'invoices': 'Rechnungen',
+  'aftersales': 'Aftersales',
   'payment-reconciliation': 'Zahlungsabgleich',
   'suppliers': 'Lieferanten',
   'staff-roles': 'Funktionen',
@@ -151,6 +153,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return guard('quotes', <QuotesScreen initialStatus={detailId} onConsumed={clearDetail} />)
       case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
+      case 'aftersales':   return guard('aftersales', <AftersalesScreen />)
       case 'payment-reconciliation': return guard('payment_matching', <PaymentReconciliationScreen />)
       case 'suppliers':    return <SuppliersScreen />
       case 'staff-roles':  return <StaffRolesScreen />

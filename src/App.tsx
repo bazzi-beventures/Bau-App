@@ -502,13 +502,17 @@ export default function App() {
 
   // Schwebende Hilfe-Blase: auf allen authentifizierten Mitarbeiter-Screens, aber nicht
   // auf Auth-Screens und nicht im Admin-Bereich (AdminApp rendert eine eigene Blase).
+  // Auch NICHT auf dem Rapport-Screen: der hat unten statt der Nav-Leiste eine eigene
+  // Chat-Eingabeleiste — der FAB (bottom: 72px, für die ~56px-Nav-Leiste gedacht) läge
+  // sonst über dem Senden-Button. Und eine zweite Hilfe-Chat-Blase über dem Rapport-Bot
+  // wäre ohnehin doppelt.
   // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_pwa' = unabhängiger
   // Schalter für die Mitarbeiter-App (Default an).
   const showHelpBubble =
     !!user &&
     hasModule(user, 'help_bot') &&
     isFeatureEnabled(user, 'help_bot_pwa') &&
-    !['loading', 'login', 'pin', 'consent', 'admin'].includes(screen)
+    !['loading', 'login', 'pin', 'consent', 'admin', 'rapport'].includes(screen)
 
   return (
     <>

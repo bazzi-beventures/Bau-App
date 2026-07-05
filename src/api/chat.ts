@@ -7,6 +7,14 @@ export interface DisambiguationOption {
   category?: string
 }
 
+// Ein Hauptmaterial aus der Rapport-Zusammenfassung (vom LLM erkannt/aufgelöst).
+export interface SummaryItem {
+  name: string
+  amount: number
+  unit?: string
+  art_nr?: string
+}
+
 export interface ChatResponse {
   reply: string
   action_taken: string | null
@@ -18,7 +26,7 @@ export interface ChatResponse {
     project: string
     date: string
     staff: { name: string; hours: number }[]
-    items: { name: string; amount: number; unit?: string; art_nr?: string }[]
+    items: SummaryItem[]
   }
 }
 

@@ -1,0 +1,366 @@
+import { useEffect, useState } from 'react'
+import {
+  listAftersales, updateAftersales, regenerateAftersalesBody,
+  sendAftersalesNow, cancelAftersales,
+  AftersalesTask, AftersalesStatus, AftersalesSnapshot,
+} from '../../api/admin'
+import { fmtDate } from '../utils/format'
+
+type FilterKey = AftersalesStatus | 'all'
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'review', label: 'Zu prüfen' },
+  { key: 'scheduled', label: 'Geplant' },
+  { key: 'sent', label: 'Gesendet' },
+  { key: 'answered', label: 'Beantwortet' },
+  { key: 'all', label: 'Alle' },
+]
+
+const KIND_LABEL: Record<string, string> = {
+  feedback: 'Feedback',
+  repair_check: 'Reparatur / Service',
+}
+
+const STATUS_LABEL: Record<AftersalesStatus, string> = {
+  scheduled: 'Geplant',
+  review: 'Zu prüfen',
+  sent: 'Gesendet',
+  answered: 'Beantwortet',
+  cancelled: 'Abgebrochen',
+  failed: 'Fehler',
+}
+
+const STATUS_BADGE: Record<AftersalesStatus, string> = {
+  scheduled: 'admin-badge-draft',
+  review: 'admin-badge-warning',
+  sent: 'admin-badge-info',
+  answered: 'admin-badge-success',
+  cancelled: 'admin-badge-draft',
+  failed: 'admin-badge-danger',
+}
+
+function fmtChf(v: number | string | null | undefined): string {
+  if (v === null || v === undefined || v === '') return ''
+  const n = Number(v)
+  if (Number.isNaN(n)) return ''
+  return `CHF ${n.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function PositionsTable({ snapshot }: { snapshot: AftersalesSnapshot | null }) {
+  const items = snapshot?.items ?? []
+  if (items.length === 0 && (snapshot?.total_amount === null || snapshot?.total_amount === undefined)) {
+    return <div style={{ fontSize: 13, color: 'var(--muted)' }}>Keine Positionen im Snapshot.</div>
+  }
+  return (
+    <table className="admin-table" style={{ fontSize: 13 }}>
+      <thead>
+        <tr><th>Position</th><th style={{ textAlign: 'right' }}>Menge</th><th style={{ textAlign: 'right' }}>Betrag</th></tr>
+      </thead>
+      <tbody>
+        {items.map((it, i) => (
+          <tr key={i}>
+            <td>{it.description}</td>
+            <td style={{ textAlign: 'right', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+              {it.quantity != null && it.quantity !== '' ? `${it.quantity} ${it.unit ?? ''}`.trim() : ''}
+            </td>
+            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtChf(it.total_price)}</td>
+          </tr>
+        ))}
+        {snapshot?.total_amount != null && (
+          <tr>
+            <td colSpan={2} style={{ fontWeight: 700 }}>Rechnungstotal</td>
+            <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmtChf(snapshot.total_amount)}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  )
+}
+
+export default function AftersalesScreen() {
+  const [tasks, setTasks] = useState<AftersalesTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<FilterKey>('review')
+  const [selected, setSelected] = useState<AftersalesTask | null>(null)
+  const [draft, setDraft] = useState<{ send_date: string; mail_subject: string; mail_body: string }>(
+    { send_date: '', mail_subject: '', mail_body: '' },
+  )
+  const [busy, setBusy] = useState<'save' | 'send' | 'regen' | 'cancel' | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  async function load() {
+    setLoading(true)
+    try {
+      setTasks(await listAftersales(filter === 'all' ? undefined : filter))
+    } catch {
+      showToast('Laden fehlgeschlagen.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openDetail(t: AftersalesTask) {
+    setSelected(t)
+    setDraft({
+      send_date: t.send_date ?? '',
+      mail_subject: t.mail_subject ?? '',
+      mail_body: t.mail_body ?? '',
+    })
+  }
+
+  const editable = selected != null && (selected.status === 'review' || selected.status === 'scheduled')
+
+  async function handleSave() {
+    if (!selected) return
+    setBusy('save')
+    try {
+      await updateAftersales(selected.id, {
+        send_date: draft.send_date || undefined,
+        mail_subject: draft.mail_subject,
+        mail_body: draft.mail_body,
+      })
+      showToast('Gespeichert.')
+      setSelected(null)
+      await load()
+    } catch {
+      showToast('Speichern fehlgeschlagen.', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!selected) return
+    setBusy('regen')
+    try {
+      const res = await regenerateAftersalesBody(selected.id)
+      setDraft(d => ({ ...d, mail_subject: res.subject, mail_body: res.body }))
+      showToast('Text neu generiert.')
+    } catch {
+      showToast('Generierung fehlgeschlagen.', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleSend() {
+    if (!selected) return
+    setBusy('send')
+    try {
+      // Erst offene Änderungen sichern, dann senden.
+      if (editable) {
+        await updateAftersales(selected.id, {
+          send_date: draft.send_date || undefined,
+          mail_subject: draft.mail_subject,
+          mail_body: draft.mail_body,
+        })
+      }
+      await sendAftersalesNow(selected.id)
+      showToast('Mail gesendet.')
+      setSelected(null)
+      await load()
+    } catch {
+      showToast('Versand fehlgeschlagen.', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleCancel() {
+    if (!selected) return
+    setBusy('cancel')
+    try {
+      await cancelAftersales(selected.id)
+      showToast('Abgebrochen.')
+      setSelected(null)
+      await load()
+    } catch {
+      showToast('Abbrechen fehlgeschlagen.', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const reviewCount = tasks.filter(t => t.status === 'review').length
+
+  return (
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div>
+          <div className="admin-page-title">Aftersales</div>
+          <div className="admin-page-subtitle">
+            {tasks.length} Einträge{filter === 'review' && reviewCount > 0 ? ` · ${reviewCount} zu prüfen` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div className="admin-table-wrap">
+        <div className="admin-filter-bar" style={{ gap: 6 }}>
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              className={`admin-btn admin-btn-sm ${filter === f.key ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Kunde</th>
+                <th>Typ</th>
+                <th>Projekt</th>
+                <th>Versand am</th>
+                <th>Status</th>
+                <th>Aktion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.length === 0 ? (
+                <tr><td colSpan={6} className="admin-table-empty">Keine Aftersales-Einträge.</td></tr>
+              ) : tasks.map(t => (
+                <tr key={t.id}>
+                  <td><strong>{t.customer_name || '—'}</strong></td>
+                  <td>{KIND_LABEL[t.kind] || t.kind}</td>
+                  <td style={{ color: 'var(--muted)' }}>{t.project_name || '—'}</td>
+                  <td style={{ color: 'var(--muted)' }}>{fmtDate(t.send_date)}</td>
+                  <td>
+                    <span className={`admin-badge ${STATUS_BADGE[t.status] || 'admin-badge-draft'}`}>
+                      {STATUS_LABEL[t.status] || t.status}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openDetail(t)}>
+                      {editable && selected?.id === t.id ? 'Offen' : 'Vorschau'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Vorschau-/Bearbeiten-Modal */}
+      {selected && (
+        <div className="admin-modal-overlay" onClick={() => setSelected(null)}>
+          <div className="admin-modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div className="admin-modal-title">
+                {KIND_LABEL[selected.kind] || selected.kind} · {selected.customer_name || '—'}
+              </div>
+              <button className="admin-modal-close" onClick={() => setSelected(null)}>×</button>
+            </div>
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                Projekt: {selected.project_name || '—'}<br />
+                Empfänger: {selected.customer_email || <span style={{ color: 'var(--danger, #dc2626)' }}>keine E-Mail hinterlegt</span>}
+              </div>
+
+              {selected.status === 'answered' ? (
+                <div>
+                  <label className="admin-form-label">Kundenantwort</label>
+                  <div style={{
+                    background: 'var(--surface-2, #f1f5f9)', borderRadius: 8, padding: 12,
+                    fontSize: 14, whiteSpace: 'pre-wrap',
+                  }}>{selected.response_text || '(ohne Text)'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                    Beantwortet am {fmtDate(selected.responded_at)}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="admin-form-label">Versanddatum (automatisch)</label>
+                    <input
+                      className="admin-form-input"
+                      type="date"
+                      value={draft.send_date}
+                      disabled={!editable}
+                      onChange={e => setDraft(d => ({ ...d, send_date: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="admin-form-label">Betreff</label>
+                    <input
+                      className="admin-form-input"
+                      value={draft.mail_subject}
+                      disabled={!editable}
+                      placeholder="(wird beim Öffnen des Review-Fensters generiert)"
+                      onChange={e => setDraft(d => ({ ...d, mail_subject: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="admin-form-label">Mail-Text</label>
+                    <textarea
+                      className="admin-form-input"
+                      style={{ minHeight: 130, resize: 'vertical', fontFamily: 'inherit' }}
+                      value={draft.mail_body}
+                      disabled={!editable}
+                      placeholder="(wird per Mistral generiert, sobald das Review-Fenster öffnet)"
+                      onChange={e => setDraft(d => ({ ...d, mail_body: e.target.value }))}
+                    />
+                    {editable && (
+                      <button
+                        className="admin-btn admin-btn-secondary admin-btn-sm"
+                        style={{ marginTop: 8 }}
+                        onClick={handleRegenerate}
+                        disabled={busy != null}
+                      >
+                        {busy === 'regen' ? 'Generiere…' : 'Text neu generieren (Mistral)'}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="admin-form-label">Rechnungspositionen (mitgesendet)</label>
+                <PositionsTable snapshot={selected.positions_snapshot} />
+              </div>
+            </div>
+
+            {editable && (
+              <div className="admin-confirm-actions" style={{ padding: '12px 20px', borderTop: '1px solid var(--border, #e2e8f0)', flexWrap: 'wrap' }}>
+                <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={handleCancel} disabled={busy != null}>
+                  {busy === 'cancel' ? '…' : 'Abbrechen (nicht senden)'}
+                </button>
+                <div style={{ flex: 1 }} />
+                <button className="admin-btn admin-btn-secondary" onClick={handleSave} disabled={busy != null}>
+                  {busy === 'save' ? 'Speichere…' : 'Datum & Text speichern'}
+                </button>
+                <button
+                  className="admin-btn admin-btn-primary"
+                  onClick={handleSend}
+                  disabled={busy != null || !selected.customer_email}
+                  title={!selected.customer_email ? 'Keine Empfänger-E-Mail hinterlegt' : undefined}
+                >
+                  {busy === 'send' ? 'Sende…' : 'Sofort senden'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-toast-container">
+          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
+        </div>
+      )}
+    </div>
+  )
+}

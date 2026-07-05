@@ -479,10 +479,24 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                   <select
                     className="admin-input"
                     value={form.kind}
-                    onChange={e => setForm(f => f && ({ ...f, kind: e.target.value as ProjectKind }))}
+                    onChange={e => setForm(f => {
+                      if (!f) return f
+                      const nextKind = e.target.value as ProjectKind
+                      // Titel automatisch mitziehen, solange er noch dem Default-
+                      // Label der bisherigen Art entspricht (Nutzer hat ihn nicht
+                      // angepasst). Ein manuell getippter Titel bleibt erhalten.
+                      const titleUntouched = !f.name.trim() || f.name === PROJECT_KIND_LABELS[f.kind]
+                      const nextName = titleUntouched && nextKind !== 'project'
+                        ? PROJECT_KIND_LABELS[nextKind]
+                        : f.name
+                      return { ...f, kind: nextKind, name: nextName }
+                    })}
                     disabled={!!form.id && form.kind === 'project'}
                   >
-                    <option value="project">Kundenprojekt</option>
+                    {/* „Kundenprojekt" ist das normale, über den Picker gewählte
+                        Projekt — nur zur Anzeige eines bestehenden Kundenprojekts,
+                        nicht als umschaltbare Art für interne Einsätze. */}
+                    {form.kind === 'project' && <option value="project">Kundenprojekt</option>}
                     <option value="teamsitzung">Teamsitzung / Schulung</option>
                     <option value="lagerarbeit">Lagerarbeit</option>
                     <option value="werkstatt">Werkstatt / Vorbereitung</option>

@@ -14,6 +14,7 @@ interface Invoice {
   created_at: string
   paid_at: string | null
   pdf_url: string | null
+  storage_path?: string | null
   customer_email?: string | null
   projektleiter_id: string | null
 }
@@ -259,7 +260,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(inv.paid_at)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {inv.pdf_url && (
+                      {(inv.storage_path || inv.pdf_url) && (
                         <a
                           href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)}
                           target="_blank"

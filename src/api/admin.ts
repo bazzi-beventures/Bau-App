@@ -36,6 +36,7 @@ export interface PendingApproval {
   title: string
   filename: string
   file_url: string | null
+  storage_path?: string | null
   mime_type: string | null
   requested_by_name: string | null
   created_at: string
@@ -586,11 +587,13 @@ export interface MaterialCleanupRow {
 
 export interface MaterialCleanupScan {
   counts: Partial<Record<MaterialSzenario, number>>
-  total: number
-  rows: MaterialCleanupRow[]
+  total: number          // Artikel im gesamten Filter (Summe der counts)
+  row_total: number      // Zeilen in der aktuellen Ansicht (nach szenario-Filter)
+  rows: MaterialCleanupRow[]  // aktuelle Seite
+  page: number
+  page_size: number
+  total_pages: number
   blocked: MaterialSzenario[]
-  truncated: boolean
-  max_bulk: number
 }
 
 export interface BulkMaterialStatusResult {
@@ -599,13 +602,18 @@ export interface BulkMaterialStatusResult {
 }
 
 export async function scanMaterialCleanup(
-  p: { category?: string; supplier_id?: string; status?: string; szenario?: string } = {},
+  p: {
+    category?: string; supplier_id?: string; status?: string; szenario?: string
+    page?: number; page_size?: number
+  } = {},
 ): Promise<MaterialCleanupScan> {
   const params = new URLSearchParams()
   if (p.category) params.set('category', p.category)
   if (p.supplier_id) params.set('supplier_id', p.supplier_id)
   if (p.status) params.set('status', p.status)
   if (p.szenario) params.set('szenario', p.szenario)
+  if (p.page) params.set('page', String(p.page))
+  if (p.page_size) params.set('page_size', String(p.page_size))
   const qs = params.toString()
   return apiFetch(`/pwa/admin/material-cleanup/scan${qs ? `?${qs}` : ''}`) as Promise<MaterialCleanupScan>
 }
@@ -617,4 +625,80 @@ export async function bulkSetMaterialStatus(
     method: 'POST',
     body: JSON.stringify({ art_nrs: artNrs, is_active: isActive }),
   }) as Promise<BulkMaterialStatusResult>
+}
+
+// ─── Aftersales ────────────────────────────────────────────
+
+export type AftersalesKind = 'feedback' | 'repair_check'
+export type AftersalesStatus =
+  | 'scheduled' | 'review' | 'sent' | 'answered' | 'cancelled' | 'failed'
+
+export interface AftersalesPositionItem {
+  description: string
+  quantity?: number | string
+  unit?: string
+  unit_price?: number | string
+  total_price?: number | string
+}
+
+export interface AftersalesSnapshot {
+  invoice_number?: string
+  total_amount?: number | string | null
+  items?: AftersalesPositionItem[]
+}
+
+export interface AftersalesTask {
+  id: number
+  invoice_id: number | null
+  project_name: string | null
+  customer_name: string | null
+  customer_email: string | null
+  object_address: string | null
+  kind: AftersalesKind
+  status: AftersalesStatus
+  review_start: string
+  send_date: string
+  season_year: number | null
+  positions_snapshot: AftersalesSnapshot | null
+  mail_subject: string | null
+  mail_body: string | null
+  mail_body_generated_at: string | null
+  sent_at: string | null
+  response_text: string | null
+  responded_at: string | null
+  created_at: string
+}
+
+export async function listAftersales(status?: AftersalesStatus): Promise<AftersalesTask[]> {
+  const qs = status ? `?status=${status}` : ''
+  const res = await apiFetch(`/pwa/admin/aftersales${qs}`) as { tasks: AftersalesTask[] }
+  return res.tasks
+}
+
+export async function getAftersales(id: number): Promise<AftersalesTask> {
+  return apiFetch(`/pwa/admin/aftersales/${id}`) as Promise<AftersalesTask>
+}
+
+export async function updateAftersales(
+  id: number,
+  fields: { send_date?: string; mail_subject?: string; mail_body?: string },
+): Promise<void> {
+  await apiFetch(`/pwa/admin/aftersales/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  })
+}
+
+export async function regenerateAftersalesBody(
+  id: number,
+): Promise<{ subject: string; body: string }> {
+  return apiFetch(`/pwa/admin/aftersales/${id}/regenerate`, { method: 'POST' }) as Promise<{ subject: string; body: string }>
+}
+
+export async function sendAftersalesNow(id: number): Promise<void> {
+  await apiFetch(`/pwa/admin/aftersales/${id}/send`, { method: 'POST' })
+}
+
+export async function cancelAftersales(id: number): Promise<void> {
+  await apiFetch(`/pwa/admin/aftersales/${id}/cancel`, { method: 'POST' })
 }
