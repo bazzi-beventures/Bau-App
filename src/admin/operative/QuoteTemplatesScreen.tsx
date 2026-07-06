@@ -78,23 +78,16 @@ function OffertenVorlagenPanel() {
   const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
   const [skontoIsDefault, setSkontoIsDefault] = useState(true)
   const [savingSkonto, setSavingSkonto] = useState(false)
-  // Skonto-Warnhinweis auf der Rechnung ("Ungerechtfertigte Skontoabzüge werden
-  // nachbelastet"). Erscheint bei Abrechnung einer Offerte mit Skonto. Eigenes Tenant-Feld.
-  const [skontoWarn, setSkontoWarn] = useState('')
-  const [skontoWarnSaved, setSkontoWarnSaved] = useState('')
-  const [skontoWarnIsDefault, setSkontoWarnIsDefault] = useState(true)
-  const [savingSkontoWarn, setSavingSkontoWarn] = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto, skontoW] = await Promise.all([
+      const [data, notes, disc, discR, skonto] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/invoice-skonto-warning') as Promise<{ text: string; is_default: boolean }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
@@ -110,9 +103,6 @@ function OffertenVorlagenPanel() {
       setSkontoTxt(skonto.text ?? '')
       setSkontoTxtSaved(skonto.text ?? '')
       setSkontoIsDefault(skonto.is_default)
-      setSkontoWarn(skontoW.text ?? '')
-      setSkontoWarnSaved(skontoW.text ?? '')
-      setSkontoWarnIsDefault(skontoW.is_default)
     } finally {
       setLoading(false)
     }
@@ -195,27 +185,6 @@ function OffertenVorlagenPanel() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingSkonto(false)
-    }
-  }
-
-  async function saveInvoiceSkontoWarning(reset = false) {
-    setSavingSkontoWarn(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
-      // serverseitig ebenfalls als Reset behandelt).
-      const res = await apiFetch('/pwa/admin/invoice-skonto-warning', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : skontoWarn }),
-      }) as { text: string; is_default: boolean }
-      setSkontoWarn(res.text ?? '')
-      setSkontoWarnSaved(res.text ?? '')
-      setSkontoWarnIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Warnhinweis gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingSkontoWarn(false)
     }
   }
 
@@ -570,48 +539,6 @@ function OffertenVorlagenPanel() {
               </span>
             </div>
           </div>
-
-          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Warnhinweis (Rechnung)</div>
-              <div className="admin-page-subtitle">
-                Erscheint auf der Rechnung unter dem Total, sobald eine Offerte mit Skonto
-                abgerechnet wird — zusammen mit der wiederholten Skonto-Kondition. Standardsatz,
-                falls ein Kunde Skonto abzieht, ohne rechtzeitig zu zahlen.
-                {skontoWarnIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={2}
-              value={skontoWarn}
-              onChange={e => setSkontoWarn(e.target.value)}
-              placeholder="Ungerechtfertigte Skontoabzüge werden nachbelastet."
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveInvoiceSkontoWarning(false)}
-                disabled={savingSkontoWarn || skontoWarn === skontoWarnSaved}
-              >
-                {savingSkontoWarn ? 'Speichern…' : 'Warnhinweis speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveInvoiceSkontoWarning(true)}
-                disabled={savingSkontoWarn || skontoWarnIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Leer lassen setzt auf den System-Standardtext zurück.
-              </span>
-            </div>
-          </div>
         </>
       )}
 
@@ -725,15 +652,200 @@ function OffertenVorlagenPanel() {
   )
 }
 
-// Platzhalter — Rechnungs-Vorlagen sind noch nicht umgesetzt (Tab bewusst leer).
+// Rechnungs-Vorlagen: aktuell der Skonto-Warnhinweis, der bei Abrechnung einer Offerte
+// mit Skonto auf der Rechnung erscheint. Eigenes Tenant-Feld + System-Default.
 function RechnungsVorlagenPanel() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState<string | null>(null)
+  // Skonto-Warnhinweis auf der Rechnung ("Ungerechtfertigte Skontoabzüge werden
+  // nachbelastet"). Erscheint bei Abrechnung einer Offerte mit Skonto.
+  const [skontoWarn, setSkontoWarn] = useState('')
+  const [skontoWarnSaved, setSkontoWarnSaved] = useState('')
+  const [skontoWarnIsDefault, setSkontoWarnIsDefault] = useState(true)
+  const [savingSkontoWarn, setSavingSkontoWarn] = useState(false)
+  // Schlusssatz/Dankestext auf der Rechnung (erscheint vor dem QR-Zahlteil). Analog zum
+  // Offerte-Disclaimer: 3 Zustände (Default / eigener Text / bewusst leer). Eigenes Tenant-Feld.
+  const [footerTxt, setFooterTxt] = useState('')
+  const [footerTxtSaved, setFooterTxtSaved] = useState('')
+  const [footerIsDefault, setFooterIsDefault] = useState(true)
+  const [savingFooter, setSavingFooter] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [skontoW, footer] = await Promise.all([
+        apiFetch('/pwa/admin/invoice-skonto-warning') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/invoice-footer-text') as Promise<{ text: string; is_default: boolean }>,
+      ])
+      setSkontoWarn(skontoW.text ?? '')
+      setSkontoWarnSaved(skontoW.text ?? '')
+      setSkontoWarnIsDefault(skontoW.is_default)
+      setFooterTxt(footer.text ?? '')
+      setFooterTxtSaved(footer.text ?? '')
+      setFooterIsDefault(footer.is_default)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  async function saveInvoiceSkontoWarning(reset = false) {
+    setSavingSkontoWarn(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
+      // serverseitig ebenfalls als Reset behandelt).
+      const res = await apiFetch('/pwa/admin/invoice-skonto-warning', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : skontoWarn }),
+      }) as { text: string; is_default: boolean }
+      setSkontoWarn(res.text ?? '')
+      setSkontoWarnSaved(res.text ?? '')
+      setSkontoWarnIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Warnhinweis gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingSkontoWarn(false)
+    }
+  }
+
+  async function saveInvoiceFooterText(reset = false) {
+    setSavingFooter(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer String
+      // ist erlaubt und heisst "bewusst kein Schlusssatz" (wird gespeichert).
+      const res = await apiFetch('/pwa/admin/invoice-footer-text', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : footerTxt }),
+      }) as { text: string; is_default: boolean }
+      setFooterTxt(res.text ?? '')
+      setFooterTxtSaved(res.text ?? '')
+      setFooterIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Schlusssatz gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingFooter(false)
+    }
+  }
+
   return (
-    <div className="admin-page-header">
-      <div>
-        <div className="admin-page-title">Rechnungs-Vorlagen</div>
-        <div className="admin-page-subtitle">Vorlagen für Rechnungen — kommt bald.</div>
+    <>
+      <div className="admin-page-header">
+        <div>
+          <div className="admin-page-title">Rechnungs-Vorlagen</div>
+          <div className="admin-page-subtitle">Texte, die auf der Rechnung erscheinen</div>
+        </div>
       </div>
-    </div>
+
+      {loading ? (
+        <div className="admin-table-wrap"><div className="admin-loading"><div className="admin-spinner" /> Laden…</div></div>
+      ) : (
+        <>
+          {error && <div className="admin-form-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
+          <div className="admin-page-header" style={{ marginTop: 8 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Warnhinweis (Rechnung)</div>
+              <div className="admin-page-subtitle">
+                Erscheint auf der Rechnung unter dem Total, sobald eine Offerte mit Skonto
+                abgerechnet wird — zusammen mit der wiederholten Skonto-Kondition. Standardsatz,
+                falls ein Kunde Skonto abzieht, ohne rechtzeitig zu zahlen.
+                {skontoWarnIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={2}
+              value={skontoWarn}
+              onChange={e => setSkontoWarn(e.target.value)}
+              placeholder="Ungerechtfertigte Skontoabzüge werden nachbelastet."
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveInvoiceSkontoWarning(false)}
+                disabled={savingSkontoWarn || skontoWarn === skontoWarnSaved}
+              >
+                {savingSkontoWarn ? 'Speichern…' : 'Warnhinweis speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveInvoiceSkontoWarning(true)}
+                disabled={savingSkontoWarn || skontoWarnIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Leer lassen setzt auf den System-Standardtext zurück.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Schlusssatz / Dankestext (erscheint vor dem QR-Zahlteil) ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusssatz (Dankestext)</div>
+              <div className="admin-page-subtitle">
+                Erscheint zuunterst auf der Rechnung, direkt vor dem QR-Zahlteil — z.B.
+                „Vielen Dank für Ihr Vertrauen".
+                {footerIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+                {!footerIsDefault && footerTxtSaved.trim() === '' &&
+                  ' Aktuell ist kein Schlusssatz gesetzt — die Rechnung zeigt vor dem QR-Teil keinen Text.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={3}
+              value={footerTxt}
+              onChange={e => setFooterTxt(e.target.value)}
+              placeholder="Vielen Dank für Ihr Vertrauen und die angenehme Zusammenarbeit."
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveInvoiceFooterText(false)}
+                disabled={savingFooter || footerTxt === footerTxtSaved}
+              >
+                {savingFooter ? 'Speichern…' : 'Schlusssatz speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveInvoiceFooterText(true)}
+                disabled={savingFooter || footerIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Feld leeren und speichern entfernt den Schlusssatz ganz; „zurücksetzen" stellt den Standardtext wieder her.
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {toast && (
+        <div className="admin-toast-container">
+          <div className="admin-toast success">{toast}</div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -746,7 +858,9 @@ export default function QuoteTemplatesScreen() {
 
   return (
     <div className="admin-page">
-      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+      {/* kpi-admin-tabs-sticky: die Reiter bleiben beim Scrollen oben sichtbar
+          (der Screen wird durch die vielen Vorlagen-Abschnitte lang). */}
+      <div className="kpi-admin-tabs kpi-admin-tabs-sticky" style={{ marginBottom: 20 }}>
         <button
           className={`kpi-admin-tab${tab === 'offerte' ? ' active' : ''}`}
           onClick={() => setTab('offerte')}

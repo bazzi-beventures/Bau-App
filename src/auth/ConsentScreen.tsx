@@ -29,7 +29,7 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
       <TenantLogo logoUrl={logoUrl} />
       <div className="auth-title">Datenschutzerklärung</div>
       <div className="auth-sub">Hallo {displayName.split(' ')[0]}, bitte lies und bestätige Folgendes:</div>
-      <div className="consent-version">Version 3 · April 2026</div>
+      <div className="consent-version">Version 4 · Juli 2026</div>
 
       <div className="consent-box">
         <p><strong>Gespeicherte Daten:</strong></p>
@@ -45,8 +45,8 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
         <ul>
           <li><strong>Mistral AI</strong> (EU/Frankreich) — Sprach- und Texterkennung (Chat, Transkription)</li>
           <li><strong>Anthropic Claude</strong> (USA, EU SCC) — PDF-Extraktion</li>
-          <li><strong>Supabase</strong> (EU/Frankfurt) — Datenbank-Speicherung</li>
-          <li><strong>Google Drive / OneDrive</strong> — Fotos und Dokumente</li>
+          <li><strong>Supabase</strong> (EU/Frankfurt) — Datenbank, Fotos und Dokumente</li>
+          <li><strong>Backblaze B2</strong> (EU/Amsterdam) — verschlüsselte Backups</li>
           <li><strong>SMTP-Provider</strong> — E-Mail-Versand</li>
         </ul>
 
@@ -54,10 +54,10 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
           <strong>Rechtsgrundlage:</strong> Vertragserfüllung (nDSG Art. 31 Abs. 2 lit. a)
         </p>
         <p>
-          Es gilt das schweizerische Datenschutzgesetz (nDSG). Sprach- und Textdaten
-          werden in der EU (Frankreich, Deutschland) verarbeitet. Einzelne Dienste
-          (Anthropic Claude für PDF-Extraktion, Microsoft OneDrive) übermitteln Daten
-          in die USA — mit Standardvertragsklauseln und Schweizer Zusatz abgesichert.
+          Es gilt das schweizerische Datenschutzgesetz (nDSG). Deine Daten werden in
+          der EU (Frankreich, Deutschland, Niederlande) gespeichert und verarbeitet.
+          Ein einzelner Dienst (Anthropic Claude für die PDF-Extraktion) übermittelt
+          Daten in die USA — mit Standardvertragsklauseln und Schweizer Zusatz abgesichert.
         </p>
         <p>
           Du hast jederzeit das Recht auf Auskunft, Berichtigung und Löschung deiner Daten.

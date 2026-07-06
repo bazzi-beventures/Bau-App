@@ -662,6 +662,7 @@ export interface AftersalesSnapshot {
   total_amount?: number | string | null
   execution_period?: { from?: string; to?: string } | null
   monteur?: string
+  projektleiter?: string
   items?: AftersalesPositionItem[]
 }
 

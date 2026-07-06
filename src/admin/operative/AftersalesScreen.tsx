@@ -246,6 +246,7 @@ export default function AftersalesScreen() {
                 <th>Kunde</th>
                 <th>Typ</th>
                 <th>Projekt</th>
+                <th>Projektleiter</th>
                 <th>Versand am</th>
                 <th>Status</th>
                 <th>Aktion</th>
@@ -253,12 +254,13 @@ export default function AftersalesScreen() {
             </thead>
             <tbody>
               {tasks.length === 0 ? (
-                <tr><td colSpan={6} className="admin-table-empty">Keine After-Sales-Einträge.</td></tr>
+                <tr><td colSpan={7} className="admin-table-empty">Keine After-Sales-Einträge.</td></tr>
               ) : tasks.map(t => (
                 <tr key={t.id}>
                   <td><strong>{t.customer_name || '—'}</strong></td>
                   <td>{KIND_LABEL[t.kind] || t.kind}</td>
                   <td style={{ color: 'var(--muted)' }}>{t.project_name || '—'}</td>
+                  <td style={{ color: 'var(--muted)' }}>{t.positions_snapshot?.projektleiter || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(t.send_date)}</td>
                   <td>
                     <span className={`admin-badge ${STATUS_BADGE[t.status] || 'admin-badge-draft'}`}>
@@ -325,7 +327,7 @@ export default function AftersalesScreen() {
                       className="admin-form-input"
                       value={draft.mail_subject}
                       disabled={!editable}
-                      placeholder="(wird beim Öffnen des Review-Fensters generiert)"
+                      placeholder="(wird automatisch generiert)"
                       onChange={e => setDraft(d => ({ ...d, mail_subject: e.target.value }))}
                     />
                   </div>
@@ -336,7 +338,7 @@ export default function AftersalesScreen() {
                       style={{ minHeight: 130, resize: 'vertical', fontFamily: 'inherit' }}
                       value={draft.mail_body}
                       disabled={!editable}
-                      placeholder="(wird per Mistral generiert, sobald das Review-Fenster öffnet)"
+                      placeholder="(wird automatisch per Mistral generiert)"
                       onChange={e => setDraft(d => ({ ...d, mail_body: e.target.value }))}
                     />
                     {editable && (

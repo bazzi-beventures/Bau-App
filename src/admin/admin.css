@@ -1034,6 +1034,18 @@ button.admin-list-item {
 .kpi-admin-tab:hover { color: var(--text); }
 .kpi-admin-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
+/* Opt-in: Tab-Leiste bleibt beim Scrollen oben kleben (langer Screen, z.B. Vorlagen).
+   Scroll-Container ist .admin-content bzw. .admin-content-mobile. background: var(--bg)
+   verdeckt den durchlaufenden Inhalt (gleiche Farbe wie der Seitenhintergrund); z-index
+   hält die Leiste über normalem Fluss-Inhalt (Tabellen/Karten haben keinen z-index),
+   bleibt aber unter der mobilen Bottom-Tabbar (z-index 50) und Modals. */
+.kpi-admin-tabs.kpi-admin-tabs-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+}
+
 .kpi-admin-content { flex: 1; overflow-y: auto; }
 
 /* Admin-Tools: Tab-Leiste über dem aktiven Tool-Screen. Das horizontale Padding
