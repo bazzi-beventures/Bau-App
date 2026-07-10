@@ -2129,6 +2129,24 @@ button.admin-list-item {
   cursor: grabbing;
 }
 
+/* Pille mit Zusatzfeldern (Adresse, PL …): nicht auf 2 Zeilen kappen. */
+.project-cal-pill.has-extra {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+/* Zusatz-Zeilen auf der Kachel (Monat + Woche): kleiner, leicht gedämpft. */
+.project-cal-pill-extra,
+.project-cal-week-event-extra {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.2;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Wochen-Zeitraster ──────────────────────────────────────── */
 
 .project-cal-week {
@@ -2273,6 +2291,14 @@ button.admin-list-item {
   padding: 2px 6px;
   font-size: 11px;
   border-radius: 999px;
+}
+
+/* Ganztags-Eintrag mit Zusatzfeldern: kein schmaler Pillen-Chip, sondern ein
+   wachsendes Rechteck, damit Adresse/PL/Kunde/Bemerkung Platz haben. */
+.project-cal-week-event.allday.has-extra {
+  border-radius: 6px;
+  padding: 4px 6px;
+  align-items: stretch;
 }
 
 .project-cal-week-event:active {

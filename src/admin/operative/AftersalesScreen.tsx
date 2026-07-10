@@ -256,7 +256,7 @@ export default function AftersalesScreen() {
               {tasks.length === 0 ? (
                 <tr><td colSpan={7} className="admin-table-empty">Keine After-Sales-Einträge.</td></tr>
               ) : tasks.map(t => (
-                <tr key={t.id}>
+                <tr key={t.id} onClick={() => openDetail(t)}>
                   <td><strong>{t.customer_name || '—'}</strong></td>
                   <td>{KIND_LABEL[t.kind] || t.kind}</td>
                   <td style={{ color: 'var(--muted)' }}>{t.project_name || '—'}</td>
@@ -270,7 +270,7 @@ export default function AftersalesScreen() {
                   <td>
                     <button
                       className={`admin-btn admin-btn-sm ${isEditable(t.status) ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                      onClick={() => openDetail(t)}
+                      onClick={e => { e.stopPropagation(); openDetail(t) }}
                     >
                       {isEditable(t.status) ? 'Bearbeiten' : 'Vorschau'}
                     </button>

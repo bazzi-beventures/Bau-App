@@ -75,6 +75,7 @@ export interface Project {
   kind: ProjectKind
   customer_id: string | null
   customer: EmbeddedCustomer | null
+  object_name: string | null
   object_address: string | null
   art_der_arbeit: string[] | null
   projektleiter_id: string | null

@@ -224,6 +224,11 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'users' ? ' active' : ''}`} onClick={() => navigate('users')}>
                   <IconKey /><span>Benutzerverwaltung</span>
                 </button>
+                {isManagement && has('document_backup') && (
+                  <button className={`admin-mobile-drawer-item${screen === 'document-backup' ? ' active' : ''}`} onClick={() => navigate('document-backup')}>
+                    <IconDocument /><span>Datensicherung</span>
+                  </button>
+                )}
                 {isSuperadmin && (
                   <button className={`admin-mobile-drawer-item${screen === 'admin-tools' ? ' active' : ''}`} onClick={() => navigate('admin-tools')}>
                     <IconSettings /><span>Admin-Tools</span>

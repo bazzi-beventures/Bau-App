@@ -18,6 +18,7 @@ export type ModuleName =
   | 'hr_weekly_report'
   | 'admin_clock_in_push'
   | 'aftersales'
+  | 'document_backup'
 
 export function hasModule(user: UserInfo | null, name: ModuleName): boolean {
   if (!user) return false

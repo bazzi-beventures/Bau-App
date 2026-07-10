@@ -41,6 +41,7 @@ const EMPTY_FORM: ProjectDraftPayload = {
   customer_address: '',
   title: '',
   description: '',
+  object_name: '',
   object_address: '',
   materials: [],
   notes: '',
@@ -49,6 +50,7 @@ const EMPTY_FORM: ProjectDraftPayload = {
 export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [objectName, setObjectName] = useState('')
   const [objectAddress, setObjectAddress] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -110,6 +112,7 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
   function resetForm() {
     setTitle('')
     setDescription('')
+    setObjectName('')
     setObjectAddress('')
     setCustomerName('')
     setCustomerPhone('')
@@ -150,6 +153,7 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
       ...EMPTY_FORM,
       title: cleanTitle,
       description: description.trim() || null,
+      object_name: objectName.trim() || null,
       object_address: objectAddress.trim() || null,
       customer_name: cleanCustomer,
       customer_phone: customerPhone.trim() || null,
@@ -246,6 +250,15 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
               onChange={e => setDescription(e.target.value)}
               rows={4}
               placeholder="Was genau soll gemacht werden?"
+            />
+          </label>
+          <label className="entwurf-label">
+            <span>Objekt-Name (optional)</span>
+            <input
+              className="entwurf-input"
+              value={objectName}
+              onChange={e => setObjectName(e.target.value)}
+              placeholder="z.B. MFH Sonnhalde oder Familie Muster"
             />
           </label>
           <label className="entwurf-label">

@@ -28,6 +28,7 @@ import QuoteTemplatesScreen from './operative/QuoteTemplatesScreen'
 import SuppliersScreen from './masterdata/SuppliersScreen'
 import StaffRolesScreen from './masterdata/StaffRolesScreen'
 import UsersScreen from './system/UsersScreen'
+import DocumentBackupScreen from './system/DocumentBackupScreen'
 import AdminToolsScreen from './system/AdminToolsScreen'
 import KpiScreen from './kpis/KpiScreen'
 import HelpBubble from '../shared/HelpBubble'
@@ -89,6 +90,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
   'quote-templates': 'Vorlagen',
   'users': 'Benutzerverwaltung',
   'kpis': 'Kennzahlen',
+  'document-backup': 'Datensicherung',
   'admin-tools': 'Admin-Tools',
 }
 
@@ -132,7 +134,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'bulk-clockin') && !isManagement) {
+    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'bulk-clockin' || screen === 'document-backup') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     if (screen === 'admin-tools' && !isSuperadmin) {
@@ -162,6 +164,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'quote-templates': return <QuoteTemplatesScreen />
       case 'users':        return <UsersScreen />
       case 'kpis':         return guard('kpis', <KpiScreen />)
+      case 'document-backup': return guard('document_backup', <DocumentBackupScreen />)
       case 'admin-tools':  return <AdminToolsScreen userRole={user.role} />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }

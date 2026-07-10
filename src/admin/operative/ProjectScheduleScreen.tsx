@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiBlobFetch, apiFetch } from '../../api/client'
-import { upsertProject, updateProjectSchedule } from '../../api/admin'
+import { upsertProject, updateProjectSchedule, getSchedulingConfig, SchedulingConfig } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
 import ProjectScheduleCalendar from './ProjectScheduleCalendar'
@@ -94,6 +94,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
   const [staff, setStaff] = useState<StaffLite[]>([])
   const [customers, setCustomers] = useState<CustomerLite[]>([])
+  const [schedulingConfig, setSchedulingConfig] = useState<SchedulingConfig | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -114,14 +115,22 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   async function loadAll() {
     setLoading(true)
     try {
-      const [proj, st, cust] = await Promise.all([
+      const [proj, st, cust, sched] = await Promise.all([
         apiFetch('/pwa/admin/projects') as Promise<Project[]>,
         apiFetch('/pwa/admin/staff') as Promise<StaffLite[]>,
         apiFetch('/pwa/admin/customers') as Promise<CustomerLite[]>,
+        // Anzeige-Config ist optional — Fehler darf den Kalender nicht blockieren.
+        getSchedulingConfig().catch(() => null),
       ])
       setProjects(proj.filter(p => !p.is_closed && p.status !== 'abgeschlossen'))
       setStaff(st)
       setCustomers(cust)
+      if (sched) {
+        setSchedulingConfig({
+          fields: { ...sched.defaults.fields, ...(sched.config.fields || {}) },
+          colors: { ...sched.defaults.colors, ...(sched.config.colors || {}) },
+        })
+      }
     } catch {
       showToast('Daten konnten nicht geladen werden.', 'error')
     } finally {
@@ -478,6 +487,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             onCreateSlot={handleCreateSlot}
             onVisibleWeekChange={setVisibleWeekIso}
             onVisibleStaffChange={setVisibleStaffIds}
+            schedulingConfig={schedulingConfig}
           />
         </div>
 

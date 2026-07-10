@@ -12,6 +12,7 @@ export interface ProjectDraftPayload {
   customer_address?: string | null
   title: string
   description?: string | null
+  object_name?: string | null
   object_address?: string | null
   materials: DraftMaterial[]
   notes?: string | null
@@ -49,6 +50,7 @@ export async function getAdminProjectDrafts(
 export interface ConvertDraftPayload {
   project_name: string
   customer_id?: string | null
+  object_name?: string | null
   object_address?: string | null
   // Baustellenkontakt — wird serverseitig als is_site_contact-Eintrag in
   // projects.kontakte gespeichert (siehe Migration 20260516d).

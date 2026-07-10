@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Project } from './ProjectsScreen'
+import { Project, projectCustomerName } from './ProjectsScreen'
+import type { SchedulingConfig } from '../../api/admin'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
   parseDateStr, diffDays, hhmmToMin, minToHHMM,
@@ -34,6 +35,8 @@ interface Props {
   // Meldet die aktuell im Filter aktiven Staff-IDs hoch (alle ohne Hide-Flag).
   // Wenn null gemeldet wird, ist kein Filter aktiv (Default = alle Monteure).
   onVisibleStaffChange?: (visibleIds: string[] | null) => void
+  // Tenant-Anzeige-Config: Einsatz-Art-Farben + optionale Kachel-Felder.
+  schedulingConfig?: SchedulingConfig
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,8 +75,10 @@ function pillLabel(p: Project): string {
 
 // Pill-Farbe je Einsatz-Art. Kundenprojekte bleiben Brand-Blau, interne
 // Einsätze unterscheiden sich farblich klar davon.
+// Die --kind-*-Variablen setzt der Kalender-Root aus der Tenant-Config (scheduling_config).
+// Fehlt eine Variable, greift der hier hinterlegte Default.
 const KIND_COLORS: Record<string, string> = {
-  project:     'var(--primary)',
+  project:     'var(--kind-project, var(--primary))',
   teamsitzung: 'var(--kind-teamsitzung, #7c3aed)',  // Lila
   lagerarbeit: 'var(--kind-lagerarbeit, #d97706)',  // Bernstein
   werkstatt:   'var(--kind-werkstatt, #0d9488)',    // Türkis
@@ -82,6 +87,20 @@ const KIND_COLORS: Record<string, string> = {
 
 function pillBg(p: Project): string {
   return KIND_COLORS[p.kind || 'project'] ?? KIND_COLORS.project
+}
+
+// Optionale Zusatz-Zeilen auf der Kachel, gesteuert per Tenant-Config (scheduling_config.fields).
+function pillExtraLines(p: Project, staff: StaffLite[], fields?: Record<string, boolean>): string[] {
+  if (!fields) return []
+  const lines: string[] = []
+  if (fields.address && p.object_address) lines.push(p.object_address)
+  if (fields.projektleiter && p.projektleiter_id) {
+    const pl = staff.find(s => s.id === p.projektleiter_id)?.name
+    if (pl) lines.push(`PL: ${pl}`)
+  }
+  if (fields.customer) { const c = projectCustomerName(p); if (c) lines.push(c) }
+  if (fields.bemerkung && p.bemerkung) lines.push(p.bemerkung)
+  return lines
 }
 
 function projectMonteurNames(p: Project, staff: StaffLite[]): string {
@@ -126,9 +145,11 @@ function CalendarLegend({ canton }: { canton: string }) {
 // ─── Month View ───────────────────────────────────────────────────────────────
 
 function MonthView({
-  projects, currentDate, onSelect, onReschedule, holidays,
+  projects, staff, fields, currentDate, onSelect, onReschedule, holidays,
 }: {
   projects: Project[]
+  staff: StaffLite[]
+  fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
@@ -185,19 +206,25 @@ function MonthView({
                   </span>
                 )}
               </div>
-              {dayProjects.map((p, j) => (
-                <div
-                  key={j}
-                  className="absence-cal-pill project-cal-pill"
-                  draggable
-                  onDragStart={e => setDragPayload(e, p.id, dayISO)}
-                  title={`${p.name} · ${fmtRange(p)}`}
-                  style={{ background: pillBg(p) }}
-                  onClick={() => onSelect(p)}
-                >
-                  {pillLabel(p)}
-                </div>
-              ))}
+              {dayProjects.map((p, j) => {
+                const extra = pillExtraLines(p, staff, fields)
+                return (
+                  <div
+                    key={j}
+                    className={`absence-cal-pill project-cal-pill${extra.length ? ' has-extra' : ''}`}
+                    draggable
+                    onDragStart={e => setDragPayload(e, p.id, dayISO)}
+                    title={`${p.name} · ${fmtRange(p)}`}
+                    style={{ background: pillBg(p) }}
+                    onClick={() => onSelect(p)}
+                  >
+                    {pillLabel(p)}
+                    {extra.map((line, k) => (
+                      <div key={k} className="project-cal-pill-extra">{line}</div>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
           )
         })}
@@ -281,10 +308,11 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
 }
 
 function WeekView({
-  projects, staff, currentDate, onSelect, onReschedule, onCreateSlot, holidays,
+  projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays,
 }: {
   projects: Project[]
   staff: StaffLite[]
+  fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
@@ -389,6 +417,7 @@ function WeekView({
   ) {
     const monteurs = projectMonteurNames(p, staff)
     const timeLabel = fmtTimeRange(p)
+    const extra = pillExtraLines(p, staff, fields)
     const laneStyle: React.CSSProperties = {}
     if (!allDay && lane && lane.total > 1) {
       // Gleichverteilte Lanes mit kleinem Spalt; left/right der CSS-Defaults
@@ -398,10 +427,14 @@ function WeekView({
       laneStyle.width = `calc(${widthPct}% - 4px)`
       laneStyle.right = 'auto'
     }
+    // Getaktete Blöcke sind höhenbegrenzt (Dauer). Bei aktiven Zusatzfeldern eine
+    // Mindesthöhe erzwingen, damit die Infos sichtbar bleiben statt weggeschnitten
+    // zu werden — auch bei kurzen Einsätzen.
+    const extraMinHeight = extra.length ? 30 + extra.length * 14 : 0
     return (
       <div
         key={p.id}
-        className={`project-cal-week-event${allDay ? ' allday' : ''}`}
+        className={`project-cal-week-event${allDay ? ' allday' : ''}${extra.length ? ' has-extra' : ''}`}
         draggable
         onDragStart={e => { dragGrabYRef.current = Math.round(e.nativeEvent.offsetY) || 0; setDragPayload(e, p.id, dayISO) }}
         onClick={() => onSelect(p)}
@@ -415,6 +448,7 @@ function WeekView({
                 height: p.end_time
                   ? blockHeightPx(p.start_time!, p.end_time)
                   : Math.max(WEEK_HOUR_HEIGHT, 44),
+                minHeight: extraMinHeight || undefined,
                 ...laneStyle,
               }
         }
@@ -423,6 +457,9 @@ function WeekView({
           <div className="project-cal-week-event-time">{timeLabel}</div>
         )}
         <div className="project-cal-week-event-name">{p.name}</div>
+        {extra.map((line, k) => (
+          <div key={k} className="project-cal-week-event-extra">{line}</div>
+        ))}
       </div>
     )
   }
@@ -532,9 +569,15 @@ function WeekView({
 
 export default function ProjectScheduleCalendar({
   projects, staff, loading, canton = 'ZH', onSelect, onReschedule, onCreateSlot,
-  onVisibleWeekChange, onVisibleStaffChange,
+  onVisibleWeekChange, onVisibleStaffChange, schedulingConfig,
 }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'staff'>('month')
+  const fields = schedulingConfig?.fields
+  // Einsatz-Art-Farben als scoped CSS-Variablen (--kind-*) auf dem Kalender-Root.
+  const kindColorVars: React.CSSProperties = {}
+  for (const [k, v] of Object.entries(schedulingConfig?.colors || {})) {
+    ;(kindColorVars as Record<string, string>)[`--kind-${k}`] = v
+  }
   const [currentDate, setCurrentDate] = useState(new Date())
   const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
   // Mitarbeiteransicht: Index des aktuell fokussierten Mitarbeiters (in staff).
@@ -634,7 +677,7 @@ export default function ProjectScheduleCalendar({
       })()
 
   return (
-    <div>
+    <div style={kindColorVars}>
       <div className="absence-cal-toolbar">
         <div style={{ display: 'flex', gap: 6 }}>
           <button
@@ -735,6 +778,8 @@ export default function ProjectScheduleCalendar({
       ) : viewMode === 'month' ? (
         <MonthView
           projects={visibleProjects}
+          staff={staff}
+          fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
@@ -746,6 +791,7 @@ export default function ProjectScheduleCalendar({
         <WeekView
           projects={visibleProjects}
           staff={staff}
+          fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}

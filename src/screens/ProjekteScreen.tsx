@@ -82,6 +82,7 @@ interface Project {
   art_der_arbeit: string[] | null
   customer_id: string | null
   customer: EmbeddedCustomer | null
+  object_name: string | null
   object_address: string | null
   start_date: string | null
   end_date: string | null
@@ -471,13 +472,19 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <span className="projekte-detail-value">{selected.customer?.billing_name || selected.customer?.name}</span>
               </div>
             )}
+            {selected.object_name && (
+              <div className="projekte-detail-row">
+                <span className="projekte-detail-label">Objekt</span>
+                <span className="projekte-detail-value">{selected.object_name}</span>
+              </div>
+            )}
             {selected.object_address && (
               <div className="projekte-detail-row">
                 <span className="projekte-detail-label">Objektadresse</span>
                 <span className="projekte-detail-value">{selected.object_address}</span>
               </div>
             )}
-            {!selected.customer && !selected.object_address && (
+            {!selected.customer && !selected.object_name && !selected.object_address && (
               <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
             )}
           </div>

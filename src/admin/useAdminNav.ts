@@ -24,6 +24,7 @@ export type AdminScreen =
   | 'quote-templates'
   | 'users'
   | 'kpis'
+  | 'document-backup'
   | 'admin-tools'
 
 export interface AdminNavState {

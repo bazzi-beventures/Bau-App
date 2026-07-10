@@ -314,6 +314,7 @@ export interface Project {
     object_address: string | null
     email: string | null
   } | null
+  object_name: string | null
   object_address: string | null
   is_closed: boolean
   created_at: string
@@ -493,6 +494,48 @@ export async function updateTenantTravelCost(
     method: 'PATCH',
     body: JSON.stringify({ travel_cost_table: table }),
   }) as Promise<{ travel_cost_table: TravelCostRow[] | null }>
+}
+
+// ─── Tenant Einsatzplanung-Anzeige ──────────────────────────
+
+// Bekannte Einsatz-Arten (kind) — Reihenfolge = Anzeige-Reihenfolge im Konfig-Tab.
+export const SCHEDULING_KINDS = [
+  { key: 'project', label: 'Kundenprojekt' },
+  { key: 'teamsitzung', label: 'Teamsitzung' },
+  { key: 'lagerarbeit', label: 'Lagerarbeit' },
+  { key: 'werkstatt', label: 'Werkstatt' },
+  { key: 'sonstiges', label: 'Sonstiges' },
+] as const
+
+// Optionale Anzeige-Felder auf den Kalender-Kacheln.
+export const SCHEDULING_FIELDS = [
+  { key: 'address', label: 'Adresse (Objekt)' },
+  { key: 'projektleiter', label: 'Projektleiter' },
+  { key: 'customer', label: 'Kunde' },
+  { key: 'bemerkung', label: 'Bemerkung' },
+] as const
+
+export interface SchedulingConfig {
+  fields: Record<string, boolean>
+  colors: Record<string, string>
+}
+
+export interface TenantSchedulingResponse {
+  config: Partial<SchedulingConfig>  // {} = Mandant nutzt System-Default
+  defaults: SchedulingConfig
+}
+
+export async function getSchedulingConfig(): Promise<TenantSchedulingResponse> {
+  return apiFetch('/pwa/admin/tenant/scheduling') as Promise<TenantSchedulingResponse>
+}
+
+export async function updateSchedulingConfig(
+  config: SchedulingConfig,
+): Promise<{ config: SchedulingConfig }> {
+  return apiFetch('/pwa/admin/tenant/scheduling', {
+    method: 'PATCH',
+    body: JSON.stringify({ config }),
+  }) as Promise<{ config: SchedulingConfig }>
 }
 
 // ─── Tenant Feature-Flags (Workflows) ───────────────────────
@@ -724,4 +767,45 @@ export async function cancelAftersales(id: number): Promise<void> {
 
 export async function reactivateAftersales(id: number): Promise<{ new_status: AftersalesStatus }> {
   return apiFetch(`/pwa/admin/aftersales/${id}/reactivate`, { method: 'POST' }) as Promise<{ new_status: AftersalesStatus }>
+}
+
+// ─── Dokument-Massensicherung (Modul document_backup, nur Management) ─────────
+
+export type DocumentBackupStatus = 'pending' | 'running' | 'ready' | 'failed'
+
+export interface DocumentBackupPart {
+  filename: string | null
+  document_count: number
+  total_bytes: number
+  download_url: string
+}
+
+export interface DocumentBackupJob {
+  id: number
+  status: DocumentBackupStatus
+  document_count: number
+  total_bytes: number
+  filename: string | null
+  error: string | null
+  created_at: string
+  ready_at: string | null
+  expires_at: string | null
+  expired: boolean
+  // Ein Backup kann auf mehrere Teil-ZIPs aufgeteilt sein (Storage-Upload-Limit).
+  // `parts` ist maßgeblich; `download_url` bleibt für Einzel-Teil-Backups gesetzt.
+  parts: DocumentBackupPart[]
+  download_url: string | null
+}
+
+export async function startDocumentBackup(): Promise<DocumentBackupJob> {
+  return apiFetch('/pwa/admin/document-backup', { method: 'POST' }) as Promise<DocumentBackupJob>
+}
+
+export async function getLatestDocumentBackup(): Promise<DocumentBackupJob | null> {
+  const res = await apiFetch('/pwa/admin/document-backup/latest') as { job: DocumentBackupJob | null }
+  return res.job
+}
+
+export async function getDocumentBackup(id: number): Promise<DocumentBackupJob> {
+  return apiFetch(`/pwa/admin/document-backup/${id}`) as Promise<DocumentBackupJob>
 }

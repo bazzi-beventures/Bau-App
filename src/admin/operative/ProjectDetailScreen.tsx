@@ -48,6 +48,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   const [name, setName] = useState(project?.name ?? '')
   const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
+  // Objekt-Name (z.B. "MFH Sonnhalde") getrennt von der reinen Objektadresse — Letztere
+  // speist die Google-Maps-Distanz (Fahrspesen), darum darf der Name nicht mit rein.
+  const [objectName, setObjectName] = useState(project?.object_name ?? '')
   const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
   // Wurde die Objektadresse manuell bearbeitet? Dann beim Kundenwechsel NICHT überschreiben.
   // Eine nur automatisch (aus dem Kundenstamm) befüllte Adresse wird hingegen neu geseedet,
@@ -532,6 +535,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         body: JSON.stringify({
           name: name.trim(),
           customer_id: customerId || null,
+          object_name: objectName.trim() || null,
           object_address: objectAddress || null,
           art_der_arbeit: artDerArbeit,
           bemerkung: bemerkung || null,
@@ -846,9 +850,23 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               </div>
 
               <div className="admin-form-group">
+                <label className="admin-form-label">Objekt-Name (optional)</label>
+                <input
+                  className="admin-form-input"
+                  value={objectName}
+                  onChange={e => setObjectName(e.target.value)}
+                  placeholder="z.B. MFH Sonnhalde oder Familie Muster"
+                />
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Bezeichnung des Objekts — erscheint auf Offerte/Rechnung. Getrennt von der Adresse.
+                </div>
+              </div>
+
+              <div className="admin-form-group">
                 <label className="admin-form-label">Objektadresse (Baustelle)</label>
                 <AddressAutocomplete className="admin-form-input" value={objectAddress} onChange={v => { setObjectAddress(v); setObjectAddressTouched(true) }} />
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                  Nur die reine Adresse — sie bestimmt die Fahrspesen (Distanz Firmensitz → Objekt).
                   Wird beim Auswählen des Kunden als Vorschlag übernommen und kann pro Projekt überschrieben werden.
                 </div>
               </div>

@@ -136,9 +136,9 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
                     Kunde: {d.customer_name}
                     {d.customer_phone ? ` · ${d.customer_phone}` : ''}
                   </div>
-                  {d.object_address && (
+                  {(d.object_name || d.object_address) && (
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {d.object_address}
+                      {[d.object_name, d.object_address].filter(Boolean).join(' · ')}
                     </div>
                   )}
                 </div>
@@ -178,6 +178,7 @@ interface DetailProps {
 function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailProps) {
   const isOpen = draft.status === 'open'
   const [projectName, setProjectName] = useState(draft.title)
+  const [objectName, setObjectName] = useState(draft.object_name ?? '')
   const [objectAddress, setObjectAddress] = useState(draft.object_address ?? draft.customer_address ?? '')
   const [contactName, setContactName] = useState(draft.customer_name)
   const [contactPhone, setContactPhone] = useState(draft.customer_phone ?? '')
@@ -258,6 +259,7 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
       const res = await convertProjectDraft(draft.id, {
         project_name: projectName.trim(),
         customer_id: customerId,
+        object_name: objectName.trim() || null,
         object_address: objectAddress.trim() || null,
         site_contact_name: contactName.trim() || null,
         site_contact_phone: contactPhone.trim() || null,
@@ -353,6 +355,16 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
                       className="admin-input"
                       value={projectName}
                       onChange={e => setProjectName(e.target.value)}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    <span>Objekt-Name (optional)</span>
+                    <input
+                      type="text"
+                      className="admin-input"
+                      value={objectName}
+                      onChange={e => setObjectName(e.target.value)}
+                      placeholder="z.B. MFH Sonnhalde"
                     />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>

@@ -5,6 +5,8 @@ import {
   getTenantFeatures, updateTenantFeature,
   TenantFeaturesResponse, FeatureRegistryEntry, FeatureFieldSchema,
   getTenantTravelCost, updateTenantTravelCost, TravelCostRow,
+  getSchedulingConfig, updateSchedulingConfig, SchedulingConfig,
+  SCHEDULING_KINDS, SCHEDULING_FIELDS,
 } from '../../api/admin'
 import {
   listHelpDocs, uploadHelpDoc, deleteHelpDoc, triggerHelpReindex, getHelpReindexStatus,
@@ -36,6 +38,7 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   kpis:             { label: 'Kennzahlen',        desc: 'KPI-Dashboard', category: 'analyse' },
   ai:               { label: 'AI-Funktionen',     desc: 'Mistral-Chat, Voxtral-Voice, KPI-Insights', category: 'ki' },
   help_bot:         { label: 'Hilfe-Bot',         desc: 'In-App-Hilfe per Chat über die Bedien-Handbücher', category: 'ki' },
+  document_backup:  { label: 'Datensicherung',    desc: 'Management kann alle Dokumente (Rechnungen/Offerten/Rapporte) als ein ZIP exportieren; Fertig-Meldung per Push, Download-Link 12 h gültig', category: 'other' },
   // Benachrichtigungen — Mail
   hr_weekly_report: { label: 'Wochen-HR-Übersicht', desc: 'Wöchentliches HR-Journal per Mail am Montag (benötigt HR). Journal & Überstunden-Salden werden weiterhin erstellt — nur die Mail entfällt.', category: 'notifications', channel: 'mail' },
   violation_emails: { label: 'ArG-Verstoss-Mails', desc: 'Wöchentliche Verstoss-E-Mails an die Admins (benötigt ArG-Compliance)', category: 'notifications', channel: 'mail' },
@@ -104,7 +107,7 @@ interface ConfigProps {
 
 export default function ConfigurationScreen({ userRole }: ConfigProps) {
   const isSuperadmin = userRole === 'superadmin'
-  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows' | 'travel-cost' | 'help-docs'>('weekly-plan')
+  const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows' | 'travel-cost' | 'scheduling' | 'help-docs'>('weekly-plan')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -168,6 +171,14 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
+            className={`admin-btn ${tab === 'scheduling' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setTab('scheduling')}
+          >
+            Einsatzplanung
+          </button>
+        )}
+        {isSuperadmin && (
+          <button
             className={`admin-btn ${tab === 'help-docs' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
             onClick={() => setTab('help-docs')}
           >
@@ -182,6 +193,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
       {tab === 'notifications' && isSuperadmin && <ModulesTab onToast={showToast} view="notifications" />}
       {tab === 'workflows' && isSuperadmin && <WorkflowsTab onToast={showToast} />}
       {tab === 'travel-cost' && isSuperadmin && <TravelCostTab onToast={showToast} />}
+      {tab === 'scheduling' && isSuperadmin && <SchedulingTab onToast={showToast} />}
       {tab === 'help-docs' && isSuperadmin && <HelpDocsTab onToast={showToast} />}
 
       {toast && (
@@ -1071,6 +1083,139 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ─── Einsatzplanung-Tab: Anzeige-Felder + Einsatz-Art-Farben pro Tenant ──────
+
+function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [config, setConfig] = useState<SchedulingConfig | null>(null)
+  const [defaults, setDefaults] = useState<SchedulingConfig | null>(null)
+  const [original, setOriginal] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Mandanten-Config mit Defaults auffüllen, damit jedes Feld/jede Farbe gesetzt ist.
+  function withDefaults(cfg: Partial<SchedulingConfig>, def: SchedulingConfig): SchedulingConfig {
+    return {
+      fields: { ...def.fields, ...(cfg.fields || {}) },
+      colors: { ...def.colors, ...(cfg.colors || {}) },
+    }
+  }
+
+  async function load() {
+    setLoading(true)
+    try {
+      const res = await getSchedulingConfig()
+      const merged = withDefaults(res.config || {}, res.defaults)
+      setDefaults(res.defaults)
+      setConfig(merged)
+      setOriginal(JSON.stringify(merged))
+    } catch {
+      onToast('Laden fehlgeschlagen', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  if (loading || !config || !defaults) {
+    return <div className="admin-loading"><div className="admin-spinner" /> Einstellungen werden geladen…</div>
+  }
+
+  const dirty = JSON.stringify(config) !== original
+
+  function setField(key: string, value: boolean) {
+    setConfig(prev => prev && { ...prev, fields: { ...prev.fields, [key]: value } })
+  }
+
+  function setColor(key: string, value: string) {
+    setConfig(prev => prev && { ...prev, colors: { ...prev.colors, [key]: value } })
+  }
+
+  function resetToDefault() {
+    if (defaults) setConfig(withDefaults({}, defaults))
+  }
+
+  async function save() {
+    if (!config) return
+    setSaving(true)
+    try {
+      const res = await updateSchedulingConfig(config)
+      const saved = defaults ? withDefaults(res.config, defaults) : config
+      setConfig(saved)
+      setOriginal(JSON.stringify(saved))
+      onToast('Einsatzplanung gespeichert', 'success')
+    } catch {
+      onToast('Speichern fehlgeschlagen', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="admin-table-wrap" style={{ padding: 24, maxWidth: 640 }}>
+      <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+        Steuert, was auf den Einsatz-Kacheln im Planungs-Kalender erscheint und welche
+        Farbe jede Einsatz-Art bekommt. Uhrzeit und Titel werden immer angezeigt.
+      </div>
+
+      <div style={{ fontWeight: 600, marginBottom: 10 }}>Zusätzliche Felder auf der Kachel</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+        {SCHEDULING_FIELDS.map(f => (
+          <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={!!config.fields[f.key]}
+              onChange={e => setField(f.key, e.target.checked)}
+            />
+            {f.label}
+          </label>
+        ))}
+      </div>
+
+      <div style={{ fontWeight: 600, marginBottom: 10 }}>Farbe je Einsatz-Art</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+        {SCHEDULING_KINDS.map(k => (
+          <label key={k.key} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14 }}>
+            <input
+              type="color"
+              value={config.colors[k.key] || '#000000'}
+              onChange={e => setColor(k.key, e.target.value)}
+              style={{ width: 44, height: 30, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+            />
+            <span style={{ width: 140 }}>{k.label}</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{config.colors[k.key]}</span>
+          </label>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={save}
+          disabled={!dirty || saving}
+        >
+          {saving ? 'Speichern…' : 'Speichern'}
+        </button>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={load}
+          disabled={saving || !dirty}
+        >
+          Verwerfen
+        </button>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={resetToDefault}
+          disabled={saving}
+          style={{ marginLeft: 'auto' }}
+        >
+          Auf System-Standard zurücksetzen
+        </button>
+      </div>
     </div>
   )
 }
