@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { fmtCHF } from '../utils/format'
+import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 
 export interface ExtractedPosition {
   label: string
@@ -96,14 +97,6 @@ interface Props {
   pricingRules?: SupplierPricingRule[]
 }
 
-function parseNum(v: string): number {
-  return parseFloat(v.replace(',', '.')) || 0
-}
-
-function ceilToHalf(x: number): number {
-  return Math.ceil(x * 2) / 2
-}
-
 // EK der Produktzeile = Summe der angehakten, NICHT separat ausgewiesenen Positionen.
 // Ohne Positionen (Griesser/manuell): das freie EK-Feld.
 function productEk(row: RowState): number {
@@ -119,7 +112,7 @@ function productEk(row: RowState): number {
 export function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedExtraProduct[] {
   const out: ConfirmedExtraProduct[] = []
   const pct = parseNum(row.margin_pct)
-  const factor = Math.round((1 + pct / 100) * 10000) / 10000
+  const factor = pctToFactor(pct)
   const hasPositions = row.positions.length > 0
   const category = row.category || null
 
@@ -130,7 +123,7 @@ export function buildConfirmedRow(row: RowState, supplierId: string | null): Con
   const fullDescription = [row.name.trim(), row.description.trim()].filter(Boolean).join(' — ')
   if (includeProduct && fullDescription) {
     const ek = productEk(row)
-    const vk = ceilToHalf(ek * (1 + pct / 100))
+    const vk = vkFromEk(ek, pct)
     out.push({
       description: fullDescription,
       quantity: row.quantity || '1',
@@ -156,7 +149,7 @@ export function buildConfirmedRow(row: RowState, supplierId: string | null): Con
   for (const p of row.positions) {
     if (p.selected && p.separate && p.label.trim()) {
       const ek = parseNum(p.ek_price)
-      const vk = ceilToHalf(ek * (1 + pct / 100))
+      const vk = vkFromEk(ek, pct)
       out.push({
         description: [row.name.trim(), p.label.trim()].filter(Boolean).join(' — '),
         quantity: '1',
@@ -176,14 +169,30 @@ function buildConfirmed(rows: RowState[], supplierId: string | null): ConfirmedE
   return rows.flatMap(row => buildConfirmedRow(row, supplierId))
 }
 
-// Karten-Summen über ALLE Zeilen, die diese Karte erzeugt (Produktzeile + separate Zeilen).
-// So spiegelt die Anzeige das wider, was tatsächlich übernommen wird — auch wenn alle
-// Positionen „separat" sind (Griesser) und die Produktzeile selbst leer bleibt.
+// Stück-Sicht der Karte: alle erzeugten Zeilen (Produktzeile + separate Zeilen) zum
+// jeweiligen Stückpreis. Speist die Felder „EK/VK — Summe gewählter Positionen" bzw.
+// „… / Stk" — beide meinen einen Stückpreis, deshalb hier bewusst OHNE Menge. Auch
+// wenn alle Positionen separat sind (Griesser) und die Produktzeile leer bleibt,
+// steht so die Summe der Positionen da statt 0.
 function cardTotals(row: RowState, supplierId: string | null): { ek: number; vk: number } {
   const lines = buildConfirmedRow(row, supplierId)
   const ek = lines.reduce((s, l) => s + l.ek_price, 0)
   const vk = lines.reduce((s, l) => s + parseNum(l.unit_price), 0)
   return { ek, vk }
+}
+
+// Was die Karte tatsächlich in die Offerte einbringt: jede erzeugte Zeile mit IHRER Menge.
+// Nötig, weil die Menge nur an der Produktzeile hängt — separate Positionen sind eigene
+// Zeilen à 1 Stk. Ohne diese Sicht zeigt eine Karte mit Menge 3 + separater Position eine
+// Summe an, die weder Stückpreis noch Offert-Betrag ist.
+// Exportiert für Unit-Tests — reine Funktion, keine React-Abhängigkeit.
+export function cardOfferTotal(
+  row: RowState, supplierId: string | null,
+): { ek: number; vk: number; lines: number } {
+  const lines = buildConfirmedRow(row, supplierId)
+  const ek = lines.reduce((s, l) => s + l.ek_price * parseNum(l.quantity), 0)
+  const vk = lines.reduce((s, l) => s + parseNum(l.unit_price) * parseNum(l.quantity), 0)
+  return { ek, vk, lines: lines.length }
 }
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -208,7 +217,7 @@ export function PdfExtractionReviewModal({
       .filter(r => r.supplier_id === supplierId && r.category)
       .map(r => ({
         category: r.category as string,
-        margin_factor: Math.round((1 + (r.markup_pct ?? 0) / 100) * 10000) / 10000,
+        margin_factor: pctToFactor(r.markup_pct ?? 0),
       }))
   }, [isManual, data.available_pricing_rules, pricingRules, supplierId])
 
@@ -232,7 +241,7 @@ export function PdfExtractionReviewModal({
         unit: p.unit || 'Stk',
         ek_price: p.ek_price != null ? String(p.ek_price) : '',
         category: p.suggested_category ?? '',
-        margin_pct: String(Math.round((factor - 1) * 10000) / 100),
+        margin_pct: String(factorToPct(factor)),
         positions: (p.positions ?? []).map(pos => ({
           label: pos.label,
           ek_price: String(pos.ek_price ?? 0),
@@ -290,8 +299,7 @@ export function PdfExtractionReviewModal({
   function onCategoryChange(i: number, category: string) {
     const factor = ruleMap.get(category)
     if (factor !== undefined) {
-      const pct = Math.round((factor - 1) * 10000) / 100
-      updateRow(i, { category, margin_pct: String(pct) })
+      updateRow(i, { category, margin_pct: String(factorToPct(factor)) })
     } else {
       updateRow(i, { category })
     }
@@ -384,6 +392,7 @@ export function PdfExtractionReviewModal({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {rows.map((row, i) => {
             const totals = cardTotals(row, supplierId)
+            const offerTotal = cardOfferTotal(row, supplierId)
             const hasPositions = row.positions.length > 0
             return (
               <div
@@ -545,6 +554,26 @@ export function PdfExtractionReviewModal({
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtCHF(totals.vk)}</div>
                   </div>
                 </div>
+
+                {/* Fusszeile: der Betrag, der wirklich in die Offerte wandert. Die Felder oben
+                    sind Stückpreise — hier zählt die Menge mit, plus jede separate Zeile. */}
+                {offerTotal.lines > 0 && (
+                  <div
+                    style={{
+                      display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline',
+                      gap: 8, flexWrap: 'wrap',
+                      marginTop: 12, paddingTop: 8,
+                      borderTop: '1px dashed var(--border, #e5e7eb)',
+                      fontSize: 12, color: 'var(--muted, #666)',
+                    }}
+                  >
+                    <span>
+                      Total in der Offerte ({offerTotal.lines} {offerTotal.lines === 1 ? 'Zeile' : 'Zeilen'}, inkl. Menge)
+                      {' · EK '}{fmtCHF(offerTotal.ek)}
+                    </span>
+                    <strong style={{ fontSize: 15, color: 'var(--fg, inherit)' }}>{fmtCHF(offerTotal.vk)}</strong>
+                  </div>
+                )}
               </div>
             )
           })}

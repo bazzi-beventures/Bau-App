@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 import type { KpiCategory } from '../api/kpis'
 
 interface CategoryDef {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { fetchKpis, KpiCategory, KpiItem, KpiStatus } from '../api/kpis'
 import { ApiError } from '../api/client'
 

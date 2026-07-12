@@ -1,6 +1,14 @@
 // Preis-Helfer für Offert-Positionen (frei erfasst oder aus Lieferanten-PDF).
-// Reine Funktionen ohne React/DOM — direkt unit-testbar. Dieselbe Kalkulation
-// nutzt das PDF-Review-Modal (dort inline als ceilToHalf).
+// Reine Funktionen ohne React/DOM — direkt unit-testbar. Einzige Quelle der
+// Kalkulation für QuotesScreen und das PDF-Review-Modal.
+
+/**
+ * Zahl aus einem Preis-Eingabefeld. Akzeptiert das Schweizer Dezimalkomma
+ * („12,50"); leere oder unlesbare Eingabe wird zu 0.
+ */
+export function parseNum(v: string): number {
+  return parseFloat(v.replace(',', '.')) || 0
+}
 
 /**
  * Verkaufspreis aus Einkaufspreis + Aufschlag:

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, type JSX } from 'react'
 import { UserInfo } from '../api/auth'
 import { getAdminDashboard, AdminDashboard } from '../api/admin'
 import AdminSidebar from './AdminSidebar'

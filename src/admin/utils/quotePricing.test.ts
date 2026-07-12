@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { vkFromEk, factorToPct, pctToFactor } from './quotePricing'
+import { parseNum, vkFromEk, factorToPct, pctToFactor } from './quotePricing'
+
+describe('parseNum', () => {
+  it('akzeptiert Punkt und Schweizer Dezimalkomma', () => {
+    expect(parseNum('12.50')).toBe(12.5)
+    expect(parseNum('12,50')).toBe(12.5)
+  })
+
+  it('liefert 0 statt NaN bei leerer oder unlesbarer Eingabe', () => {
+    expect(parseNum('')).toBe(0)
+    expect(parseNum('abc')).toBe(0)
+  })
+
+  it('behält das Vorzeichen von Rabatt-Positionen', () => {
+    expect(parseNum('-80,25')).toBe(-80.25)
+  })
+})
 
 describe('vkFromEk', () => {
   it('rechnet VK = EK × (1 + Aufschlag), aufgerundet auf 0.50', () => {

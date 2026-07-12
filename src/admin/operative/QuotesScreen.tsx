@@ -9,7 +9,7 @@ import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
-import { vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
+import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
@@ -172,10 +172,6 @@ function specialRowValid(r: SpecialRow): boolean {
 
 const STATUS_LABELS = QUOTE_STATUS_LABELS
 const STATUS_BADGE = QUOTE_STATUS_BADGE
-
-function parseNum(v: string): number {
-  return parseFloat(v.replace(',', '.')) || 0
-}
 
 // ─── Auto-Entwurf (lokaler Zwischenstand) ───────────────────
 // Der noch nicht abgeschickte Offert-Entwurf wird laufend in localStorage

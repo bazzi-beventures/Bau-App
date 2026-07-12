@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildConfirmedRow, RowState, PositionState } from './PdfExtractionReviewModal'
+import { buildConfirmedRow, cardOfferTotal, RowState, PositionState } from './PdfExtractionReviewModal'
 
 function row(patch: Partial<RowState> = {}): RowState {
   return {
@@ -129,6 +129,56 @@ describe('buildConfirmedRow — Positionen und „separat"', () => {
     const out = buildConfirmedRow(row({ ek_price: '20' }), null)
 
     expect(out[0].positions).toBeUndefined()
+  })
+})
+
+describe('cardOfferTotal — Betrag, der in die Offerte wandert', () => {
+  it('multipliziert die Produktzeile mit der Menge', () => {
+    const t = cardOfferTotal(row({ ek_price: '100', margin_pct: '50', quantity: '3' }), null)
+
+    expect(t).toEqual({ ek: 300, vk: 450, lines: 1 }) // 3 × 100 EK, 3 × 150 VK
+  })
+
+  it('zählt Menge nur an der Produktzeile, separate Positionen bleiben 1-Stk-Zeilen', () => {
+    // Der Mischfall: Menge 3 + eine separat ausgewiesene Position.
+    // Produktzeile 3 × VK(100) = 450, separate Zeile 1 × VK(50) = 75.
+    const t = cardOfferTotal(
+      row({
+        quantity: '3',
+        margin_pct: '50',
+        positions: [pos({ ek_price: '100' }), pos({ label: 'Motor', ek_price: '50', separate: true })],
+      }),
+      null,
+    )
+
+    expect(t).toEqual({ ek: 350, vk: 525, lines: 2 })
+  })
+
+  it('summiert bei Griesser schlicht die separaten Zeilen', () => {
+    const t = cardOfferTotal(
+      row({
+        margin_pct: '0',
+        positions: [
+          pos({ label: 'Küche', ek_price: '500', separate: true }),
+          pos({ label: 'Bad', ek_price: '200', separate: true }),
+        ],
+      }),
+      null,
+    )
+
+    expect(t).toEqual({ ek: 700, vk: 700, lines: 2 })
+  })
+
+  it('behandelt leere Menge als 1', () => {
+    const t = cardOfferTotal(row({ ek_price: '80', margin_pct: '0', quantity: '' }), null)
+
+    expect(t).toEqual({ ek: 80, vk: 80, lines: 1 })
+  })
+
+  it('liefert 0 / keine Zeilen für eine leere Karte', () => {
+    const t = cardOfferTotal(row({ name: '', description: '', ek_price: '100' }), null)
+
+    expect(t).toEqual({ ek: 0, vk: 0, lines: 0 })
   })
 })
 
