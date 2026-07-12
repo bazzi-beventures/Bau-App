@@ -61,7 +61,13 @@ async function parseErrorDetail(res: Response): Promise<string> {
   let detail = res.statusText
   try {
     const body = await res.json()
-    detail = body.detail ?? detail
+    // detail ist meist ein String-Code; strukturierte Fehler (z.B. Passwort-Policy)
+    // liefern {code, message} — dann den Klartext zeigen statt "[object Object]".
+    if (body.detail && typeof body.detail === 'object' && typeof body.detail.message === 'string') {
+      detail = body.detail.message
+    } else {
+      detail = body.detail ?? detail
+    }
   } catch {}
   return detail
 }

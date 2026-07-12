@@ -1,4 +1,5 @@
 import { apiFetch, apiFormFetch } from './client'
+import { clearApiCache } from './swCache'
 import { AdminScreen } from '../admin/useAdminNav'
 
 // ─── Dashboard ─────────────────────────────────────────────
@@ -207,6 +208,9 @@ export async function bulkClockIn(
 // ─── Password Auth ─────────────────────────────────────────
 
 export async function loginWithPassword(username: string, password: string): Promise<{ tenant_slug: string }> {
+  // Neue Session beginnt: evtl. gecachte /pwa/-Antworten eines früheren
+  // Nutzers auf diesem Gerät loswerden (geteiltes Gerät ohne sauberen Logout).
+  await clearApiCache()
   return await apiFetch('/pwa/auth/login-password', {
     method: 'POST',
     body: JSON.stringify({ username, password }),

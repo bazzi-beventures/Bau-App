@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 12
+export const APP_DATA_VERSION = 13
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -186,7 +186,21 @@ const migration_11_to_12: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12]
+// v12 → v13: ExtraProductRow (im quote-draft:*) benennt die Kalkulations-Metadaten um —
+// ek_price:number/margin_factor:number → ek:string/margin_pct:string (editierbare Felder
+// für EK + Aufschlag % an der freien Position). Der Preis selbst (unit_price) bleibt
+// unverändert erhalten; ein alter Entwurf verliert beim Fortsetzen nur die noch nicht
+// gespeicherte EK/Marge-Vorbelegung (die Felder erscheinen leer). Kein Wipe nötig —
+// die alten number-Felder werden schlicht ignoriert. No-op als Tripwire für ältere Clients.
+const migration_12_to_13: Migration = {
+  from: 12,
+  to: 13,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

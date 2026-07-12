@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { clearApiCache } from './swCache'
 
 export interface UserInfo {
   authorized_user_id: string
@@ -34,7 +35,13 @@ export async function getMe(): Promise<UserInfo> {
 }
 
 export async function logout(): Promise<void> {
-  await apiFetch('/pwa/auth/logout', { method: 'POST' })
+  try {
+    await apiFetch('/pwa/auth/logout', { method: 'POST' })
+  } finally {
+    // Auch wenn der Server-Logout fehlschlägt (offline): gecachte Antworten
+    // des abgemeldeten Nutzers dürfen nicht auf dem Gerät zurückbleiben.
+    await clearApiCache()
+  }
 }
 
 export async function acceptConsent(): Promise<void> {

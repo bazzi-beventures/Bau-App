@@ -11,7 +11,8 @@ export interface ExtractedProduct {
   description: string
   quantity: number
   unit: string
-  ek_price: number
+  // null = kein EK vorbelegt (manuelle Erfassung); OCR liefert immer eine Zahl.
+  ek_price: number | null
   positions?: ExtractedPosition[]
   suggested_category: string | null
   suggested_margin_factor: number | null
@@ -21,6 +22,19 @@ export interface ExtractedProduct {
 export interface PricingRule {
   category: string
   margin_factor: number
+}
+
+/** Lieferant zur Auswahl im manuellen Modus. */
+export interface SupplierOption {
+  id: string
+  name: string
+}
+
+/** Rohe Preisregel aus GET /pwa/admin/pricing-rules — über alle Lieferanten. */
+export interface SupplierPricingRule {
+  supplier_id: string
+  category: string | null
+  markup_pct: number | null
 }
 
 export interface PdfExtractionResponse {
@@ -52,14 +66,14 @@ export interface ConfirmedExtraProduct {
   positions?: ConfirmedPosition[]
 }
 
-interface PositionState {
+export interface PositionState {
   label: string
   ek_price: string
   selected: boolean   // Häkchen: kommt überhaupt in die Offerte
   separate: boolean   // „separat ausweisen": wird eine eigene Offert-Zeile
 }
 
-interface RowState {
+export interface RowState {
   name: string
   description: string
   quantity: string
@@ -74,6 +88,12 @@ interface Props {
   data: PdfExtractionResponse
   onCancel: () => void
   onConfirm: (rows: ConfirmedExtraProduct[]) => void
+  /** 'pdf' = Review einer OCR-Extraktion (Default), 'manual' = freie Erfassung ohne PDF. */
+  mode?: 'pdf' | 'manual'
+  /** Nur manueller Modus: Lieferanten zur Auswahl (bestimmt die Warengruppen). */
+  suppliers?: SupplierOption[]
+  /** Nur manueller Modus: alle Preisregeln; werden nach gewähltem Lieferanten gefiltert. */
+  pricingRules?: SupplierPricingRule[]
 }
 
 function parseNum(v: string): number {
@@ -95,7 +115,8 @@ function productEk(row: RowState): number {
 
 // Baut die finalen Offert-Zeilen aus EINER Produktkarte:
 // 1 Produktzeile (EK = Summe nicht-separater Positionen) + N separate Zeilen.
-function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedExtraProduct[] {
+// Exportiert für Unit-Tests — reine Funktion, keine React-Abhängigkeit.
+export function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedExtraProduct[] {
   const out: ConfirmedExtraProduct[] = []
   const pct = parseNum(row.margin_pct)
   const factor = Math.round((1 + pct / 100) * 10000) / 10000
@@ -103,11 +124,13 @@ function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedE
   const category = row.category || null
 
   // Produktzeile: immer ohne Positionen, sonst nur wenn ≥1 nicht-separate Position gewählt ist.
+  // Ohne Bezeichnung entsteht keine Zeile — sonst zählt der „Übernehmen"-Button Zeilen mit,
+  // die das Formular beim Speichern ohnehin wegfiltert.
   const includeProduct = !hasPositions || row.positions.some(p => p.selected && !p.separate)
-  if (includeProduct) {
+  const fullDescription = [row.name.trim(), row.description.trim()].filter(Boolean).join(' — ')
+  if (includeProduct && fullDescription) {
     const ek = productEk(row)
     const vk = ceilToHalf(ek * (1 + pct / 100))
-    const fullDescription = row.description ? `${row.name} — ${row.description}` : row.name
     out.push({
       description: fullDescription,
       quantity: row.quantity || '1',
@@ -131,11 +154,11 @@ function buildConfirmedRow(row: RowState, supplierId: string | null): ConfirmedE
   // Separate Zeilen: jede angehakte Position mit „separat ausweisen".
   // Produktname als Kontext voranstellen (z. B. „P206C.03, Lamisol III 70 Fix — Küche 1570×965").
   for (const p of row.positions) {
-    if (p.selected && p.separate) {
+    if (p.selected && p.separate && p.label.trim()) {
       const ek = parseNum(p.ek_price)
       const vk = ceilToHalf(ek * (1 + pct / 100))
       out.push({
-        description: row.name ? `${row.name} — ${p.label}` : p.label,
+        description: [row.name.trim(), p.label.trim()].filter(Boolean).join(' — '),
         quantity: '1',
         unit: row.unit || 'Stk',
         unit_price: String(vk),
@@ -168,8 +191,27 @@ const LABEL_STYLE: React.CSSProperties = {
   marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.4,
 }
 
-export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
-  const rules: PricingRule[] = data.available_pricing_rules ?? []
+export function PdfExtractionReviewModal({
+  data, onCancel, onConfirm,
+  mode = 'pdf', suppliers = [], pricingRules = [],
+}: Props) {
+  const isManual = mode === 'manual'
+
+  // PDF: Lieferant steht durch die OCR-Erkennung fest. Manuell: der Admin wählt ihn,
+  // denn davon hängen die verfügbaren Warengruppen und deren Aufschlag ab.
+  const [supplierId, setSupplierId] = useState<string | null>(data.supplier_id)
+
+  const rules: PricingRule[] = useMemo(() => {
+    if (!isManual) return data.available_pricing_rules ?? []
+    if (!supplierId) return []
+    return pricingRules
+      .filter(r => r.supplier_id === supplierId && r.category)
+      .map(r => ({
+        category: r.category as string,
+        margin_factor: Math.round((1 + (r.markup_pct ?? 0) / 100) * 10000) / 10000,
+      }))
+  }, [isManual, data.available_pricing_rules, pricingRules, supplierId])
+
   const ruleMap = useMemo(() => {
     const m = new Map<string, number>()
     for (const r of rules) m.set(r.category, r.margin_factor)
@@ -188,7 +230,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         description: p.description,
         quantity: String(p.quantity ?? 1),
         unit: p.unit || 'Stk',
-        ek_price: String(p.ek_price ?? 0),
+        ek_price: p.ek_price != null ? String(p.ek_price) : '',
         category: p.suggested_category ?? '',
         margin_pct: String(Math.round((factor - 1) * 10000) / 100),
         positions: (p.positions ?? []).map(pos => ({
@@ -217,6 +259,34 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
     }))
   }
 
+  // Neue Position: bei Griesser passend zu den Geschwisterzeilen separat, sonst in den EK.
+  function addPosition(i: number) {
+    setRows(rs => rs.map((r, j) => j === i
+      ? { ...r, positions: [...r.positions, { label: '', ek_price: '', selected: true, separate: isGriesser }] }
+      : r))
+  }
+
+  function removePosition(i: number, k: number) {
+    setRows(rs => rs.map((r, j) => j === i ? { ...r, positions: r.positions.filter((_, l) => l !== k) } : r))
+  }
+
+  function addRow() {
+    setRows(rs => [...rs, {
+      name: '', description: '', quantity: '1', unit: 'Stk',
+      ek_price: '', category: '', margin_pct: '', positions: [],
+    }])
+  }
+
+  function removeRow(i: number) {
+    setRows(rs => rs.filter((_, j) => j !== i))
+  }
+
+  // Lieferantenwechsel invalidiert die Warengruppen — Aufschlag bleibt als Eingabe stehen.
+  function onSupplierChange(id: string) {
+    setSupplierId(id || null)
+    setRows(rs => rs.map(r => ({ ...r, category: '' })))
+  }
+
   function onCategoryChange(i: number, category: string) {
     const factor = ruleMap.get(category)
     if (factor !== undefined) {
@@ -227,7 +297,19 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
     }
   }
 
-  const confirmed = useMemo(() => buildConfirmed(rows, data.supplier_id), [rows, data.supplier_id])
+  function positionsLabel(hasPositions: boolean): string {
+    if (isGriesser) {
+      return 'Positionen — jede wird eine eigene Offert-Zeile; EK ist Netto inkl. Auftrags- und Kundenrabatt. Abwählen entfernt die Zeile.'
+    }
+    if (!hasPositions) {
+      return 'Positionen (optional) — z. B. Einzelteile oder Varianten. „separat" macht daraus eine eigene Offert-Zeile.'
+    }
+    return isManual
+      ? 'Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile'
+      : 'Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile · Lieferanten-Rabatte (Minus) sind standardmässig abgewählt'
+  }
+
+  const confirmed = useMemo(() => buildConfirmed(rows, supplierId), [rows, supplierId])
 
   function handleConfirm() {
     onConfirm(confirmed)
@@ -253,26 +335,55 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-          <h3 style={{ margin: 0, fontSize: 18 }}>Lieferanten-Offerte prüfen</h3>
-          <span className="admin-badge admin-badge-sent" style={{ padding: '2px 10px' }}>{supplierLabel}</span>
+          <h3 style={{ margin: 0, fontSize: 18 }}>
+            {isManual ? 'Position manuell erfassen' : 'Lieferanten-Offerte prüfen'}
+          </h3>
+          {!isManual && (
+            <span className="admin-badge admin-badge-sent" style={{ padding: '2px 10px' }}>{supplierLabel}</span>
+          )}
           {data.project_ref && (
             <span style={{ color: 'var(--muted, #666)', fontSize: 13 }}>· {data.project_ref}</span>
           )}
         </div>
         <p style={{ marginTop: 0, marginBottom: 16, color: 'var(--muted, #666)', fontSize: 12 }}>
-          EK = Netto aus der Lieferanten-Offerte. VK = EK × (1 + Aufschlag). Warengruppe wählen lädt den Aufschlag aus den Lieferanten-Preisregeln.
+          {isManual
+            ? 'EK = dein Einkaufspreis. VK = EK × (1 + Aufschlag), aufgerundet auf 0.50. Lieferant + Warengruppe wählen lädt den Aufschlag automatisch.'
+            : 'EK = Netto aus der Lieferanten-Offerte. VK = EK × (1 + Aufschlag). Warengruppe wählen lädt den Aufschlag aus den Lieferanten-Preisregeln.'}
         </p>
 
-        {rules.length === 0 && (
+        {/* Manueller Modus: Lieferant bestimmt die Warengruppen. Ohne Lieferant bleibt
+            die Warengruppe leer und der Aufschlag wird von Hand eingetragen. */}
+        {isManual && (
+          <div style={{ marginBottom: 16, maxWidth: 340 }}>
+            <label style={LABEL_STYLE}>Lieferant (optional)</label>
+            <select
+              className="admin-form-select"
+              value={supplierId ?? ''}
+              onChange={e => onSupplierChange(e.target.value)}
+            >
+              <option value="">— kein Lieferant —</option>
+              {suppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {!isManual && rules.length === 0 && (
           <div className="admin-alert admin-alert-warning" style={{ marginBottom: 16, fontSize: 13, padding: '8px 12px' }}>
             Keine Lieferanten-Preisregeln für <strong>{supplierLabel}</strong> hinterlegt — Aufschlag manuell eintragen.
+          </div>
+        )}
+        {isManual && supplierId && rules.length === 0 && (
+          <div className="admin-alert admin-alert-warning" style={{ marginBottom: 16, fontSize: 13, padding: '8px 12px' }}>
+            Für diesen Lieferanten sind keine Warengruppen-Preisregeln hinterlegt — Aufschlag manuell eintragen.
           </div>
         )}
 
         {/* Karten pro Produkt */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {rows.map((row, i) => {
-            const totals = cardTotals(row, data.supplier_id)
+            const totals = cardTotals(row, supplierId)
             const hasPositions = row.positions.length > 0
             return (
               <div
@@ -286,7 +397,18 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
               >
                 {/* Zeile 1: Produktname (gross) */}
                 <div style={{ marginBottom: 10 }}>
-                  <label style={LABEL_STYLE}>Produkt</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <label style={LABEL_STYLE}>Produkt</label>
+                    {isManual && rows.length > 1 && (
+                      <button
+                        className="admin-btn admin-btn-danger admin-btn-sm"
+                        onClick={() => removeRow(i)}
+                        title="Produkt entfernen"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                   <input
                     className="admin-form-input"
                     style={{ fontWeight: 600, fontSize: 14 }}
@@ -307,19 +429,18 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                   />
                 </div>
 
-                {/* Positionsliste (nur Stobag o.ä.): an-/abwählbar, optional separat ausweisen */}
-                {hasPositions && (
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={LABEL_STYLE}>{isGriesser
-                      ? 'Positionen — jede wird eine eigene Offert-Zeile; EK ist Netto inkl. Auftrags- und Kundenrabatt. Abwählen entfernt die Zeile.'
-                      : 'Positionen — anhaken übernimmt in den EK, „separat" wird eigene Zeile · Lieferanten-Rabatte (Minus) sind standardmässig abgewählt'}</label>
+                {/* Positionsliste: an-/abwählbar, optional separat ausweisen.
+                    Kommt aus der OCR (Stobag/Griesser) oder wird von Hand angelegt. */}
+                <div style={{ marginBottom: 10 }}>
+                  <label style={LABEL_STYLE}>{positionsLabel(hasPositions)}</label>
+                  {hasPositions && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {row.positions.map((p, k) => (
                         <div
                           key={k}
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: '24px 1fr 110px 92px',
+                            gridTemplateColumns: '24px 1fr 110px 92px 32px',
                             gap: 8,
                             alignItems: 'center',
                             opacity: p.selected ? 1 : 0.45,
@@ -334,6 +455,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                           <input
                             className="admin-form-input"
                             style={{ fontSize: 13 }}
+                            placeholder="Bezeichnung"
                             value={p.label}
                             onChange={e => updatePosition(i, k, { label: e.target.value })}
                             disabled={!p.selected}
@@ -341,6 +463,7 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                           <input
                             className="admin-form-input"
                             style={{ fontSize: 13, textAlign: 'right' }}
+                            placeholder="EK"
                             value={p.ek_price}
                             onChange={e => updatePosition(i, k, { ek_price: e.target.value })}
                             disabled={!p.selected}
@@ -355,11 +478,25 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
                             />
                             separat
                           </label>
+                          <button
+                            className="admin-btn admin-btn-danger admin-btn-sm"
+                            onClick={() => removePosition(i, k)}
+                            title="Position entfernen"
+                          >
+                            ✕
+                          </button>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                  <button
+                    className="admin-btn admin-btn-secondary admin-btn-sm"
+                    style={{ marginTop: hasPositions ? 6 : 0 }}
+                    onClick={() => addPosition(i)}
+                  >
+                    + Position
+                  </button>
+                </div>
 
                 {/* Zeile 3: Menge / Einheit / EK */}
                 <div style={{ display: 'grid', gridTemplateColumns: '90px 100px 1fr', gap: 10, marginBottom: 10 }}>
@@ -414,7 +551,11 @@ export function PdfExtractionReviewModal({ data, onCancel, onConfirm }: Props) {
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 20, justifyContent: 'flex-end', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 20, alignItems: 'center' }}>
+          {isManual && (
+            <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addRow}>+ Produkt</button>
+          )}
+          <div style={{ flex: 1 }} />
           <button className="admin-btn admin-btn-secondary" onClick={onCancel}>Abbrechen</button>
           <button className="admin-btn admin-btn-primary" onClick={handleConfirm} disabled={confirmed.length === 0}>
             Übernehmen ({confirmed.length})

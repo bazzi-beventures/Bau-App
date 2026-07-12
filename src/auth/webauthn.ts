@@ -1,4 +1,5 @@
 import { apiFetch } from '../api/client'
+import { clearApiCache } from '../api/swCache'
 
 // ── base64url helpers ────────────────────────────────────────
 
@@ -54,6 +55,10 @@ export async function registerPasskey(
   const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential
   const response = credential.response as AuthenticatorAttestationResponse
 
+  // Neue Session beginnt: evtl. gecachte /pwa/-Antworten eines früheren
+  // Nutzers auf diesem Gerät loswerden (geteiltes Gerät ohne sauberen Logout).
+  await clearApiCache()
+
   // 4. Send to server (Session-Cookie wird vom Server gesetzt)
   await apiFetch('/pwa/auth/register-complete', {
     method: 'POST',
@@ -102,6 +107,10 @@ export async function authenticatePasskey(
   // 3. Fingerprint dialog
   const credential = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential
   const response = credential.response as AuthenticatorAssertionResponse
+
+  // Neue Session beginnt: evtl. gecachte /pwa/-Antworten eines früheren
+  // Nutzers auf diesem Gerät loswerden (geteiltes Gerät ohne sauberen Logout).
+  await clearApiCache()
 
   // 4. Verify on server (server sets cookie on success)
   const result = (await apiFetch('/pwa/auth/login-complete', {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
-import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct, ConfirmedPosition } from './PdfExtractionReviewModal'
+import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct, ConfirmedPosition, SupplierPricingRule } from './PdfExtractionReviewModal'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
@@ -9,6 +9,7 @@ import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
+import { vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 
@@ -81,7 +82,18 @@ export interface QuoteDetail {
   labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; hidden?: boolean }[]
   material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; optional?: boolean }[]
   travel_items: { description: string; total_price: number }[]
-  extra_product_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; optional?: boolean }[]
+  // ek_price/margin_factor/supplier_id/category/positions: Metadaten aus PDF-Extraktion oder
+  // manueller Erfassung. Preisneutral (das Total zählt nur total_price), aber für die
+  // Nachkalkulation relevant — dürfen ein Bearbeiten der Offerte nicht verlieren.
+  extra_product_items: {
+    description: string; quantity: number; unit: string; unit_price: number; total_price: number
+    optional?: boolean
+    ek_price?: number
+    margin_factor?: number
+    supplier_id?: string | null
+    category?: string | null
+    positions?: ConfirmedPosition[]
+  }[]
   extra_charge_items: { description: string; total_price: number }[]
   installation_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   special_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
@@ -120,12 +132,15 @@ interface ExtraProductRow {
   quantity: string
   unit: string
   unit_price: string
-  // Optional: gesetzt, wenn Zeile aus einer Lieferanten-PDF-Extraktion stammt.
-  ek_price?: number
-  margin_factor?: number
+  // Kalkulations-Metadaten — bei freier Erfassung von Hand, sonst aus der Lieferanten-PDF.
+  // EK + Aufschlag % rechnen den unit_price (VK) automatisch; als editierbare Strings
+  // gehalten (wie unit_price), damit Dezimaleingaben wie "10,50" nicht abgeschnitten werden.
+  // Preisneutral fürs Total (dort zählt unit_price × quantity), aber für die Nachkalkulation.
+  ek?: string
+  margin_pct?: string
   supplier_id?: string | null
   category?: string | null
-  positions?: ConfirmedPosition[]  // Stobag: Auswahl-Breakdown der Produktzeile (Metadaten)
+  positions?: ConfirmedPosition[]  // Stobag/Griesser: Auswahl-Breakdown der Produktzeile (Metadaten)
   optional?: boolean  // Eventualposition (Workflow "optionale_positionen"): nicht im Total
 }
 interface ExtraChargeRow { description: string; total_price: string }
@@ -255,6 +270,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
+  // Dieselbe Prüf-Maske dient zwei Zwecken: 'pdf' = OCR-Review, 'manual' = freie Erfassung
+  // mit EK/Aufschlag und „separat"-Positionen, aber ohne PDF.
+  const [reviewMode, setReviewMode] = useState<'pdf' | 'manual'>('pdf')
+  // Preisregeln aller Lieferanten — nur die manuelle Erfassung braucht sie (Warengruppe → Aufschlag).
+  const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
   // Gefundener, noch nicht abgeschlossener Entwurf aus einer früheren Sitzung.
   const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; data: QuoteDraft } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -286,6 +306,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     // Formular nicht blockieren (Filter bleibt dann einfach leer).
     apiFetch('/pwa/admin/suppliers')
       .then(s => setSuppliers(s as Supplier[]))
+      .catch(() => {})
+    // Preisregeln für die manuelle Erfassung. Fehler ist unkritisch — dann bleibt die
+    // Warengruppe leer und der Aufschlag wird von Hand eingetragen.
+    apiFetch('/pwa/admin/pricing-rules')
+      .then(r => setPricingRules(r as SupplierPricingRule[]))
       .catch(() => {})
     // Mandanten-spezifischen Standard-Bemerkungstext laden (pflegbar unter Offert-Vorlagen).
     // Fehler darf das Formular nicht blockieren — dann bleibt der Fallback-Default.
@@ -413,7 +438,16 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
 
   // ── Extra product helpers ──
   function updateExtraProduct(i: number, patch: Partial<ExtraProductRow>) {
-    setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, ...patch } : r))
+    setExtraProducts(rows => rows.map((r, j) => {
+      if (j !== i) return r
+      const next = { ...r, ...patch }
+      // Sobald ein EK gesetzt ist, treibt EK × (1 + Aufschlag) den VK. Ohne EK bleibt
+      // der Preis frei von Hand editierbar (klassische freie Position).
+      if (('ek' in patch || 'margin_pct' in patch) && next.ek && next.ek.trim() !== '') {
+        next.unit_price = String(vkFromEk(parseNum(next.ek), parseNum(next.margin_pct ?? '')))
+      }
+      return next
+    }))
   }
   function addExtraProduct() { setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }]) }
   function removeExtraProduct(i: number) { setExtraProducts(r => r.filter((_, j) => j !== i)) }
@@ -441,6 +475,33 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   }
   function removeSpecial(i: number) { setSpecialRows(r => r.filter((_, j) => j !== i)) }
 
+  // ── Manuelle Erfassung ──
+  // Öffnet dieselbe Prüf-Maske wie die PDF-Extraktion, nur mit einer leeren Produktkarte.
+  // Dadurch gibt es Unter-Positionen mit „separat ausweisen" und die EK → Aufschlag → VK-
+  // Rechnung auch ohne Lieferanten-PDF. Kein pendingPdfFile — es ist keine Quelle abzulegen.
+  function openManualEntry() {
+    pendingPdfFile.current = null
+    setReviewMode('manual')
+    setPdfReview({
+      supplier: '',
+      supplier_label: '',
+      supplier_id: null,
+      project_ref: '',
+      available_pricing_rules: [],
+      products: [{
+        name: '',
+        description: '',
+        quantity: 1,
+        unit: 'Stk',
+        ek_price: null,
+        positions: [],
+        suggested_category: null,
+        suggested_margin_factor: null,
+        suggested_vk_price: null,
+      }],
+    })
+  }
+
   // ── PDF Upload ──
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -457,6 +518,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       }
       // Quelle-PDF merken, bis der Admin das Review bestätigt oder abbricht.
       pendingPdfFile.current = file
+      setReviewMode('pdf')
       setPdfReview(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
@@ -472,8 +534,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       quantity: c.quantity,
       unit: c.unit,
       unit_price: c.unit_price,
-      ek_price: c.ek_price,
-      margin_factor: c.margin_factor,
+      ek: String(c.ek_price),
+      margin_pct: String(factorToPct(c.margin_factor)),
       supplier_id: c.supplier_id,
       category: c.category,
       positions: c.positions,
@@ -548,8 +610,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
             unit_price: price,
             total_price: round2(qty * price),
           }
-          if (r.ek_price !== undefined) item.ek_price = r.ek_price
-          if (r.margin_factor !== undefined) item.margin_factor = r.margin_factor
+          if (r.ek !== undefined && r.ek.trim() !== '') item.ek_price = parseNum(r.ek)
+          if (r.margin_pct !== undefined && r.margin_pct.trim() !== '') item.margin_factor = pctToFactor(parseNum(r.margin_pct))
           if (r.supplier_id) item.supplier_id = r.supplier_id
           if (r.category) item.category = r.category
           if (r.positions) item.positions = r.positions
@@ -638,6 +700,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       {pdfReview && (
         <PdfExtractionReviewModal
           data={pdfReview}
+          mode={reviewMode}
+          suppliers={suppliers}
+          pricingRules={pricingRules}
           onCancel={() => { pendingPdfFile.current = null; setPdfReview(null) }}
           onConfirm={handlePdfReviewConfirm}
         />
@@ -770,12 +835,17 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       {/* Extra Products */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen.
+        </p>
         {extraProducts.map((row, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Beschreibung" value={row.description} onChange={e => updateExtraProduct(i, { description: e.target.value })} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity} onChange={e => updateExtraProduct(i, { quantity: e.target.value })} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit} onChange={e => updateExtraProduct(i, { unit: e.target.value })} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="Preis/Stk" value={row.unit_price} onChange={e => updateExtraProduct(i, { unit_price: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={e => updateExtraProduct(i, { description: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity} onChange={e => updateExtraProduct(i, { quantity: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Einheit" value={row.unit} onChange={e => updateExtraProduct(i, { unit: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 65 }} placeholder="EK" value={row.ek ?? ''} onChange={e => updateExtraProduct(i, { ek: e.target.value })} title="Einkaufspreis (optional) — füllt mit dem Aufschlag den Preis automatisch" />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Auf. %" value={row.margin_pct ?? ''} onChange={e => updateExtraProduct(i, { margin_pct: e.target.value })} title="Aufschlag in % auf den EK" />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 75 }} placeholder="Preis/Stk" value={row.unit_price} onChange={e => updateExtraProduct(i, { unit_price: e.target.value })} title={row.ek?.trim() ? 'Verkaufspreis (aus EK × Aufschlag; überschreibbar)' : 'Verkaufspreis pro Stück'} />
             {optionalEnabled && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
                 <input type="checkbox" checked={!!row.optional} onChange={e => updateExtraProduct(i, { optional: e.target.checked })} />
@@ -785,8 +855,15 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeExtraProduct(i)} title="Entfernen">✕</button>
           </div>
         ))}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addExtraProduct}>+ Freie Position</button>
+          <button
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={openManualEntry}
+            title="Produkt mit Einkaufspreis, Aufschlag und Unter-Positionen erfassen — wie beim PDF, nur von Hand"
+          >
+            + Manuell erfassen
+          </button>
           <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             {uploading ? 'Wird extrahiert…' : 'PDF hochladen'}
             <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={uploading} />
@@ -943,6 +1020,15 @@ function round2(n: number) { return Math.round(n * 100) / 100 }
 type EditLaborRow = { description: string; quantity: string; unit_price: string; hidden?: boolean }
 // `optional` (Workflow "optionale_positionen"): Eventualposition, nicht im Total.
 type EditFreeRow = { description: string; quantity: string; unit: string; unit_price: string; optional?: boolean }
+// Produktzeilen aus PDF-Extraktion / manueller Erfassung führen zusätzlich EK, Aufschlag,
+// Lieferant und den Positions-Breakdown mit. Preisneutral, aber sie müssen ein Edit überleben.
+type EditExtraRow = EditFreeRow & {
+  ek?: string
+  margin_pct?: string
+  supplier_id?: string | null
+  category?: string | null
+  positions?: ConfirmedPosition[]
+}
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
 
@@ -954,9 +1040,26 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   const [materialRows, setMaterialRows] = useState<EditFreeRow[]>(() =>
     quote.material_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price), optional: !!i.optional }))
   )
-  const [extraProducts, setExtraProducts] = useState<EditFreeRow[]>(() =>
-    quote.extra_product_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit: i.unit, unit_price: String(i.unit_price), optional: !!i.optional }))
+  const [extraProducts, setExtraProducts] = useState<EditExtraRow[]>(() =>
+    quote.extra_product_items.map(i => ({
+      description: i.description, quantity: String(i.quantity), unit: i.unit,
+      unit_price: String(i.unit_price), optional: !!i.optional,
+      ek: i.ek_price != null ? String(i.ek_price) : undefined,
+      margin_pct: i.margin_factor != null ? String(factorToPct(i.margin_factor)) : undefined,
+      supplier_id: i.supplier_id, category: i.category, positions: i.positions,
+    }))
   )
+  // Wie im Erstell-Formular: EK + Aufschlag treiben den VK, sobald ein EK gesetzt ist.
+  function updateExtra(i: number, patch: Partial<EditExtraRow>) {
+    setExtraProducts(rows => rows.map((r, j) => {
+      if (j !== i) return r
+      const next = { ...r, ...patch }
+      if (('ek' in patch || 'margin_pct' in patch) && next.ek && next.ek.trim() !== '') {
+        next.unit_price = String(vkFromEk(parseNum(next.ek), parseNum(next.margin_pct ?? '')))
+      }
+      return next
+    }))
+  }
   const [extraCharges, setExtraCharges] = useState<EditChargeRow[]>(() =>
     quote.extra_charge_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
   )
@@ -1021,7 +1124,24 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
         extra_product_items: extraProducts
           .filter(r => r.description)
-          .map(r => ({ description: r.description, quantity: parseNum(r.quantity), unit: r.unit, unit_price: parseNum(r.unit_price), total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)), optional: !!r.optional })),
+          .map(r => {
+            const item: Record<string, unknown> = {
+              description: r.description,
+              quantity: parseNum(r.quantity),
+              unit: r.unit,
+              unit_price: parseNum(r.unit_price),
+              total_price: round2(parseNum(r.quantity) * parseNum(r.unit_price)),
+              optional: !!r.optional,
+            }
+            // EK/Marge/Lieferant/Positions erhalten — preisneutral, gingen aber bisher
+            // beim Bearbeiten der Offerte verloren.
+            if (r.ek !== undefined && r.ek.trim() !== '') item.ek_price = parseNum(r.ek)
+            if (r.margin_pct !== undefined && r.margin_pct.trim() !== '') item.margin_factor = pctToFactor(parseNum(r.margin_pct))
+            if (r.supplier_id) item.supplier_id = r.supplier_id
+            if (r.category) item.category = r.category
+            if (r.positions) item.positions = r.positions
+            return item
+          }),
         extra_charge_items: extraCharges
           .filter(r => r.description && parseNum(r.total_price) > 0)
           .map(r => ({ description: r.description, total_price: parseNum(r.total_price) })),
@@ -1118,19 +1238,26 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       {/* Extra Products */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen.
+        </p>
         {extraProducts.map((row, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Beschreibung" value={row.description}
-              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity}
-              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit}
-              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit: e.target.value } : r))} />
-            <input className="admin-form-input" style={{ flex: 1, minWidth: 80 }} placeholder="Preis/Stk" value={row.unit_price}
-              onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, unit_price: e.target.value } : r))} />
+            <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
+              onChange={e => updateExtra(i, { description: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity}
+              onChange={e => updateExtra(i, { quantity: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Einheit" value={row.unit}
+              onChange={e => updateExtra(i, { unit: e.target.value })} />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 65 }} placeholder="EK" value={row.ek ?? ''}
+              onChange={e => updateExtra(i, { ek: e.target.value })} title="Einkaufspreis (optional) — füllt mit dem Aufschlag den Preis automatisch" />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Auf. %" value={row.margin_pct ?? ''}
+              onChange={e => updateExtra(i, { margin_pct: e.target.value })} title="Aufschlag in % auf den EK" />
+            <input className="admin-form-input" style={{ flex: 1, minWidth: 75 }} placeholder="Preis/Stk" value={row.unit_price}
+              onChange={e => updateExtra(i, { unit_price: e.target.value })} title={row.ek?.trim() ? 'Verkaufspreis (aus EK × Aufschlag; überschreibbar)' : 'Verkaufspreis pro Stück'} />
             {optionalEnabled && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, whiteSpace: 'nowrap' }} title="Eventualposition — nicht im Total, erscheint mit Preis auf der Offerte">
-                <input type="checkbox" checked={!!row.optional} onChange={e => setExtraProducts(rows => rows.map((r, j) => j === i ? { ...r, optional: e.target.checked } : r))} />
+                <input type="checkbox" checked={!!row.optional} onChange={e => updateExtra(i, { optional: e.target.checked })} />
                 Option
               </label>
             )}

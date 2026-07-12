@@ -26,6 +26,9 @@ interface Props {
 const CREATABLE_ROLES = ['user_light', 'user', 'admin']
 const ALL_ROLES = ['user_light', 'user', 'admin', 'management', 'superadmin']
 
+// Spiegelt services/password_policy.py — die verbindliche Prüfung passiert im Backend.
+const MIN_PASSWORD_LENGTH = 12
+
 export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const isNew = !user
   const [email, setEmail] = useState(user?.email ?? '')
@@ -75,8 +78,9 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
 
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault()
-    if (!user || newPassword.length < 8) return
+    if (!user || newPassword.length < MIN_PASSWORD_LENGTH) return
     setSettingPassword(true)
+    setError('')
     try {
       await apiFetch(`/pwa/admin/users/${user.id}/set-password`, {
         method: 'POST',
@@ -84,8 +88,9 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
       })
       setNewPassword('')
       showToast('Passwort gesetzt')
-    } catch {
-      setError('Fehler beim Setzen des Passworts')
+    } catch (err: unknown) {
+      // Policy-Verstöße kommen als deutscher Klartext vom Backend.
+      setError(err instanceof Error && err.message ? err.message : 'Fehler beim Setzen des Passworts')
     } finally {
       setSettingPassword(false)
     }
@@ -186,7 +191,8 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
             <div className="admin-table-wrap" style={{ padding: 20 }}>
               <div className="admin-section-title">Passwort</div>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '10px 0 14px' }}>
-                Setzt ein neues Login-Passwort für diesen Benutzer (min. 8 Zeichen).
+                Setzt ein neues Login-Passwort für diesen Benutzer: mindestens {MIN_PASSWORD_LENGTH} Zeichen,
+                keine gängigen Passwörter, keine Zahlen- oder Tastaturreihen, nicht der eigene Name.
               </p>
               <form onSubmit={handleSetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ position: 'relative' }}>
@@ -196,7 +202,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     placeholder="••••••••"
-                    minLength={8}
+                    minLength={MIN_PASSWORD_LENGTH}
                     style={{ width: '100%', paddingRight: 44, boxSizing: 'border-box' }}
                   />
                   <button
@@ -217,7 +223,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                   type="submit"
                   className="admin-btn admin-btn-secondary"
                   style={{ width: '100%', justifyContent: 'center' }}
-                  disabled={settingPassword || newPassword.length < 8}
+                  disabled={settingPassword || newPassword.length < MIN_PASSWORD_LENGTH}
                 >
                   {settingPassword ? 'Speichere…' : 'Passwort setzen'}
                 </button>
