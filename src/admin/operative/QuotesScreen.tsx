@@ -1412,6 +1412,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   const [sendQuote, setSendQuote] = useState<Quote | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
+  // Produkt-Prospekte zur Offerte (Feature prospekt_mit_offerte): im Versand-Dialog wählbar.
+  const [prospektEnabled, setProspektEnabled] = useState(false)
+  const [prospekte, setProspekte] = useState<{ id: string; filename: string }[]>([])
+  const [selectedProspekte, setSelectedProspekte] = useState<Set<string>>(new Set())
 
   async function load() {
     setLoading(true)
@@ -1423,6 +1427,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    getMe().then(me => setProspektEnabled(isFeatureEnabled(me, 'prospekt_mit_offerte'))).catch(() => {})
+  }, [])
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff')
@@ -1468,13 +1476,37 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     }
   }
 
+  async function openSendQuote(q: Quote) {
+    setSendEmail('')
+    setProspekte([])
+    setSelectedProspekte(new Set())
+    setSendQuote(q)
+    if (!prospektEnabled) return
+    try {
+      const res = await apiFetch(`/pwa/admin/quotes/${q.id}/prospekte`) as { prospekte: { id: string; filename: string }[] }
+      setProspekte(res.prospekte)
+      // Default: alle Prospekte angehakt — der Nutzer kann einzelne abwählen.
+      setSelectedProspekte(new Set(res.prospekte.map(p => p.id)))
+    } catch {
+      // Prospekt-Liste ist optional; bei Fehler bleibt der Versand ohne Anhang möglich.
+    }
+  }
+
+  function toggleProspekt(id: string) {
+    setSelectedProspekte(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
   async function handleSendQuote() {
     if (!sendQuote || !sendEmail) return
     setSending(true)
     try {
       await apiFetch('/pwa/admin/quotes/send', {
         method: 'POST',
-        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail }),
+        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail, prospekt_file_ids: [...selectedProspekte] }),
       })
       showToast(`Offerte an ${sendEmail} gesendet`, 'success')
       setSendQuote(null)
@@ -1621,7 +1653,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                       {['entwurf', 'akzeptiert'].includes(q.status) && (
                         <button
                           className="admin-btn admin-btn-primary admin-btn-sm"
-                          onClick={() => { setSendEmail(''); setSendQuote(q) }}
+                          onClick={() => openSendQuote(q)}
                           disabled={acting === q.id}
                         >
                           Senden
@@ -1692,6 +1724,19 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                 placeholder="kunde@example.com"
               />
             </div>
+            {prospektEnabled && prospekte.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="admin-form-label">Prospekte anhängen</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {prospekte.map(p => (
+                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedProspekte.has(p.id)} onChange={() => toggleProspekt(p.id)} />
+                      {p.filename}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="admin-confirm-actions">
               <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sending}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sending}>

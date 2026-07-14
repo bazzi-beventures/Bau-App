@@ -140,6 +140,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sendingQuote, setSendingQuote] = useState(false)
+  // Produkt-Prospekte zur Offerte (Feature prospekt_mit_offerte): im Versand-Dialog wählbar.
+  const [prospektEnabled, setProspektEnabled] = useState(false)
+  const [sendProspekte, setSendProspekte] = useState<{ id: string; filename: string }[]>([])
+  const [selectedProspekte, setSelectedProspekte] = useState<Set<string>>(new Set())
 
   // Aufgaben (Checkliste)
   const [tasks, setTasks] = useState<ProjectTask[]>([])
@@ -187,6 +191,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     getMe().then(me => {
       setCurrentUserId(me.authorized_user_id)
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
+      setProspektEnabled(isFeatureEnabled(me, 'prospekt_mit_offerte'))
     }).catch(() => {})
   }, [])
 
@@ -413,7 +418,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   function handleOpenSendQuote(q: ProjectQuote) {
     setSendEmail(q.customer_email || '')
+    const projektProspekte = prospektEnabled
+      ? files.filter(f => f.category === 'prospekt' && f.storage_path).map(f => ({ id: f.id, filename: f.filename }))
+      : []
+    setSendProspekte(projektProspekte)
+    // Default: alle Prospekte angehakt — einzelne abwählbar.
+    setSelectedProspekte(new Set(projektProspekte.map(f => f.id)))
     setSendQuote(q)
+  }
+
+  function toggleProspekt(id: string) {
+    setSelectedProspekte(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
 
   async function handleSendQuote() {
@@ -422,7 +441,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     try {
       await apiFetch('/pwa/admin/quotes/send', {
         method: 'POST',
-        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail }),
+        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail, prospekt_file_ids: [...selectedProspekte] }),
       })
       showToast(`Offerte an ${sendEmail} gesendet`)
       setSendQuote(null)
@@ -1513,6 +1532,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 placeholder="kunde@example.com"
               />
             </div>
+            {prospektEnabled && sendProspekte.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="admin-form-label">Prospekte anhängen</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {sendProspekte.map(p => (
+                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedProspekte.has(p.id)} onChange={() => toggleProspekt(p.id)} />
+                      {p.filename}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="admin-confirm-actions">
               <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sendingQuote}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sendingQuote}>

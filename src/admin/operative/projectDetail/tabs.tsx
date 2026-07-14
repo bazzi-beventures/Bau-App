@@ -12,6 +12,7 @@ export type ProjectFileCategory =
   | 'bestellungen'
   | 'auftragsbestaetigung'
   | 'lieferschein'
+  | 'prospekt'
 
 export interface ProjectFile {
   id: string
@@ -33,6 +34,9 @@ const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'bestellungen', title: 'Bestellungen' },
   { key: 'auftragsbestaetigung', title: 'Auftragsbestätigung' },
   { key: 'lieferschein', title: 'Lieferschein' },
+  // Prospekt = Produktprospekt für den Kunden. Kann optional mit der Offerte
+  // mitversendet werden (Feature-Flag prospekt_mit_offerte, Auswahl im Versand-Dialog).
+  { key: 'prospekt', title: 'Prospekt' },
 ]
 
 // Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der
@@ -154,6 +158,7 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   bestellungen: 'Bestellungen',
   auftragsbestaetigung: 'Auftragsbestätigung',
   lieferschein: 'Lieferschein',
+  prospekt: 'Prospekt',
 }
 
 interface FileSectionsProps {
