@@ -5,6 +5,8 @@ import { isFeatureEnabled } from '../../api/modules'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 export interface Kontakt {
   name: string
@@ -168,6 +170,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
+  const isMobile = useIsMobile()
   const [projektleiterOptions, setProjektleiterOptions] = useState<{ id: string; name: string }[]>([])
   // id → Name für ALLE Mitarbeiter (nicht nur Projektleiter-geflaggte): löst
   // projektleiter_id in der Spalte auf, auch wenn der PL kein PL-Flag (mehr) hat.
@@ -293,6 +296,32 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={rows}
+            keyFor={p => p.id}
+            onItemClick={p => setSelected(p)}
+            empty="Keine Projekte gefunden."
+            renderCard={p => {
+              const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
+              return (
+                <>
+                  <div className="admin-card-head">
+                    <span className="admin-card-title">{p.name}</span>
+                    <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`}>
+                      {PROJECT_STATUS_LABELS[effectiveStatus]}
+                    </span>
+                  </div>
+                  <div className="admin-card-meta">
+                    {p.project_id_text || '—'} · {projectCustomerName(p) || '—'}
+                  </div>
+                  <div className="admin-card-meta">
+                    Offerte: {p.quote ? p.quote.status : '—'} · Rechnung: {p.invoice ? p.invoice.status : '—'} · {new Date(p.created_at).toLocaleDateString('de-CH')}
+                  </div>
+                </>
+              )
+            }}
+          />
         ) : (
           <table className="admin-table">
             <thead>

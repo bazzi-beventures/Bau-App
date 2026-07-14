@@ -60,6 +60,7 @@ function PositionsTable({ snapshot }: { snapshot: AftersalesSnapshot | null }) {
     return <div style={{ fontSize: 13, color: 'var(--muted)' }}>Keine Positionen im Snapshot.</div>
   }
   return (
+    <div className="admin-table-wrap">
     <table className="admin-table" style={{ fontSize: 13 }}>
       <thead>
         <tr><th>Position</th><th style={{ textAlign: 'right' }}>Menge</th><th style={{ textAlign: 'right' }}>Betrag</th></tr>
@@ -82,6 +83,7 @@ function PositionsTable({ snapshot }: { snapshot: AftersalesSnapshot | null }) {
         )}
       </tbody>
     </table>
+    </div>
   )
 }
 

@@ -8,7 +8,9 @@ import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
+import { InfoHint } from '../components/InfoHint'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
+import { SendQuoteDialog } from './SendQuoteDialog'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -775,7 +777,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
 
       {/* Materials */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Materialpositionen</legend>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>
+          Materialpositionen
+          <InfoHint text="Menge je Position erfassen. Eine als Option markierte Zeile ist eine Eventualposition: erscheint mit Preis auf der Offerte, zählt aber nicht ins Total." />
+        </legend>
         {/* Optionale Filter — grenzen die Auswahl in allen Material-Comboboxen ein. */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <select
@@ -798,7 +803,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           </select>
         </div>
         {materialRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <div key={i} className="quote-row">
             <MaterialCombobox
               materials={materials}
               supplierMap={supplierMap}
@@ -821,7 +826,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
               </label>
             )}
             {materialRows.length > 1 && (
-              <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeMaterial(i)} title="Entfernen">✕</button>
+              <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => removeMaterial(i)} title="Entfernen" aria-label="Position entfernen">✕</button>
             )}
           </div>
         ))}
@@ -832,10 +837,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
         <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
-          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen.
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div key={i} className="quote-row">
             <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={e => updateExtraProduct(i, { description: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity} onChange={e => updateExtraProduct(i, { quantity: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Einheit" value={row.unit} onChange={e => updateExtraProduct(i, { unit: e.target.value })} />
@@ -932,7 +937,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
         <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
           <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderpositionen</legend>
           {specialRows.map((row, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div key={i} className="quote-row">
               <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={e => updateSpecial(i, { description: e.target.value })} />
               <select className="admin-form-select" style={{ flex: 1, minWidth: 120 }} value={row.mode} onChange={e => updateSpecial(i, { mode: e.target.value as SpecialMode })}>
                 <option value="pauschal">Pauschale</option>
@@ -1208,9 +1213,12 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
 
       {/* Materials */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <legend style={{ fontWeight: 600, padding: '0 8px' }}>Materialpositionen</legend>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>
+          Materialpositionen
+          <InfoHint text="Menge je Position erfassen. Eine als Option markierte Zeile ist eine Eventualposition: erscheint mit Preis auf der Offerte, zählt aber nicht ins Total." />
+        </legend>
         {materialRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div key={i} className="quote-row">
             <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Bezeichnung" value={row.description}
               onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity}
@@ -1235,10 +1243,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
         <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
-          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen.
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div key={i} className="quote-row">
             <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
               onChange={e => updateExtra(i, { description: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity}
@@ -1306,7 +1314,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
           <legend style={{ fontWeight: 600, padding: '0 8px' }}>Sonderpositionen</legend>
           {specialRows.map((row, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div key={i} className="quote-row">
               <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
                 onChange={e => setSpecialRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
               <select className="admin-form-select" style={{ flex: 1, minWidth: 120 }} value={row.mode}
@@ -1410,12 +1418,6 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   // Send quote
   const [sendQuote, setSendQuote] = useState<Quote | null>(null)
-  const [sendEmail, setSendEmail] = useState('')
-  const [sending, setSending] = useState(false)
-  // Produkt-Prospekte zur Offerte (Feature prospekt_mit_offerte): im Versand-Dialog wählbar.
-  const [prospektEnabled, setProspektEnabled] = useState(false)
-  const [prospekte, setProspekte] = useState<{ id: string; filename: string }[]>([])
-  const [selectedProspekte, setSelectedProspekte] = useState<Set<string>>(new Set())
 
   async function load() {
     setLoading(true)
@@ -1427,10 +1429,6 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   }
 
   useEffect(() => { load() }, [])
-
-  useEffect(() => {
-    getMe().then(me => setProspektEnabled(isFeatureEnabled(me, 'prospekt_mit_offerte'))).catch(() => {})
-  }, [])
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff')
@@ -1473,48 +1471,6 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
       showToast('Fehler beim Aktualisieren', 'error')
     } finally {
       setActing(null)
-    }
-  }
-
-  async function openSendQuote(q: Quote) {
-    setSendEmail('')
-    setProspekte([])
-    setSelectedProspekte(new Set())
-    setSendQuote(q)
-    if (!prospektEnabled) return
-    try {
-      const res = await apiFetch(`/pwa/admin/quotes/${q.id}/prospekte`) as { prospekte: { id: string; filename: string }[] }
-      setProspekte(res.prospekte)
-      // Default: alle Prospekte angehakt — der Nutzer kann einzelne abwählen.
-      setSelectedProspekte(new Set(res.prospekte.map(p => p.id)))
-    } catch {
-      // Prospekt-Liste ist optional; bei Fehler bleibt der Versand ohne Anhang möglich.
-    }
-  }
-
-  function toggleProspekt(id: string) {
-    setSelectedProspekte(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  async function handleSendQuote() {
-    if (!sendQuote || !sendEmail) return
-    setSending(true)
-    try {
-      await apiFetch('/pwa/admin/quotes/send', {
-        method: 'POST',
-        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail, prospekt_file_ids: [...selectedProspekte] }),
-      })
-      showToast(`Offerte an ${sendEmail} gesendet`, 'success')
-      setSendQuote(null)
-      load()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen', 'error')
-    } finally {
-      setSending(false)
     }
   }
 
@@ -1653,7 +1609,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                       {['entwurf', 'akzeptiert'].includes(q.status) && (
                         <button
                           className="admin-btn admin-btn-primary admin-btn-sm"
-                          onClick={() => openSendQuote(q)}
+                          onClick={() => setSendQuote(q)}
                           disabled={acting === q.id}
                         >
                           Senden
@@ -1707,44 +1663,12 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
 
       {/* Dialog: Offerte senden */}
       {sendQuote && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
-            <div className="admin-confirm-title">Offerte senden</div>
-            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
-              {sendQuote.quote_number} · {fmtCHF(sendQuote.total_amount)}<br />
-              Projekt: {sendQuote.project_name}
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label className="admin-form-label">Empfänger E-Mail</label>
-              <input
-                className="admin-form-input"
-                type="email"
-                value={sendEmail}
-                onChange={e => setSendEmail(e.target.value)}
-                placeholder="kunde@example.com"
-              />
-            </div>
-            {prospektEnabled && prospekte.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <label className="admin-form-label">Prospekte anhängen</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {prospekte.map(p => (
-                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={selectedProspekte.has(p.id)} onChange={() => toggleProspekt(p.id)} />
-                      {p.filename}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sending}>Abbrechen</button>
-              <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sending}>
-                {sending ? 'Wird gesendet…' : 'Offerte senden'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SendQuoteDialog
+          quoteId={sendQuote.id}
+          header={<>{sendQuote.quote_number} · {fmtCHF(sendQuote.total_amount)}<br />Projekt: {sendQuote.project_name}</>}
+          onClose={() => setSendQuote(null)}
+          onSent={email => { showToast(`Offerte an ${email} gesendet`, 'success'); setSendQuote(null); load() }}
+        />
       )}
 
       {toast && (

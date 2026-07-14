@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 interface Supplier {
   id: string
@@ -40,6 +42,7 @@ const EMPTY_FORM = {
 }
 
 export default function SuppliersScreen() {
+  const isMobile = useIsMobile()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -207,6 +210,32 @@ export default function SuppliersScreen() {
       <div className="admin-table-wrap">
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={suppliers}
+            keyFor={s => String(s.id)}
+            onItemClick={s => openEdit(s)}
+            empty="Keine Lieferanten vorhanden."
+            renderCard={s => (
+              <>
+                <div className="admin-card-head">
+                  <span className="admin-card-title">{s.name}</span>
+                  <span className="admin-card-meta" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{s.prefix}</span>
+                </div>
+                {(s.city || s.phone) && (
+                  <div className="admin-card-meta">{[s.city, s.phone].filter(Boolean).join(' · ')}</div>
+                )}
+                <div className="admin-card-actions">
+                  <button
+                    className="admin-btn admin-btn-danger admin-btn-sm"
+                    onClick={e => { e.stopPropagation(); handleDelete(s) }}
+                  >
+                    Löschen
+                  </button>
+                </div>
+              </>
+            )}
+          />
         ) : (
           <table className="admin-table">
             <thead>
@@ -337,7 +366,7 @@ export default function SuppliersScreen() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-form-row">
                 <div className="admin-form-group">
                   <label className="admin-form-label">Telefon</label>
                   <input
@@ -379,7 +408,7 @@ export default function SuppliersScreen() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
+              <div className="admin-form-row admin-form-row-label">
                 <div className="admin-form-group">
                   <label className="admin-form-label">PLZ</label>
                   <input

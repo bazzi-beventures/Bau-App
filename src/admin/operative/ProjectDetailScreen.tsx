@@ -7,6 +7,7 @@ import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, 
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
+import { SendQuoteDialog } from './SendQuoteDialog'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
@@ -138,12 +139,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
-  const [sendEmail, setSendEmail] = useState('')
-  const [sendingQuote, setSendingQuote] = useState(false)
-  // Produkt-Prospekte zur Offerte (Feature prospekt_mit_offerte): im Versand-Dialog wählbar.
-  const [prospektEnabled, setProspektEnabled] = useState(false)
-  const [sendProspekte, setSendProspekte] = useState<{ id: string; filename: string }[]>([])
-  const [selectedProspekte, setSelectedProspekte] = useState<Set<string>>(new Set())
 
   // Aufgaben (Checkliste)
   const [tasks, setTasks] = useState<ProjectTask[]>([])
@@ -191,7 +186,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     getMe().then(me => {
       setCurrentUserId(me.authorized_user_id)
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
-      setProspektEnabled(isFeatureEnabled(me, 'prospekt_mit_offerte'))
     }).catch(() => {})
   }, [])
 
@@ -413,43 +407,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       await reloadQuotes()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler')
-    }
-  }
-
-  function handleOpenSendQuote(q: ProjectQuote) {
-    setSendEmail(q.customer_email || '')
-    const projektProspekte = prospektEnabled
-      ? files.filter(f => f.category === 'prospekt' && f.storage_path).map(f => ({ id: f.id, filename: f.filename }))
-      : []
-    setSendProspekte(projektProspekte)
-    // Default: alle Prospekte angehakt — einzelne abwählbar.
-    setSelectedProspekte(new Set(projektProspekte.map(f => f.id)))
-    setSendQuote(q)
-  }
-
-  function toggleProspekt(id: string) {
-    setSelectedProspekte(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  async function handleSendQuote() {
-    if (!sendQuote || !sendEmail) return
-    setSendingQuote(true)
-    try {
-      await apiFetch('/pwa/admin/quotes/send', {
-        method: 'POST',
-        body: JSON.stringify({ quote_id: sendQuote.id, recipient_email: sendEmail, prospekt_file_ids: [...selectedProspekte] }),
-      })
-      showToast(`Offerte an ${sendEmail} gesendet`)
-      setSendQuote(null)
-      await reloadQuotes()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Versand fehlgeschlagen')
-    } finally {
-      setSendingQuote(false)
     }
   }
 
@@ -910,7 +867,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               </div>
             )}
             {kontakte.map((k, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr 1fr 2fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+              <div key={i} className="project-pos-row">
                 <button
                   type="button"
                   onClick={() => toggleSiteContact(i)}
@@ -958,7 +915,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               Optional: Eigentümer des Objekts — eine <strong>eigene Rolle</strong>, unabhängig von
               Auftraggeber, Rechnungsempfänger und Baustellenkontakt. Wird auf Offerte und Rechnung gedruckt.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr', gap: 14 }}>
+            <div className="admin-form-row">
               <div className="admin-form-group" style={{ margin: 0 }}>
                 <label className="admin-form-label">Name</label>
                 <input className="admin-form-input" autoComplete="new-eigentuemer-name" value={eigentuemer.name} onChange={e => updateEigentuemer('name', e.target.value)} placeholder="z.B. Erika Muster / Eigentümergemeinschaft" />
@@ -987,7 +944,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   <label className="admin-form-label">Material</label>
                   <input className="admin-form-input" value={disposal.material} onChange={e => updateDisposal('material', e.target.value)} placeholder="z.B. Aluminium-Storen, Rollladen-Lamellen" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="admin-form-row">
                   <div className="admin-form-group" style={{ margin: 0 }}>
                     <label className="admin-form-label">Menge</label>
                     <input className="admin-form-input" value={disposal.menge} onChange={e => updateDisposal('menge', e.target.value)} placeholder="z.B. 12 Stk · 45 kg" />
@@ -1015,7 +972,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
               Optional: Wartungs-Intervall (in Monaten) + letzter Service → nächste Fälligkeit wird automatisch berechnet.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+            <div className="admin-form-row admin-form-row-3">
               <div className="admin-form-group" style={{ margin: 0 }}>
                 <label className="admin-form-label">Intervall (Monate)</label>
                 <input
@@ -1090,7 +1047,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
                   Termin festlegen, damit das Projekt im Einsatz-Kalender erscheint. Leer lassen = kein Termin.
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="admin-form-row">
                   <div className="admin-form-group" style={{ margin: 0 }}>
                     <label className="admin-form-label">Start (Datum)</label>
                     <input className="admin-form-input" type="date" value={startDate} onChange={e => {
@@ -1158,7 +1115,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onResumeDraft={() => { setResumeQuoteDraft(true); setShowQuoteForm(true) }}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
-          onSend={handleOpenSendQuote}
+          onSend={q => setSendQuote(q)}
           onEdit={handleEditQuote}
         />
       )}
@@ -1511,48 +1468,34 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {sendQuote && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
-            <div className="admin-confirm-title">Offerte senden</div>
-            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
-              {sendQuote.quote_number}<br />
+        <SendQuoteDialog
+          quoteId={sendQuote.id}
+          defaultEmail={sendQuote.customer_email || ''}
+          header={
+            <>
+              {sendQuote.quote_number}
               {sendQuote.status === 'gesendet' && (
-                <span style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  Wurde bereits versendet — erneuter Versand erzeugt neue Annahme-/Ablehnen-Links.
-                </span>
+                <>
+                  <br />
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                    Wurde bereits versendet — erneuter Versand erzeugt neue Annahme-/Ablehnen-Links.
+                  </span>
+                </>
               )}
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label className="admin-form-label">Empfänger E-Mail</label>
-              <input
-                className="admin-form-input"
-                type="email"
-                value={sendEmail}
-                onChange={e => setSendEmail(e.target.value)}
-                placeholder="kunde@example.com"
-              />
-            </div>
-            {prospektEnabled && sendProspekte.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <label className="admin-form-label">Prospekte anhängen</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {sendProspekte.map(p => (
-                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={selectedProspekte.has(p.id)} onChange={() => toggleProspekt(p.id)} />
-                      {p.filename}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setSendQuote(null)} disabled={sendingQuote}>Abbrechen</button>
-              <button className="admin-btn admin-btn-primary" onClick={handleSendQuote} disabled={!sendEmail || sendingQuote}>
-                {sendingQuote ? 'Wird gesendet…' : 'Offerte senden'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          onClose={() => setSendQuote(null)}
+          onSent={async email => {
+            showToast(`Offerte an ${email} gesendet`)
+            setSendQuote(null)
+            await reloadQuotes()
+            if (!project) return
+            // Direkt angehängte Dateien liegen jetzt als Projekt-Anhänge — Liste auffrischen.
+            try {
+              setFiles(await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[])
+            } catch { /* Datei-Liste ist nicht kritisch */ }
+          }}
+        />
       )}
 
       {toast && (

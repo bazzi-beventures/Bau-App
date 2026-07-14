@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import UserDetailScreen from './UserDetailScreen'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 export interface AuthUser {
   id: string
@@ -14,6 +16,7 @@ export interface AuthUser {
 }
 
 export default function UsersScreen() {
+  const isMobile = useIsMobile()
   const [users, setUsers] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -78,6 +81,34 @@ export default function UsersScreen() {
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={filtered}
+            keyFor={u => String(u.id)}
+            onItemClick={u => setSelected(u)}
+            empty="Keine Benutzer gefunden."
+            renderCard={u => (
+              <>
+                <div className="admin-card-head">
+                  <span className="admin-card-title">{u.display_name || '—'}</span>
+                  <span className={`admin-badge ${u.role === 'admin' || u.role === 'management' || u.role === 'superadmin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>
+                    {u.role}
+                  </span>
+                </div>
+                <div className="admin-card-meta">
+                  {[u.username, u.email].filter(Boolean).join(' · ') || '—'}
+                </div>
+                <div className="admin-card-meta" style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <span className={`admin-badge ${u.is_active ? 'admin-badge-active' : 'admin-badge-rejected'}`}>
+                    {u.is_active ? 'Aktiv' : 'Inaktiv'}
+                  </span>
+                  <span className={`admin-badge ${u.consent_version ? 'admin-badge-approved' : 'admin-badge-draft'}`}>
+                    Consent: {u.consent_version ? 'Ja' : 'Ausstehend'}
+                  </span>
+                </div>
+              </>
+            )}
+          />
         ) : (
           <table className="admin-table">
             <thead>

@@ -606,6 +606,7 @@ export default function HrReportsScreen() {
                   </div>
 
                   {isExpanded && sessions.length > 0 && (
+                    <div className="admin-table-wrap">
                     <table className="admin-table">
                       <thead>
                         <tr>
@@ -639,6 +640,7 @@ export default function HrReportsScreen() {
                         </tr>
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               )

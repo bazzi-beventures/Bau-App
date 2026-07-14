@@ -274,7 +274,7 @@ export default function ImportScreen() {
           </p>
           <div style={{ display: 'grid', gap: 10, maxWidth: 520 }}>
             {parsed.fields.map(fld => (
-              <div key={fld.key} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 12 }}>
+              <div key={fld.key} className="admin-form-row admin-form-row-label">
                 <label className="admin-form-label" style={{ margin: 0 }}>
                   {fld.label}{fld.required && <span style={{ color: '#ef4444' }}> *</span>}
                 </label>

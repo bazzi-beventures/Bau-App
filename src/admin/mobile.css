@@ -518,6 +518,43 @@
     width: 100%;
     min-height: 44px;
   }
+
+  /* ─── Formular-Zeilen einspaltig ─────────────────────── */
+  .admin-form-row,
+  .admin-form-row-3,
+  .admin-form-row-label {
+    grid-template-columns: 1fr;
+  }
+
+  /* Projekt-Detail-Editor-Zeile stapelt (Stern/Felder/Entfernen untereinander) */
+  .project-pos-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  /* Offerten-Positions-Zeile: Hauptfeld volle Breite, kleine Felder 2-spaltig */
+  .quote-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-items: start;
+  }
+  .quote-row > :first-child,
+  .quote-row > label,
+  .quote-row > button {
+    grid-column: 1 / -1;
+  }
+
+  /* ─── Touch-Targets ──────────────────────────────────── */
+  .admin-modal-close {
+    padding: 10px;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .admin-btn-sm {
+    min-height: 40px;
+  }
 }
 
 /* ─── Reduced-motion ─────────────────────────────────────── */

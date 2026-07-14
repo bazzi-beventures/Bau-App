@@ -116,6 +116,7 @@ export default function PaymentReconciliationScreen() {
             {!s.dry_run && <SummaryCard label="Verbucht" value={s.applied} color="#0a7d33" />}
           </div>
 
+          <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
               <tr>
@@ -148,6 +149,7 @@ export default function PaymentReconciliationScreen() {
               ))}
             </tbody>
           </table>
+          </div>
 
           {s.dry_run && s.matched > 0 && (
             <div className="admin-form-hint" style={{ marginTop: 12 }}>

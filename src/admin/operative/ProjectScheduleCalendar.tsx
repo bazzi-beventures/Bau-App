@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Project, projectCustomerName } from './ProjectsScreen'
 import type { SchedulingConfig } from '../../api/admin'
+import { useIsMobile } from '../useIsMobile'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
   parseDateStr, diffDays, hhmmToMin, minToHHMM,
@@ -565,6 +566,70 @@ function WeekView({
   )
 }
 
+// ─── Agenda-Ansicht (Mobile) ────────────────────────────────────────────────
+// Vertikale Wochen-Agenda: Tage untereinander, Einsätze als Karten. Ersetzt auf
+// dem Handy das Zeitraster (dessen Drag&Drop/Aufziehen auf Touch nicht geht).
+// Verschieben passiert über das Bearbeitungs-Panel (Tap → onSelect), neue
+// Einsätze über den +-Button im Tag-Header (Default-Slot 08:00–09:00).
+function AgendaView({
+  projects, staff, fields, currentDate, onSelect, onCreateSlot, holidays,
+}: {
+  projects: Project[]
+  staff: StaffLite[]
+  fields?: Record<string, boolean>
+  currentDate: Date
+  onSelect: (p: Project) => void
+  onCreateSlot?: (dayISO: string, startTime: string, endTime: string) => void
+  holidays: Map<string, string>
+}) {
+  const days = getWeekDays(currentDate)
+  const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
+  return (
+    <div className="project-cal-agenda">
+      {days.map((day, i) => {
+        const dayISO = toDateStr(day)
+        const holiday = holidays.get(dayISO)
+        const dayProjects = projectsByDay[i]
+        return (
+          <div key={dayISO} className="project-cal-agenda-day">
+            <div className={`project-cal-agenda-day-head${isToday(day) ? ' today' : ''}`}>
+              <span>{day.toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+              {holiday && <span className="project-cal-week-day-holiday">{holiday}</span>}
+              {onCreateSlot && (
+                <button
+                  type="button"
+                  className="project-cal-agenda-add"
+                  onClick={() => onCreateSlot(dayISO, '08:00', '09:00')}
+                  aria-label="Einsatz hinzufügen"
+                >+</button>
+              )}
+            </div>
+            {dayProjects.length === 0 ? (
+              <div className="project-cal-agenda-empty">–</div>
+            ) : dayProjects.map(p => {
+              const extra = pillExtraLines(p, staff, fields)
+              const monteurs = projectMonteurNames(p, staff)
+              return (
+                <div
+                  key={p.id}
+                  className="project-cal-agenda-event"
+                  style={{ background: pillBg(p) }}
+                  onClick={() => onSelect(p)}
+                >
+                  <span className="project-cal-agenda-event-time">{fmtTimeRange(p) || 'Ganztägig'}</span>
+                  <strong>{p.name}</strong>
+                  {monteurs && <span className="project-cal-agenda-event-sub">{monteurs}</span>}
+                  {extra.map((line, j) => <span key={j} className="project-cal-agenda-event-sub">{line}</span>)}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ProjectScheduleCalendar({
@@ -572,6 +637,7 @@ export default function ProjectScheduleCalendar({
   onVisibleWeekChange, onVisibleStaffChange, schedulingConfig,
 }: Props) {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'staff'>('month')
+  const isMobile = useIsMobile()
   const fields = schedulingConfig?.fields
   // Einsatz-Art-Farben als scoped CSS-Variablen (--kind-*) auf dem Kalender-Root.
   const kindColorVars: React.CSSProperties = {}
@@ -644,8 +710,12 @@ export default function ProjectScheduleCalendar({
     ...getSwissHolidays(year + 1, canton),
   ])
 
+  // Auf Mobile ist die Ansicht immer die Wochen-Agenda → Navigation wochenweise,
+  // unabhängig vom (dort ausgeblendeten) Monatsmodus.
+  const monthNav = viewMode === 'month' && !isMobile
+
   function handlePrev() {
-    if (viewMode === 'month') {
+    if (monthNav) {
       setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
     } else {
       setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n })
@@ -653,7 +723,7 @@ export default function ProjectScheduleCalendar({
   }
 
   function handleNext() {
-    if (viewMode === 'month') {
+    if (monthNav) {
       setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
     } else {
       setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n })
@@ -667,7 +737,7 @@ export default function ProjectScheduleCalendar({
     onCreateSlot?.(dayISO, startTime, endTime, monteurId)
   }
 
-  const title = viewMode === 'month'
+  const title = monthNav
     ? currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' })
     : (() => {
         const days = getWeekDays(currentDate)
@@ -680,18 +750,33 @@ export default function ProjectScheduleCalendar({
     <div style={kindColorVars}>
       <div className="absence-cal-toolbar">
         <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className={`admin-btn admin-btn-sm ${viewMode === 'month' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-            onClick={() => setViewMode('month')}
-          >Monat</button>
-          <button
-            className={`admin-btn admin-btn-sm ${viewMode === 'week' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-            onClick={() => setViewMode('week')}
-          >Woche</button>
-          <button
-            className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-            onClick={() => setViewMode('staff')}
-          >Mitarbeiter</button>
+          {isMobile ? (
+            <>
+              <button
+                className={`admin-btn admin-btn-sm ${viewMode !== 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode('week')}
+              >Alle</button>
+              <button
+                className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode('staff')}
+              >Mitarbeiter</button>
+            </>
+          ) : (
+            <>
+              <button
+                className={`admin-btn admin-btn-sm ${viewMode === 'month' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode('month')}
+              >Monat</button>
+              <button
+                className={`admin-btn admin-btn-sm ${viewMode === 'week' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode('week')}
+              >Woche</button>
+              <button
+                className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode('staff')}
+              >Mitarbeiter</button>
+            </>
+          )}
         </div>
 
         <div className="absence-cal-title">{title}</div>
@@ -775,6 +860,18 @@ export default function ProjectScheduleCalendar({
 
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+      ) : viewMode === 'staff' && !focusedStaff ? (
+        <div className="admin-empty">Keine Mitarbeiter verfügbar.</div>
+      ) : isMobile ? (
+        <AgendaView
+          projects={visibleProjects}
+          staff={staff}
+          fields={fields}
+          currentDate={currentDate}
+          onSelect={onSelect}
+          onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
+          holidays={holidays}
+        />
       ) : viewMode === 'month' ? (
         <MonthView
           projects={visibleProjects}
@@ -785,8 +882,6 @@ export default function ProjectScheduleCalendar({
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           holidays={holidays}
         />
-      ) : viewMode === 'staff' && !focusedStaff ? (
-        <div className="admin-empty">Keine Mitarbeiter verfügbar.</div>
       ) : (
         <WeekView
           projects={visibleProjects}
@@ -800,7 +895,12 @@ export default function ProjectScheduleCalendar({
         />
       )}
 
-      {!loading && <CalendarLegend canton={canton} />}
+      {!loading && !isMobile && <CalendarLegend canton={canton} />}
+      {!loading && isMobile && (
+        <div className="project-cal-agenda-hint">
+          Einsatz antippen zum Bearbeiten, <strong>+</strong> für neuen Einsatz.
+        </div>
+      )}
     </div>
   )
 }

@@ -376,7 +376,7 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
                       onChange={e => setObjectAddress(e.target.value)}
                     />
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="admin-form-row">
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                       <span>Ansprechpartner vor Ort</span>
                       <input
@@ -497,7 +497,7 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
                             onChange={e => setNewCustName(e.target.value)}
                           />
                         </label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div className="admin-form-row">
                           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                             <span>Telefon</span>
                             <input

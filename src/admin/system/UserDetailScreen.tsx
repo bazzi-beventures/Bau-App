@@ -120,7 +120,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
         <button className="admin-btn admin-btn-secondary" onClick={onClose}>← Zurück</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
+      <div className="admin-detail-grid">
         {/* Formular */}
         <form onSubmit={handleSave}>
           <div className="admin-table-wrap" style={{ padding: 24 }}>

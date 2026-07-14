@@ -5,6 +5,8 @@ import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
 import { CompanySearch } from '../../shared/CompanySearch'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 import { formatDateTime } from './projectDetail/tabs'
 
 interface CustomerComment {
@@ -332,7 +334,7 @@ function CustomerForm({
             }}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="admin-form-row">
           <div className="admin-form-group">
             <label className="admin-form-label">Name *</label>
             <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
@@ -346,7 +348,7 @@ function CustomerForm({
           <label className="admin-form-label">E-Mail</label>
           <input className="admin-form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="admin-form-row">
           <div className="admin-form-group">
             <label className="admin-form-label">Mobil</label>
             <input className="admin-form-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="079 123 45 67" />
@@ -371,7 +373,7 @@ function CustomerForm({
             Abweichende Rechnungsadresse
           </label>
           {billingDiffers && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 10 }}>
+            <div className="admin-form-row" style={{ marginTop: 10 }}>
               <div>
                 <label className="admin-form-label">Empfänger (Rechnung)</label>
                 <input className="admin-form-input" value={billingName} onChange={e => setBillingName(e.target.value)} placeholder={name || 'z.B. Verwaltung AG'} />
@@ -392,7 +394,7 @@ function CustomerForm({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="admin-form-row">
           <div className="admin-form-group">
             <label className="admin-form-label">Lokaler Kontakt — Name (Default)</label>
             <input className="admin-form-input" value={localContactName} onChange={e => setLocalContactName(e.target.value)} placeholder="z.B. Hauswart" />
@@ -404,7 +406,7 @@ function CustomerForm({
         </div>
 
         {showOwnerContact && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="admin-form-row">
             <div className="admin-form-group">
               <label className="admin-form-label">Eigentümer — Name</label>
               <input className="admin-form-input" value={ownerContactName} onChange={e => setOwnerContactName(e.target.value)} placeholder="z.B. Eigentümer / Verwaltung" />
@@ -450,6 +452,7 @@ interface CustomersListResponse {
 const PAGE_SIZE = 50
 
 export default function CustomersScreen() {
+  const isMobile = useIsMobile()
   const [data, setData] = useState<CustomersListResponse>({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -556,6 +559,36 @@ export default function CustomersScreen() {
           </div>
         ) : (
           <>
+            {isMobile ? (
+              <AdminCardList
+                items={rows}
+                keyFor={c => String(c.id)}
+                onItemClick={c => setEditing(c)}
+                empty="Kein Kunde gefunden."
+                renderCard={c => (
+                  <>
+                    <div className="admin-card-head">
+                      <span className="admin-card-title">{c.name}</span>
+                      {c.company && <span className="admin-card-meta">{c.company}</span>}
+                    </div>
+                    {(c.email || c.phone) && (
+                      <div className="admin-card-meta">{[c.email, c.phone].filter(Boolean).join(' · ')}</div>
+                    )}
+                    {(c.billing_address ?? c.address) && (
+                      <div className="admin-card-meta">{c.billing_address ?? c.address}</div>
+                    )}
+                    <div className="admin-card-actions">
+                      <button
+                        className="admin-btn admin-btn-secondary admin-btn-sm"
+                        onClick={e => { e.stopPropagation(); setConfirmDelete(c) }}
+                      >
+                        Löschen
+                      </button>
+                    </div>
+                  </>
+                )}
+              />
+            ) : (
             <table className="admin-table">
               <thead>
                 <tr>
@@ -592,6 +625,7 @@ export default function CustomersScreen() {
                 ))}
               </tbody>
             </table>
+            )}
 
             {total > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--border)', gap: 12, flexWrap: 'wrap' }}>

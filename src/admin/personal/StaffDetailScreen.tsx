@@ -64,7 +64,7 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
         <button className="admin-btn admin-btn-secondary" onClick={onClose}>← Zurück</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
+      <div className="admin-detail-grid">
         {/* Formular */}
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="admin-table-wrap" style={{ padding: 24 }}>
@@ -76,7 +76,7 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                 <label className="admin-form-label">Name *</label>
                 <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-form-row">
                 <div className="admin-form-group">
                   <label className="admin-form-label">Kürzel</label>
                   <input className="admin-form-input" value={kuerzel} onChange={e => setKuerzel(e.target.value)} placeholder="z.B. MA" maxLength={5} />
@@ -91,7 +91,7 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                   </select>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-form-row">
                 <div className="admin-form-group">
                   <label className="admin-form-label">Geburtsdatum</label>
                   <input
@@ -135,7 +135,7 @@ export default function StaffDetailScreen({ member, onClose, onSaved }: Props) {
                   Beschäftigungsgrad. 100% = Vollzeit (Tenant-Soll). Bei 80% und 40h-Woche = 32h Soll (6.4h/Tag).
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="admin-form-row">
                 <div className="admin-form-group">
                   <label className="admin-form-label">Stundenlohn (CHF)</label>
                   <input className="admin-form-input" inputMode="decimal" value={hourlyRate} onChange={e => setHourlyRate(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="35.00" />

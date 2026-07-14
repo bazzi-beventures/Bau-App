@@ -12,7 +12,8 @@ export type ProjectFileCategory =
   | 'bestellungen'
   | 'auftragsbestaetigung'
   | 'lieferschein'
-  | 'prospekt'
+  | 'anhang'
+  | 'prospekt' // Altbestand: frühere Kategorie der Offerten-Anhänge, wird unter 'anhang' angezeigt
 
 export interface ProjectFile {
   id: string
@@ -28,15 +29,15 @@ const PROJECT_DOC_SECTIONS: { key: ProjectFileCategory; title: string; legacyFal
   { key: 'fotos', title: 'Fotos' },
   { key: 'masse', title: 'Masse' },
   { key: 'sonstiges', title: 'Sonstiges', legacyFallback: true },
+  // Dokumente für den Kunden (z.B. Produktprospekt) — können beim Versand einer
+  // Offerte als E-Mail-Anhang gewählt werden (Feature prospekt_mit_offerte).
+  { key: 'anhang', title: 'Anhänge' },
 ]
 
 const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'bestellungen', title: 'Bestellungen' },
   { key: 'auftragsbestaetigung', title: 'Auftragsbestätigung' },
   { key: 'lieferschein', title: 'Lieferschein' },
-  // Prospekt = Produktprospekt für den Kunden. Kann optional mit der Offerte
-  // mitversendet werden (Feature-Flag prospekt_mit_offerte, Auswahl im Versand-Dialog).
-  { key: 'prospekt', title: 'Prospekt' },
 ]
 
 // Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der
@@ -46,6 +47,9 @@ const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
 const ALL_CATEGORY_KEYS = new Set<ProjectFileCategory>(
   [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS].map(s => s.key),
 )
+// Altbestand: wird in der Anhänge-Sektion angezeigt und darf nicht zusätzlich
+// unter "Sonstiges" auftauchen.
+ALL_CATEGORY_KEYS.add('prospekt')
 
 export interface ProjectQuote {
   id: number
@@ -158,6 +162,7 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   bestellungen: 'Bestellungen',
   auftragsbestaetigung: 'Auftragsbestätigung',
   lieferschein: 'Lieferschein',
+  anhang: 'Anhang',
   prospekt: 'Prospekt',
 }
 
@@ -311,6 +316,8 @@ function FileSections({ files, sections, uploading, uploadingCategory, onUpload,
       {sections.map(section => {
         const items = files.filter(f => {
           if (f.category === section.key) return true
+          // Altbestand: frühere Kategorie der Offerten-Anhänge.
+          if (section.key === 'anhang' && f.category === 'prospekt') return true
           // Fallback nur für echte Altlasten: null oder eine Kategorie, die in
           // KEINEM Tab vorkommt. Bekannte Fremd-Kategorien (z.B. auftragsbestaetigung)
           // bleiben in ihrer eigenen Sektion und tauchen hier nicht auf.

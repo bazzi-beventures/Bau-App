@@ -4,6 +4,8 @@ import { INVOICE_STATUS_LABELS as STATUS_LABELS, INVOICE_STATUS_BADGE as STATUS_
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 interface Invoice {
   id: number
@@ -43,6 +45,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
   const [projektleiterOptions, setProjektleiterOptions] = useState<ProjektleiterOption[]>([])
   const [acting, setActing] = useState<number | null>(null)
+  const isMobile = useIsMobile()
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   // Generate invoice
@@ -230,6 +233,53 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={filtered}
+            keyFor={inv => String(inv.id)}
+            empty="Keine Rechnungen gefunden."
+            renderCard={inv => (
+              <>
+                <div className="admin-card-head">
+                  <span className="admin-card-title" style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{inv.invoice_number}</span>
+                  <span className={`admin-badge ${STATUS_BADGE[inv.status] || 'admin-badge-draft'}`}>
+                    {STATUS_LABELS[inv.status] || inv.status}
+                  </span>
+                </div>
+                <div className="admin-card-meta"><strong>{inv.project_name}</strong></div>
+                <div className="admin-card-meta">
+                  {fmtCHF(inv.total_amount)} · erstellt {fmtDate(inv.created_at)}{inv.paid_at ? ` · bezahlt ${fmtDate(inv.paid_at)}` : ''}
+                </div>
+                <div className="admin-card-actions">
+                  {(inv.storage_path || inv.pdf_url) && (
+                    <a
+                      href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                    >
+                      PDF
+                    </a>
+                  )}
+                  {(inv.status === 'ausstehend' || inv.status === 'offen') && (
+                    <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openSendInvoice(inv)} disabled={acting === inv.id}>
+                      Senden
+                    </button>
+                  )}
+                  {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
+                    <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmPaid(inv)} disabled={acting === inv.id}>
+                      Als bezahlt markieren
+                    </button>
+                  )}
+                  {inv.status === 'bezahlt' && (
+                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleArchive(inv.id)} disabled={acting === inv.id}>
+                      {acting === inv.id ? '…' : 'Archivieren'}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          />
         ) : (
           <table className="admin-table">
             <thead>

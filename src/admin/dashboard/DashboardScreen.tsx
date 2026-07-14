@@ -530,7 +530,7 @@ function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps)
                         Geplant bis {fmtDate(p.end_date)} ({daysSince(p.end_date)} Tage überfällig)
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div className="admin-form-row">
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                         <span>Start</span>
                         <input

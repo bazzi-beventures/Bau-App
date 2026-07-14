@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fmtCHF } from '../utils/format'
+import { useIsMobile } from '../useIsMobile'
 
 // Tippbare Material-Auswahl mit Live-Filter. Ersetzt das native <select> in der
 // Offerten-Erstellung, weil der Materialstamm (Stobag ~4'500 Artikel) im Dropdown
@@ -41,6 +42,7 @@ export function MaterialCombobox({ materials, supplierMap, supplierFilter, categ
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
 
   const selected = useMemo(() => materials.find(m => m.art_nr === value) ?? null, [materials, value])
   const selectedLabel = selected ? labelOf(selected) : ''
@@ -130,8 +132,62 @@ export function MaterialCombobox({ materials, supplierMap, supplierFilter, categ
 
   const totalCandidates = candidates.length
 
+  const menuInner = (
+    <>
+      <div
+        onMouseDown={() => pick(null)}
+        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}
+      >
+        — Material wählen —
+      </div>
+      {filtered.length === 0 ? (
+        <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>Kein Treffer</div>
+      ) : (
+        filtered.map((m, i) => (
+          <div
+            key={m.art_nr}
+            onMouseDown={() => pick(m)}
+            onMouseEnter={() => setHighlighted(i)}
+            style={{
+              padding: '8px 12px',
+              minHeight: isMobile ? 44 : undefined,
+              display: isMobile ? 'flex' : undefined,
+              alignItems: isMobile ? 'center' : undefined,
+              cursor: 'pointer',
+              fontSize: 13,
+              color: 'var(--text)',
+              background: i === highlighted ? 'var(--surface2)' : 'transparent',
+              borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {labelOf(m)}
+          </div>
+        ))
+      )}
+      {totalCandidates > filtered.length && (
+        <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
+          {filtered.length} von {totalCandidates} — weiter tippen, um einzugrenzen
+        </div>
+      )}
+    </>
+  )
+
+  const menuBoxBase = {
+    margin: 0,
+    padding: 0,
+    listStyle: 'none' as const,
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+    overflowY: 'auto' as const,
+  }
+
   return (
-    <div style={{ flex: 2, minWidth: 0 }}>
+    <div style={{ flex: 2, minWidth: 0, position: 'relative' }}>
       <input
         ref={inputRef}
         className="admin-form-input"
@@ -143,61 +199,22 @@ export function MaterialCombobox({ materials, supplierMap, supplierFilter, categ
         onChange={e => { setQuery(e.target.value); setHighlighted(0); if (!open) openMenu() }}
         onKeyDown={onKeyDown}
       />
-      {open && pos && createPortal(
+      {/* Mobile: In-Flow-Dropdown direkt unter dem Feld — position:fixed sitzt bei
+          offener iOS-Tastatur falsch, weil iOS fixed dann nicht neu layoutet. */}
+      {open && isMobile && (
         <div
           ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            width: pos.width,
-            zIndex: 2000,
-            margin: 0,
-            padding: 0,
-            listStyle: 'none',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-            maxHeight: 300,
-            overflowY: 'auto',
-          }}
+          style={{ ...menuBoxBase, position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 50, maxHeight: '40vh' }}
         >
-          <div
-            onMouseDown={() => pick(null)}
-            style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}
-          >
-            — Material wählen —
-          </div>
-          {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: 13, color: 'var(--muted)' }}>Kein Treffer</div>
-          ) : (
-            filtered.map((m, i) => (
-              <div
-                key={m.art_nr}
-                onMouseDown={() => pick(m)}
-                onMouseEnter={() => setHighlighted(i)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: 'var(--text)',
-                  background: i === highlighted ? 'var(--surface2)' : 'transparent',
-                  borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {labelOf(m)}
-              </div>
-            ))
-          )}
-          {totalCandidates > filtered.length && (
-            <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--muted)', borderTop: '1px solid var(--border)' }}>
-              {filtered.length} von {totalCandidates} — weiter tippen, um einzugrenzen
-            </div>
-          )}
+          {menuInner}
+        </div>
+      )}
+      {open && !isMobile && pos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ ...menuBoxBase, position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 2000, maxHeight: 300 }}
+        >
+          {menuInner}
         </div>,
         document.body
       )}

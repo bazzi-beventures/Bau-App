@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { getAdminStaff, deleteStaff, StaffMember } from '../../api/admin'
 import StaffDetailScreen from './StaffDetailScreen'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 interface Props {
   onNav?: (screen: string, id?: string) => void
 }
 
 export default function StaffScreen({ onNav }: Props) {
+  const isMobile = useIsMobile()
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -81,6 +84,34 @@ export default function StaffScreen({ onNav }: Props) {
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={filtered}
+            keyFor={s => String(s.id)}
+            onItemClick={s => setSelected(s)}
+            empty="Keine Mitarbeiter gefunden."
+            renderCard={s => (
+              <>
+                <div className="admin-card-head">
+                  <span className="admin-card-title">{s.name}</span>
+                  {s.role
+                    ? <span className={`admin-badge ${s.role === 'admin' ? 'admin-badge-admin' : 'admin-badge-active'}`}>{s.role}</span>
+                    : <span className="admin-badge admin-badge-draft">—</span>}
+                </div>
+                <div className="admin-card-meta">
+                  {[s.kuerzel, s.funktion, s.email].filter(Boolean).join(' · ') || '—'}
+                </div>
+                <div className="admin-card-actions">
+                  <button
+                    className="admin-btn admin-btn-secondary admin-btn-sm"
+                    onClick={e => { e.stopPropagation(); setConfirmDelete(s) }}
+                  >
+                    Deaktivieren
+                  </button>
+                </div>
+              </>
+            )}
+          />
         ) : (
           <table className="admin-table">
             <thead>

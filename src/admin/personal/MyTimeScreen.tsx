@@ -546,7 +546,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
                 onChange={e => setCorrForm(f => ({ ...f, date: e.target.value }))}
               />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="admin-form-row">
               <div className="admin-form-group">
                 <label className="admin-form-label">Einstempel</label>
                 <input
@@ -661,7 +661,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
                 <option value="other">Sonstiges</option>
               </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="admin-form-row">
               <div className="admin-form-group">
                 <label className="admin-form-label">Von</label>
                 <input

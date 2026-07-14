@@ -124,22 +124,22 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, padding: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 16 }}>
+      <div className="kpi-admin-tabs">
         <button
-          className={`admin-btn ${tab === 'weekly-plan' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+          className={`kpi-admin-tab${tab === 'weekly-plan' ? ' active' : ''}`}
           onClick={() => setTab('weekly-plan')}
         >
           Wochenplan
         </button>
         <button
-          className={`admin-btn ${tab === 'year-end' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+          className={`kpi-admin-tab${tab === 'year-end' ? ' active' : ''}`}
           onClick={() => setTab('year-end')}
         >
           Jahresabschluss
         </button>
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'modules' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'modules' ? ' active' : ''}`}
             onClick={() => setTab('modules')}
           >
             Module
@@ -147,7 +147,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'notifications' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'notifications' ? ' active' : ''}`}
             onClick={() => setTab('notifications')}
           >
             Benachrichtigungen
@@ -155,7 +155,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'workflows' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'workflows' ? ' active' : ''}`}
             onClick={() => setTab('workflows')}
           >
             Workflows
@@ -163,7 +163,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'travel-cost' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'travel-cost' ? ' active' : ''}`}
             onClick={() => setTab('travel-cost')}
           >
             Fahrtkosten
@@ -171,7 +171,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'scheduling' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'scheduling' ? ' active' : ''}`}
             onClick={() => setTab('scheduling')}
           >
             Einsatzplanung
@@ -179,7 +179,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         )}
         {isSuperadmin && (
           <button
-            className={`admin-btn ${tab === 'help-docs' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            className={`kpi-admin-tab${tab === 'help-docs' ? ' active' : ''}`}
             onClick={() => setTab('help-docs')}
           >
             Hilfe-Bot
@@ -974,9 +974,10 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
           }}>
             Dieser Mandant nutzt aktuell die <strong>System-Standard-Tabelle</strong>.
           </div>
-          <table className="admin-table" style={{ marginBottom: 16 }}>
+          <div className="admin-table-wrap" style={{ marginBottom: 16 }}>
+          <table className="admin-table">
             <thead>
-              <tr><th>Distanz</th><th style={{ width: 140 }}>CHF</th></tr>
+              <tr><th>Distanz</th><th>CHF</th></tr>
             </thead>
             <tbody>
               {defaultTable.map(([km, chf], i) => (
@@ -987,18 +988,20 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
               ))}
             </tbody>
           </table>
+          </div>
           <button className="admin-btn admin-btn-primary" onClick={startCustom}>
             Eigene Tabelle erstellen
           </button>
         </>
       ) : (
         <>
-          <table className="admin-table" style={{ marginBottom: 12 }}>
+          <div className="admin-table-wrap" style={{ marginBottom: 12 }}>
+          <table className="admin-table">
             <thead>
               <tr>
-                <th style={{ width: 160 }}>bis … km</th>
-                <th style={{ width: 160 }}>CHF</th>
-                <th style={{ width: 80 }}></th>
+                <th>bis … km</th>
+                <th>CHF</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -1009,7 +1012,7 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
                       type="number" min="0" step="1" className="admin-form-input"
                       value={km ?? ''}
                       onChange={e => setRow(i, e.target.value === '' ? null : parseFloat(e.target.value), chf)}
-                      style={{ width: 130 }}
+                      style={{ width: '100%', maxWidth: 130 }}
                     />
                     {i === rows.length - 1 && (
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>gilt auch darüber</div>
@@ -1020,7 +1023,7 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
                       type="number" min="0" step="0.05" className="admin-form-input"
                       value={Number.isFinite(chf) ? chf : ''}
                       onChange={e => setRow(i, km, parseFloat(e.target.value) || 0)}
-                      style={{ width: 130 }}
+                      style={{ width: '100%', maxWidth: 130 }}
                     />
                   </td>
                   <td>
@@ -1036,6 +1039,7 @@ function TravelCostTab({ onToast }: { onToast: (msg: string, type: 'success' | '
               ))}
             </tbody>
           </table>
+          </div>
 
           <button
             className="admin-btn admin-btn-secondary"
@@ -1655,12 +1659,13 @@ function HelpDocsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'er
           Noch keine Handbücher hochgeladen.
         </div>
       ) : (
+        <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
               <th>Datei</th>
-              <th style={{ width: 120 }}>Grösse</th>
-              <th style={{ width: 100 }}></th>
+              <th>Grösse</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -1681,6 +1686,7 @@ function HelpDocsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'er
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

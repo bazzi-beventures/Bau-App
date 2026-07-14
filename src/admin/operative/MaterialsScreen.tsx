@@ -5,6 +5,8 @@ import FrequentMaterialsPanel from './FrequentMaterialsPanel'
 import ImportScreen from '../system/ImportScreen'
 import { UserInfo } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 interface Supplier {
   id: string
@@ -264,7 +266,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
             <label className="admin-form-label">Bezeichnung *</label>
             <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="admin-form-row">
             <div className="admin-form-group">
               <label className="admin-form-label">Kategorie</label>
               {isNewCategory ? (
@@ -302,7 +304,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
               )}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="admin-form-row">
             <div className="admin-form-group">
               <label className="admin-form-label">EK-Preis (CHF)</label>
               <input className="admin-form-input" type="number" step="0.01" min="0" value={costPrice} onChange={e => onChangeCost(e.target.value)} placeholder="Einkaufspreis" />
@@ -393,6 +395,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 function MaterialInventoryPanel() {
+  const isMobile = useIsMobile()
   const [data, setData] = useState<MaterialsListResponse>({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<string[]>([])
@@ -501,6 +504,42 @@ function MaterialInventoryPanel() {
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={rows}
+            keyFor={m => String(m.id)}
+            onItemClick={m => setEditMaterial(m)}
+            empty="Keine Materialien gefunden."
+            renderCard={m => {
+              const stock = m.inventory[0]?.quantity ?? null
+              const minStock = m.inventory[0]?.min_quantity ?? null
+              const stockLow = stock !== null && minStock !== null && stock <= minStock
+              const supplierName = m.supplier_id ? (supplierMap[m.supplier_id] ?? null) : null
+              return (
+                <>
+                  <div className="admin-card-head">
+                    <span className="admin-card-title">{m.name}</span>
+                    <span className="admin-card-meta" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{m.art_nr}</span>
+                  </div>
+                  <div className="admin-card-meta">
+                    {[m.category, m.unit, supplierName].filter(Boolean).join(' · ') || '—'}
+                  </div>
+                  <div className="admin-card-meta">
+                    EK: {m.cost_price != null ? `CHF ${m.cost_price.toFixed(2)}` : '—'} · VK: {m.calc_vk != null && m.calc_vk > 0 ? `CHF ${m.calc_vk.toFixed(2)}` : '—'}
+                    {stock !== null && <> · Bestand: <span style={{ color: stockLow ? '#ef4444' : 'inherit', fontWeight: stockLow ? 700 : undefined }}>{stock} {m.unit || ''}</span></>}
+                  </div>
+                  <div className="admin-card-actions">
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={e => { e.stopPropagation(); setStockMaterial(m) }}
+                    >
+                      Lager
+                    </button>
+                  </div>
+                </>
+              )
+            }}
+          />
         ) : (
           <table className="admin-table">
             <thead>

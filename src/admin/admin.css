@@ -552,7 +552,8 @@ select.admin-input {
   transition: background 0.1s;
 }
 
-.admin-table tbody tr:hover {
+.admin-table tbody tr:hover,
+.admin-table tbody tr:active {
   background: var(--surface-2);
 }
 
@@ -752,6 +753,29 @@ select.admin-input {
 .admin-form-error {
   font-size: 12px;
   color: var(--danger);
+}
+
+/* ─── Responsive Formular-Zeilen (ersetzen Inline-gridTemplateColumns) ── */
+.admin-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+.admin-form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+.admin-form-row-label {
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  align-items: center;
+}
+
+/* Detail-Screens mit rechter Info-Spalte (ersetzt '1fr 340px'/'1fr 320px') */
+.admin-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--s-5);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .admin-detail-grid { grid-template-columns: 1fr; }
 }
 
 /* ─── Buttons ─────────────────────────────────────────────── */
@@ -1652,8 +1676,10 @@ button.admin-list-item {
   border-radius: 12px;
   width: 360px;
   max-width: 94vw;
+  max-height: 85dvh;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .absence-modal-header {
   display: flex;
@@ -2146,6 +2172,134 @@ button.admin-list-item {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Mobile Agenda (Einsatzplanung) ─────────────────────────── */
+
+.project-cal-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.project-cal-agenda-day {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.project-cal-agenda-day-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.project-cal-agenda-day-head.today { color: var(--primary); }
+.project-cal-agenda-add {
+  margin-left: auto;
+  min-width: 40px;
+  min-height: 40px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.project-cal-agenda-empty {
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.project-cal-agenda-event {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--s-2) var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #fff;
+  cursor: pointer;
+}
+.project-cal-agenda-event-time { font-size: 11px; opacity: 0.85; }
+.project-cal-agenda-event-sub { font-size: 12px; opacity: 0.9; }
+.project-cal-agenda-hint {
+  margin-top: var(--s-3);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Projekt-Detail: mehrspaltige Editor-Zeile (Ansprechpersonen etc.) */
+.project-pos-row {
+  display: grid;
+  grid-template-columns: auto 2fr 1fr 1fr 2fr auto;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: end;
+}
+
+/* Offerten-Editor: Positions-Zeile (Material / Freie Position) */
+.quote-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ⓘ-Erklärungs-Button (InfoHint) */
+.admin-info-hint-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+
+/* ─── Mobile Karten-Listen (AdminCardList) ────────────────── */
+.admin-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.admin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--s-4);
+}
+.admin-card.clickable { cursor: pointer; }
+.admin-card.clickable:active { background: var(--surface-2); }
+.admin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.admin-card-title {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.admin-card-meta {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.admin-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.admin-card-actions .admin-btn { min-height: 40px; }
 
 /* Wochen-Zeitraster ──────────────────────────────────────── */
 

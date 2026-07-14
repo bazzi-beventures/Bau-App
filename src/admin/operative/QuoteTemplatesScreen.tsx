@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
+import { fmtDate } from '../utils/format'
 
 // Vorlagen für die Offerten-Sektionen "Montagepositionen" und "Sonderpositionen".
 // Spiegelt die Schnell-Buttons im Offerte-Formular — hier zentral pflegbar, ohne Migration.
@@ -24,6 +25,23 @@ interface SpecialTpl {
   default_hours: number | null
   sort_order: number
   notes: string | null
+}
+
+// Standard-Anhänge: mandantenweite Dokumente (AGB, Firmenprospekt …), die beim
+// Offerten-Versand als Mail-Anhang wählbar sind (Feature 'prospekt_mit_offerte').
+interface QuoteAttachmentTpl {
+  id: string
+  filename: string
+  mime_type: string | null
+  file_size: number | null
+  created_at: string
+}
+
+// Dateigrösse menschenlesbar — die API liefert Bytes.
+function fmtBytes(n: number | null): string {
+  if (n == null) return '—'
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
 type Kind = 'installation' | 'special'
@@ -78,19 +96,29 @@ function OffertenVorlagenPanel() {
   const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
   const [skontoIsDefault, setSkontoIsDefault] = useState(true)
   const [savingSkonto, setSavingSkonto] = useState(false)
+  // Standard-Anhänge: pflegbar auch bei deaktiviertem Feature (nur der Versand-Dialog
+  // hängt am Flag) — analog zu den Sonderpositionen mit Hinweis statt Ausblenden.
+  const [attachments, setAttachments] = useState<QuoteAttachmentTpl[]>([])
+  const [attSearch, setAttSearch] = useState('')
+  const [attUploading, setAttUploading] = useState(false)
+  const [attDeleting, setAttDeleting] = useState<string | null>(null)
+  const [anhangFeatureOn, setAnhangFeatureOn] = useState(true)
+  const attFileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto] = await Promise.all([
+      const [data, notes, disc, discR, skonto, att] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-attachment-templates') as Promise<{ attachments: QuoteAttachmentTpl[] }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
+      setAttachments(att.attachments ?? [])
       setStdNotes(notes.notes ?? '')
       setStdNotesSaved(notes.notes ?? '')
       setStdIsDefault(notes.is_default)
@@ -193,6 +221,7 @@ function OffertenVorlagenPanel() {
     getMe().then(me => {
       setSpecialFeatureOn(isFeatureEnabled(me, 'sonderpositionen'))
       setRichtoffAvailable(isFeatureEnabled(me, 'richtofferte'))
+      setAnhangFeatureOn(isFeatureEnabled(me, 'prospekt_mit_offerte'))
     }).catch(() => {})
   }, [])
 
@@ -280,7 +309,48 @@ function OffertenVorlagenPanel() {
     }
   }
 
+  async function handleAttachmentUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files ? Array.from(e.target.files) : []
+    e.target.value = '' // gleiche Datei erneut auswählbar machen
+    if (files.length === 0) return
+    setAttUploading(true)
+    setError('')
+    try {
+      // Sequentiell statt parallel — so bleibt bei einem Fehler klar, welche Dateien
+      // schon durch sind, und der Upload-Endpoint wird nicht geflutet.
+      for (const file of files) {
+        const form = new FormData()
+        form.append('file', file)
+        await apiFormFetch('/pwa/admin/quote-attachment-templates', form)
+      }
+      showToast(files.length === 1 ? 'Anhang hochgeladen' : `${files.length} Anhänge hochgeladen`)
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setAttUploading(false)
+    }
+  }
+
+  async function handleAttachmentDelete(a: QuoteAttachmentTpl) {
+    if (!window.confirm(`Anhang "${a.filename}" wirklich löschen?`)) return
+    setAttDeleting(a.id)
+    setError('')
+    try {
+      await apiFetch(`/pwa/admin/quote-attachment-templates/${a.id}`, { method: 'DELETE' })
+      showToast('Anhang gelöscht')
+      load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setAttDeleting(null)
+    }
+  }
+
   const isSpecialModal = editing?.kind === 'special'
+  const attFiltered = attSearch.trim()
+    ? attachments.filter(a => a.filename.toLowerCase().includes(attSearch.trim().toLowerCase()))
+    : attachments
 
   return (
     <>
@@ -360,6 +430,85 @@ function OffertenVorlagenPanel() {
                     <td style={{ color: 'var(--muted)' }}>{t.notes || '—'}</td>
                     <td>
                       <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={e => { e.stopPropagation(); openEditSpecial(t) }}>Bearbeiten</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Standard-Anhänge ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Standard-Anhänge</div>
+              <div className="admin-page-subtitle">
+                Dokumente (z.B. AGB, Firmenprospekt), die beim Versenden einer Offerte als Anhang wählbar sind.
+              </div>
+            </div>
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={() => attFileRef.current?.click()}
+              disabled={attUploading}
+            >
+              {attUploading ? 'Wird hochgeladen…' : '+ Anhang hochladen'}
+            </button>
+            <input
+              ref={attFileRef}
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleAttachmentUpload}
+            />
+          </div>
+          {!anhangFeatureOn && (
+            <div className="admin-form-hint" style={{ margin: '0 0 12px' }}>
+              Das Feature „Anhänge mit der Offerte versenden" ist für diesen Mandanten aktuell deaktiviert —
+              die Anhänge erscheinen erst im Versand-Dialog, wenn du es unter Konfiguration aktivierst.
+              Du kannst sie hier trotzdem schon vorbereiten.
+            </div>
+          )}
+          {attachments.length > 5 && (
+            <input
+              className="admin-form-input"
+              value={attSearch}
+              onChange={e => setAttSearch(e.target.value)}
+              placeholder="Anhänge durchsuchen…"
+              style={{ maxWidth: 320, marginBottom: 12 }}
+            />
+          )}
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Datei</th><th>Grösse</th><th>Hochgeladen</th><th></th></tr>
+              </thead>
+              <tbody>
+                {attachments.length === 0 ? (
+                  <tr><td colSpan={4} className="admin-table-empty">Keine Standard-Anhänge hochgeladen.</td></tr>
+                ) : attFiltered.length === 0 ? (
+                  <tr><td colSpan={4} className="admin-table-empty">Keine Treffer.</td></tr>
+                ) : attFiltered.map(a => (
+                  <tr key={a.id}>
+                    <td>
+                      {/* Download läuft über den Browser (Cookie-Auth), nicht über apiFetch */}
+                      <a
+                        href={apiUrl(`/pwa/admin/quote-attachment-templates/${a.id}/download`)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <strong>{a.filename}</strong>
+                      </a>
+                    </td>
+                    <td style={{ color: 'var(--muted)' }}>{fmtBytes(a.file_size)}</td>
+                    <td style={{ color: 'var(--muted)' }}>{fmtDate(a.created_at)}</td>
+                    <td>
+                      <button
+                        className="admin-btn admin-btn-danger admin-btn-sm"
+                        onClick={() => handleAttachmentDelete(a)}
+                        disabled={attDeleting === a.id}
+                      >
+                        {attDeleting === a.id ? '…' : 'Löschen'}
+                      </button>
                     </td>
                   </tr>
                 ))}
