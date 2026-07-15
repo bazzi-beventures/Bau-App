@@ -22,12 +22,12 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
   const [items, setItems] = useState<FrequentMaterialOption[]>([])
   const [qty, setQty] = useState<Record<string, number>>({})  // art_nr -> Menge (0 = nicht gewählt)
   const [loading, setLoading] = useState(true)
-  const [galleryCount, setGalleryCount] = useState(0)  // Anzahl Artikel mit Foto (>0 ⇒ Foto-Button)
+  const [galleryCount, setGalleryCount] = useState(0)  // Anzahl aktiver Katalog-Artikel (>0 ⇒ Katalog-Button)
   const [showPicker, setShowPicker] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    // Kuratierte Liste UND Foto-Anzahl parallel laden. Der Schritt erscheint, sobald
+    // Kuratierte Liste UND Katalog-Anzahl parallel laden. Der Schritt erscheint, sobald
     // eines von beidem etwas hat; nur wenn beide leer sind, wird er übersprungen.
     Promise.all([
       fetchFrequentMaterials().catch(() => [] as FrequentMaterialOption[]),
@@ -43,7 +43,7 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
     return () => { cancelled = true }
   }, [])
 
-  // Auswahl aus dem Foto-Popup übernehmen: neue Artikel (nicht in der kuratierten Liste)
+  // Auswahl aus dem Katalog-Popup übernehmen: neue Artikel (nicht in der kuratierten Liste)
   // als Zeilen ergänzen, damit sie sichtbar/anpassbar sind; Menge setzen (überschreiben).
   function applyPicked(picked: ErsatzteilSelection[]) {
     setItems(prev => {
@@ -81,7 +81,7 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
     onSubmit(selected)
   }
 
-  // Während des Ladens und wenn weder kuratierte Liste noch Foto-Artikel da sind
+  // Während des Ladens und wenn weder kuratierte Liste noch Katalog-Artikel da sind
   // (onSubmit wurde dann schon gerufen) nichts zeigen.
   if (loading || (items.length === 0 && galleryCount === 0)) return null
 
@@ -100,7 +100,7 @@ export default function ErsatzteilPrompt({ onSubmit }: Props) {
           className="confirm-btn confirm-btn-no ersatzteil-foto-btn"
           onClick={() => setShowPicker(true)}
         >
-          📷 Nach Foto auswählen
+          📷 Aus dem Katalog wählen
         </button>
       )}
 

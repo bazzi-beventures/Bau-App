@@ -20,10 +20,17 @@ export function filterGallery(items: GalleryMaterialOption[], query: string): Ga
   })
 }
 
-// Foto-Popup: durch alle Artikel mit Bild scrollen, mehrere mit Menge wählen und in
-// den Ersatzteil-Schritt übernehmen. Additiv gedacht — Übernehmen setzt die Mengen der
-// gewählten Artikel (Überschreiben, kein Aufaddieren); Entfernen/Feintuning passiert
-// danach in der Liste des Ersatzteil-Schritts.
+// Katalog-Popup: durch alle aktiven Artikel scrollen (mit Bild zuerst, ohne Bild mit
+// Platzhalter), mehrere mit Menge wählen und in den Ersatzteil-Schritt übernehmen.
+// Additiv gedacht — Übernehmen setzt die Mengen der gewählten Artikel (Überschreiben,
+// kein Aufaddieren); Entfernen/Feintuning passiert danach in der Liste des
+// Ersatzteil-Schritts.
+
+// Obergrenze gerenderter Kacheln: grosse Kataloge (Stobag ~4500 Artikel) würden das
+// Grid sonst mit tausenden DOM-Knoten aufblähen (spürbar träge auf Baustellen-Handys).
+// Die Suche filtert weiterhin über ALLE Artikel — nur die Anzeige ist gedeckelt.
+export const MAX_TILES = 120
+
 export default function MaterialPhotoPicker({ onCancel, onApply }: Props) {
   const [items, setItems] = useState<GalleryMaterialOption[]>([])
   const [byArtNr, setByArtNr] = useState<Record<string, GalleryMaterialOption>>({})
@@ -84,7 +91,7 @@ export default function MaterialPhotoPicker({ onCancel, onApply }: Props) {
     <div className="photo-picker-overlay" onClick={onCancel}>
       <div className="photo-picker" onClick={e => e.stopPropagation()}>
         <div className="photo-picker-header">
-          <div className="photo-picker-title">Artikel nach Foto</div>
+          <div className="photo-picker-title">Artikel aus dem Katalog</div>
           <button className="photo-picker-close" onClick={onCancel} aria-label="Schliessen">×</button>
         </div>
 
@@ -99,14 +106,14 @@ export default function MaterialPhotoPicker({ onCancel, onApply }: Props) {
           {loading && <div className="photo-picker-empty">Lädt…</div>}
           {!loading && error && <div className="photo-picker-empty">Fehler beim Laden.</div>}
           {!loading && !error && items.length === 0 && (
-            <div className="photo-picker-empty">Keine Artikel mit Foto vorhanden.</div>
+            <div className="photo-picker-empty">Keine Artikel vorhanden.</div>
           )}
           {!loading && !error && items.length > 0 && filtered.length === 0 && (
             <div className="photo-picker-empty">Keine Treffer für „{query}“.</div>
           )}
           {!loading && !error && filtered.length > 0 && (
             <div className="photo-picker-grid">
-              {filtered.map(m => {
+              {filtered.slice(0, MAX_TILES).map(m => {
                 const n = qty[m.art_nr] || 0
                 const checked = n > 0
                 return (
@@ -141,6 +148,11 @@ export default function MaterialPhotoPicker({ onCancel, onApply }: Props) {
                   </div>
                 )
               })}
+            </div>
+          )}
+          {!loading && !error && filtered.length > MAX_TILES && (
+            <div className="photo-picker-empty">
+              {filtered.length - MAX_TILES} weitere Treffer — Suche verfeinern, um sie zu sehen.
             </div>
           )}
         </div>

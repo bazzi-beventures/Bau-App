@@ -145,7 +145,7 @@ export async function fetchFrequentMaterials(): Promise<FrequentMaterialOption[]
   return apiFetch('/pwa/chat/frequent-materials', { method: 'GET' }) as Promise<FrequentMaterialOption[]>
 }
 
-// ─── Foto-Material-Picker (Rapport-Abschluss) ────────────────
+// ─── Material-Picker / Artikel-Katalog (Rapport-Abschluss) ───
 
 export interface GalleryMaterialOption {
   art_nr: string
@@ -153,15 +153,15 @@ export interface GalleryMaterialOption {
   unit: string
   category?: string | null
   calc_vk: number
-  image_url?: string | null   // frisch signierte URL (privater Bucket)
+  image_url?: string | null   // frisch signierte URL (privater Bucket); fehlt bei Artikeln ohne Bild → Platzhalter
 }
 
-// Alle aktiven Artikel mit Foto — lazy beim Öffnen des Popups geladen.
+// Alle aktiven Artikel (mit Bild zuerst, ohne Bild danach) — lazy beim Öffnen des Popups geladen.
 export async function fetchMaterialGallery(): Promise<GalleryMaterialOption[]> {
   return apiFetch('/pwa/chat/material-gallery', { method: 'GET' }) as Promise<GalleryMaterialOption[]>
 }
 
-// Billiges Gating (count-only): entscheidet, ob der Foto-Button gezeigt wird.
+// Billiges Gating (count-only): entscheidet, ob der Katalog-Button gezeigt wird.
 export async function fetchMaterialGalleryCount(): Promise<number> {
   const res = await apiFetch('/pwa/chat/material-gallery/count', { method: 'GET' }) as { count: number }
   return res?.count ?? 0

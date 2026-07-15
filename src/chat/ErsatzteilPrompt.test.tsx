@@ -86,23 +86,23 @@ describe('ErsatzteilPrompt', () => {
     expect(erfassen).toBeDisabled()
   })
 
-  it('zeigt keinen Foto-Button, wenn es keine Artikel mit Foto gibt', async () => {
+  it('zeigt keinen Katalog-Button, wenn es keine aktiven Artikel gibt', async () => {
     mockFetch.mockResolvedValue(LIST)
     mockCount.mockResolvedValue(0)
     render(<ErsatzteilPrompt onSubmit={vi.fn()} />)
 
     await screen.findByText('Ersatzteile verbraucht?')
-    expect(screen.queryByRole('button', { name: /Nach Foto/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Katalog/ })).not.toBeInTheDocument()
   })
 
-  it('rendert den Schritt mit Foto-Button auch ohne kuratierte Liste, wenn Foto-Artikel existieren', async () => {
+  it('rendert den Schritt mit Katalog-Button auch ohne kuratierte Liste, wenn Artikel existieren', async () => {
     mockFetch.mockResolvedValue([])   // keine kuratierten Ersatzteile …
-    mockCount.mockResolvedValue(5)    // … aber 5 Artikel mit Foto
+    mockCount.mockResolvedValue(5)    // … aber 5 aktive Katalog-Artikel
     const onSubmit = vi.fn()
     render(<ErsatzteilPrompt onSubmit={onSubmit} />)
 
     expect(await screen.findByText('Ersatzteile verbraucht?')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Nach Foto/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Katalog/ })).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()   // Schritt wird NICHT übersprungen
   })
 })

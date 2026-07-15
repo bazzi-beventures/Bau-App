@@ -619,6 +619,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  async function handleRenameFile(fileId: string, filename: string) {
+    if (!project) return
+    try {
+      await apiFetch(`/pwa/admin/projects/${project.id}/files/${fileId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ filename }),
+      })
+      // Server-Antwort kann den Namen anpassen (Endung wird erhalten) → neu laden
+      const updated = await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[]
+      setFiles(updated)
+    } catch {
+      setError('Fehler beim Umbenennen')
+    }
+  }
+
   async function handleAddComment() {
     if (!project || !newComment.trim()) return
     setAddingComment(true)
@@ -1092,6 +1107,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           uploadingCategory={uploadCategory}
           onUpload={uploadFilesToCategory}
           onDelete={setConfirmDeleteFileId}
+          onRename={handleRenameFile}
         />
       )}
 
@@ -1102,6 +1118,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           uploadingCategory={uploadCategory}
           onUpload={uploadFilesToCategory}
           onDelete={setConfirmDeleteFileId}
+          onRename={handleRenameFile}
         />
       )}
 

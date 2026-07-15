@@ -173,6 +173,7 @@ interface FileSectionsProps {
   uploadingCategory: ProjectFileCategory | null
   onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
+  onRename: (fileId: string, filename: string) => Promise<void>
 }
 
 interface FileSectionProps {
@@ -182,17 +183,38 @@ interface FileSectionProps {
   isUploadingHere: boolean
   onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
+  onRename: (fileId: string, filename: string) => Promise<void>
 }
 
 // Eine Datei-Sektion (z.B. "Fotos") mit Drag-&-Drop-Feld + Hochladen-Button.
 // Sowohl Ablegen per Drag-&-Drop als auch Auswahl über den Button laden direkt
 // in DIESE Kategorie hoch — die Sektion bestimmt die Kategorie implizit.
-function FileSection({ section, items, uploading, isUploadingHere, onUpload, onDelete }: FileSectionProps) {
+function FileSection({ section, items, uploading, isUploadingHere, onUpload, onDelete, onRename }: FileSectionProps) {
   const [dragOver, setDragOver] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [renaming, setRenaming] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function pickFiles() {
     if (!uploading) inputRef.current?.click()
+  }
+
+  function startEdit(f: ProjectFile) {
+    setEditingId(f.id)
+    setEditValue(f.filename)
+  }
+
+  async function saveEdit() {
+    const name = editValue.trim()
+    if (!editingId || !name || renaming) return
+    setRenaming(true)
+    try {
+      await onRename(editingId, name)
+      setEditingId(null)
+    } finally {
+      setRenaming(false)
+    }
   }
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -288,20 +310,64 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
           {items.map(f => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {(f.storage_path || f.file_url)
-                  ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
-                  : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
-                }
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
-              </div>
-              <button
-                type="button"
-                className="admin-btn admin-btn-sm admin-btn-danger"
-                onClick={() => onDelete(f.id)}
-              >
-                ✕
-              </button>
+              {editingId === f.id ? (
+                <>
+                  <input
+                    type="text"
+                    className="admin-input"
+                    value={editValue}
+                    disabled={renaming}
+                    autoFocus
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveEdit()
+                      if (e.key === 'Escape') setEditingId(null)
+                    }}
+                    style={{ flex: 1, minWidth: 0, fontSize: 13 }}
+                  />
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-primary"
+                    disabled={renaming || !editValue.trim()}
+                    onClick={saveEdit}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    disabled={renaming}
+                    onClick={() => setEditingId(null)}
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {(f.storage_path || f.file_url)
+                      ? <a href={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 500, color: 'var(--primary)', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</a>
+                      : <span style={{ fontSize: 13, fontWeight: 500 }}>{f.filename}</span>
+                    }
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    title="Umbenennen"
+                    onClick={() => startEdit(f)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-danger"
+                    onClick={() => onDelete(f.id)}
+                  >
+                    ✕
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -310,7 +376,7 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
   )
 }
 
-function FileSections({ files, sections, uploading, uploadingCategory, onUpload, onDelete }: FileSectionsProps) {
+function FileSections({ files, sections, uploading, uploadingCategory, onUpload, onDelete, onRename }: FileSectionsProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {sections.map(section => {
@@ -333,6 +399,7 @@ function FileSections({ files, sections, uploading, uploadingCategory, onUpload,
             isUploadingHere={uploading && uploadingCategory === section.key}
             onUpload={onUpload}
             onDelete={onDelete}
+            onRename={onRename}
           />
         )
       })}
@@ -346,9 +413,10 @@ interface DocumentsTabProps {
   uploadingCategory: ProjectFileCategory | null
   onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
+  onRename: (fileId: string, filename: string) => Promise<void>
 }
 
-export function DocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete }: DocumentsTabProps) {
+export function DocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete, onRename }: DocumentsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div className="admin-section-title" style={{ marginBottom: 14 }}>Dokumente & Fotos</div>
@@ -359,12 +427,13 @@ export function DocumentsTab({ files, uploading, uploadingCategory, onUpload, on
         uploadingCategory={uploadingCategory}
         onUpload={onUpload}
         onDelete={onDelete}
+        onRename={onRename}
       />
     </div>
   )
 }
 
-export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete }: DocumentsTabProps) {
+export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete, onRename }: DocumentsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div className="admin-section-title" style={{ marginBottom: 14 }}>Lieferantendokumente</div>
@@ -375,6 +444,7 @@ export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onUp
         uploadingCategory={uploadingCategory}
         onUpload={onUpload}
         onDelete={onDelete}
+        onRename={onRename}
       />
     </div>
   )
