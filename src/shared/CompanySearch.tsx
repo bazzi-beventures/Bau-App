@@ -152,10 +152,10 @@ export function CompanySearch({
           margin: 0,
           padding: 0,
           listStyle: 'none',
-          background: 'var(--card-bg, #1e2a3a)',
-          border: '1px solid var(--border, rgba(255,255,255,0.1))',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
           borderRadius: 6,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--shadow-hover, 0 4px 16px rgba(0,0,0,0.15))',
           maxHeight: 260,
           overflowY: 'auto',
         }}>
@@ -169,11 +169,11 @@ export function CompanySearch({
                 style={{
                   padding: '8px 12px',
                   cursor: 'pointer',
-                  background: i === highlighted ? 'var(--hover-bg, rgba(255,255,255,0.07))' : 'transparent',
-                  borderBottom: i < suggestions.length - 1 ? '1px solid var(--border, rgba(255,255,255,0.06))' : 'none',
+                  background: i === highlighted ? 'var(--surface-2)' : 'transparent',
+                  borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none',
                 }}
               >
-                <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text, #e2e8f0)' }}>{s.name}</div>
+                <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text)' }}>{s.name}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                   {[s.street, city].filter(Boolean).join(' · ')}
                   {s.phone ? ` · ${s.phone}` : ''}

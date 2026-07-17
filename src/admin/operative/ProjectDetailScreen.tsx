@@ -137,6 +137,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
+  // Feature offerte_dank_mail: „Dankeschön senden"-Knopf bei angenommenen Offerten.
+  const [dankEnabled, setDankEnabled] = useState(false)
+  const [sendingThankyouId, setSendingThankyouId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
 
@@ -186,6 +189,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     getMe().then(me => {
       setCurrentUserId(me.authorized_user_id)
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
+      setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
     }).catch(() => {})
   }, [])
 
@@ -407,6 +411,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       await reloadQuotes()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
+
+  async function handleSendThankyou(quoteId: number) {
+    setSendingThankyouId(quoteId)
+    try {
+      const res = await apiFetch(`/pwa/admin/quotes/${quoteId}/send-thankyou`, { method: 'POST' }) as { message?: string }
+      showToast(res.message || 'Danke-Mail gesendet')
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen')
+    } finally {
+      setSendingThankyouId(null)
     }
   }
 
@@ -1128,11 +1145,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           invoices={invoices}
           regeneratingQuoteId={regeneratingQuoteId}
           hasLocalDraft={quoteDraftExists}
+          dankEnabled={dankEnabled}
+          sendingThankyouId={sendingThankyouId}
           onShowCreateForm={() => { setResumeQuoteDraft(false); setShowQuoteForm(true) }}
           onResumeDraft={() => { setResumeQuoteDraft(true); setShowQuoteForm(true) }}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={q => setSendQuote(q)}
+          onSendThankyou={handleSendThankyou}
           onEdit={handleEditQuote}
         />
       )}

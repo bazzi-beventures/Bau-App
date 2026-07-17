@@ -64,6 +64,7 @@ export interface ProjectQuote {
   storage_path?: string | null
   xlsx_storage_path?: string | null
   customer_email: string | null
+  thankyou_sent_at?: string | null
 }
 
 export interface ProjectInvoice {
@@ -457,15 +458,20 @@ interface QuotesTabProps {
   invoices: ProjectInvoice[]
   regeneratingQuoteId: number | null
   hasLocalDraft: boolean
+  // Feature offerte_dank_mail: steuert den „Dankeschön senden"-Knopf bei
+  // angenommenen Offerten (Per-Knopfdruck-Modus bzw. Auto-Versand-Fallback).
+  dankEnabled: boolean
+  sendingThankyouId: number | null
   onShowCreateForm: () => void
   onResumeDraft: () => void
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
   onSend: (quote: ProjectQuote) => void
+  onSendThankyou: (quoteId: number) => void
   onEdit: (quoteId: number) => void
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onEdit }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou, onEdit }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
@@ -529,6 +535,11 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                     <span className={`admin-badge ${QUOTE_STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>{QUOTE_STATUS_LABELS[q.status] || q.status}</span>
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{fmtDate(q.created_at)}</span>
                     {editable && <span style={{ fontSize: 12, color: 'var(--muted)' }} title="Klicken zum Bearbeiten">✎ bearbeiten</span>}
+                    {dankEnabled && q.thankyou_sent_at && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }} title="Danke-Mail an den Kunden wurde versendet">
+                        ✓ Danke-Mail {fmtDate(q.thankyou_sent_at)}
+                      </span>
+                    )}
                     {/* Summe + Aktionen als ein rechtsbündiger Block, der bei knappem
                         Platz (Kommentar-Seitenleiste) als Einheit umbricht – statt die
                         Summe vom Button-Cluster zu trennen. */}
@@ -552,6 +563,16 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                           )}
                           {q.status === 'entwurf' && (
                             <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onUpdateStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
+                          )}
+                          {dankEnabled && q.status === 'akzeptiert' && !q.thankyou_sent_at && (
+                            <button
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              disabled={sendingThankyouId === q.id}
+                              onClick={() => onSendThankyou(q.id)}
+                              title="Dankesmail an den Kunden senden"
+                            >
+                              {sendingThankyouId === q.id ? '…' : 'Dankeschön senden'}
+                            </button>
                           )}
                           <button
                             className="admin-btn admin-btn-secondary admin-btn-sm"
