@@ -931,6 +931,8 @@ button.admin-list-item {
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 @keyframes spin {
@@ -1136,6 +1138,10 @@ button.admin-list-item {
   border-top-color: var(--primary);
   animation: kpi-admin-spin 0.8s linear infinite;
   margin-right: 10px;
+  /* Als Flex-Kind neben langem Text sonst in einen schmalen Oval gequetscht
+     (z.B. Datensicherung-Karte) — die runde Form muss erhalten bleiben. */
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 @keyframes kpi-admin-spin { to { transform: rotate(360deg); } }
 

@@ -228,6 +228,17 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .consent-box ul { margin: 0 0 8px; padding-left: 18px; }
 .consent-box li { margin-bottom: 2px; }
 
+/* WYSIWYG-Editor (RichTextField): der globale Reset (*{margin:0;padding:0} oben) nimmt
+   ul/ol ihren Einzug + Bullet-Platz — Aufzählungspunkte/Nummern säßen sonst ohne Einzug
+   am linken Rand (Bold/Kursiv sind davon nicht betroffen). Nur die Editor-Darstellung;
+   das PDF regelt eigenes Template-CSS (templates/quote_template.html .rich-text). */
+/* Linksbündig erzwingen — der Editor sitzt in einem zentrierten Formular-Abschnitt und
+   würde sonst text-align:center erben (das PDF ist ohnehin linksbündig). */
+.richtext-field { text-align: left; }
+.richtext-field ul { list-style: disc; margin: 4px 0; padding-left: 22px; }
+.richtext-field ol { list-style: decimal; margin: 4px 0; padding-left: 22px; }
+.richtext-field li { margin: 1px 0; }
+
 /* ── HEADER LOGO ────────────────────────────────── */
 .header-logo {
   height: 28px;

@@ -775,7 +775,7 @@ export async function reactivateAftersales(id: number): Promise<{ new_status: Af
 
 // ─── Dokument-Massensicherung (Modul document_backup, nur Management) ─────────
 
-export type DocumentBackupStatus = 'pending' | 'running' | 'ready' | 'failed'
+export type DocumentBackupStatus = 'pending' | 'running' | 'ready' | 'failed' | 'cancelled'
 
 export interface DocumentBackupPart {
   filename: string | null
@@ -795,10 +795,28 @@ export interface DocumentBackupJob {
   ready_at: string | null
   expires_at: string | null
   expired: boolean
+  cancel_requested: boolean
   // Ein Backup kann auf mehrere Teil-ZIPs aufgeteilt sein (Storage-Upload-Limit).
   // `parts` ist maßgeblich; `download_url` bleibt für Einzel-Teil-Backups gesetzt.
   parts: DocumentBackupPart[]
   download_url: string | null
+}
+
+// Vorab-Übersicht für den Bestätigungs-Dialog (startet noch nichts).
+export interface DocumentBackupPreview {
+  document_count: number
+  invoices: number
+  quotes: number
+  reports: number
+  max_per_month: number         // 0 = unbegrenzt
+  used_this_month: number
+  remaining_this_month: number | null  // null = unbegrenzt
+  limit_reached: boolean
+  active: boolean
+}
+
+export async function getDocumentBackupPreview(): Promise<DocumentBackupPreview> {
+  return apiFetch('/pwa/admin/document-backup/preview') as Promise<DocumentBackupPreview>
 }
 
 export async function startDocumentBackup(): Promise<DocumentBackupJob> {
@@ -812,4 +830,8 @@ export async function getLatestDocumentBackup(): Promise<DocumentBackupJob | nul
 
 export async function getDocumentBackup(id: number): Promise<DocumentBackupJob> {
   return apiFetch(`/pwa/admin/document-backup/${id}`) as Promise<DocumentBackupJob>
+}
+
+export async function cancelDocumentBackup(id: number): Promise<DocumentBackupJob> {
+  return apiFetch(`/pwa/admin/document-backup/${id}/cancel`, { method: 'POST' }) as Promise<DocumentBackupJob>
 }

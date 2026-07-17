@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DocumentBackupJob,
+  DocumentBackupPreview,
   getLatestDocumentBackup,
   getDocumentBackup,
+  getDocumentBackupPreview,
   startDocumentBackup,
+  cancelDocumentBackup,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
 
@@ -34,6 +37,9 @@ export default function DocumentBackupScreen() {
   const [job, setJob] = useState<DocumentBackupJob | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [preview, setPreview] = useState<DocumentBackupPreview | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Für die Restlaufzeit-Anzeige jede Minute neu rendern.
   const [, setTick] = useState(0)
@@ -79,7 +85,23 @@ export default function DocumentBackupScreen() {
     return () => clearInterval(iv)
   }, [])
 
-  async function handleStart() {
+  // Schritt 1: Vorschau laden und Bestätigungs-Dialog öffnen (startet noch nichts).
+  async function handleOpenPreview() {
+    setError(null)
+    setPreviewing(true)
+    try {
+      const p = await getDocumentBackupPreview()
+      setPreview(p)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Vorschau konnte nicht geladen werden')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  // Schritt 2: nach Bestätigung wirklich starten.
+  async function handleConfirmStart() {
+    setPreview(null)
     setError(null)
     setStarting(true)
     try {
@@ -88,11 +110,12 @@ export default function DocumentBackupScreen() {
       poll(created.id)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        // Es läuft bereits ein Export → aktuellen Stand nachladen.
         const latest = await getLatestDocumentBackup()
         setJob(latest)
         if (isActive(latest) && latest) poll(latest.id)
         setError('Es läuft bereits ein Export. Bitte warten, bis er fertig ist.')
+      } else if (e instanceof ApiError && e.status === 429) {
+        setError('Das Monats-Limit für Datensicherungen ist erreicht. Bitte im nächsten Monat erneut versuchen.')
       } else {
         setError(e instanceof Error ? e.message : 'Export konnte nicht gestartet werden')
       }
@@ -101,7 +124,23 @@ export default function DocumentBackupScreen() {
     }
   }
 
+  async function handleCancel() {
+    if (!job) return
+    setCancelling(true)
+    setError(null)
+    try {
+      const updated = await cancelDocumentBackup(job.id)
+      setJob(updated)
+      if (isActive(updated)) poll(updated.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Abbruch fehlgeschlagen')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   const running = isActive(job)
+  const busy = previewing || starting || running
   // `parts` ist maßgeblich; für einen (noch) nicht aktualisierten Backend-Stand auf
   // das einzelne download_url zurückfallen.
   const downloads =
@@ -131,10 +170,10 @@ export default function DocumentBackupScreen() {
         </div>
         <button
           className="admin-btn admin-btn-primary"
-          onClick={handleStart}
-          disabled={starting || running}
+          onClick={handleOpenPreview}
+          disabled={busy}
         >
-          {starting ? 'Startet…' : running ? 'Export läuft…' : 'Backup erstellen'}
+          {previewing ? 'Prüft…' : starting ? 'Startet…' : running ? 'Export läuft…' : 'Backup erstellen'}
         </button>
       </div>
 
@@ -156,15 +195,30 @@ export default function DocumentBackupScreen() {
       {!loading && job && (
         <div style={{ maxWidth: 560, border: '1px solid var(--border)', borderRadius: 10, padding: 20, background: 'var(--surface)' }}>
           {running && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text)' }}>
-              <div className="kpi-admin-spinner" />
-              <div>
-                <div style={{ fontWeight: 600 }}>Export läuft…</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  Die Dokumente werden gepackt. Das kann je nach Menge einige Minuten dauern —
-                  du bekommst eine Push-Nachricht, sobald es fertig ist.
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text)' }}>
+                <div className="kpi-admin-spinner" />
+                <div>
+                  <div style={{ fontWeight: 600 }}>
+                    {job.cancel_requested ? 'Wird abgebrochen…' : 'Export läuft…'}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    {job.cancel_requested
+                      ? 'Der Abbruch wurde angefordert und greift nach dem aktuellen Teil.'
+                      : 'Die Dokumente werden gepackt. Das kann je nach Menge einige Minuten dauern — du bekommst eine Push-Nachricht, sobald es fertig ist.'}
+                  </div>
                 </div>
               </div>
+              {!job.cancel_requested && (
+                <button
+                  className="admin-btn admin-btn-secondary"
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  style={{ marginTop: 16 }}
+                >
+                  {cancelling ? 'Abbrechen…' : 'Export abbrechen'}
+                </button>
+              )}
             </div>
           )}
 
@@ -213,6 +267,17 @@ export default function DocumentBackupScreen() {
             </div>
           )}
 
+          {job.status === 'cancelled' && (
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--text-strong)', marginBottom: 6 }}>
+                Export abgebrochen
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Die Sicherung wurde abgebrochen. Du kannst jederzeit ein neues Backup erstellen.
+              </div>
+            </div>
+          )}
+
           {job.status === 'failed' && (
             <div>
               <div style={{ fontWeight: 600, color: '#991b1b', marginBottom: 6 }}>
@@ -225,6 +290,96 @@ export default function DocumentBackupScreen() {
           )}
         </div>
       )}
+
+      {preview && (
+        <ConfirmDialog
+          preview={preview}
+          onConfirm={handleConfirmStart}
+          onClose={() => setPreview(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ConfirmDialog({
+  preview, onConfirm, onClose,
+}: {
+  preview: DocumentBackupPreview
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const nothing = preview.document_count === 0
+  const blocked = preview.limit_reached || preview.active || nothing
+  const limitLine =
+    preview.max_per_month <= 0
+      ? 'Kein Monats-Limit gesetzt.'
+      : `Diesen Monat verwendet: ${preview.used_this_month} von ${preview.max_per_month}` +
+        (preview.remaining_this_month != null ? ` · noch ${preview.remaining_this_month} übrig` : '')
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: 460, width: '100%', background: 'var(--surface)',
+          border: '1px solid var(--border)', borderRadius: 12, padding: 24,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-strong)', marginBottom: 12 }}>
+          Datensicherung starten?
+        </div>
+
+        {nothing ? (
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>
+            Es sind keine Dokumente zum Sichern vorhanden.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 14, color: 'var(--text)', marginBottom: 6 }}>
+              Es werden <strong>{preview.document_count} Dokument(e)</strong> gesichert und in
+              ein ZIP gepackt.
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+              {preview.invoices} Rechnung(en) · {preview.quotes} Offerte(n) · {preview.reports} Rapport(e)
+            </div>
+          </>
+        )}
+
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)', padding: '10px 12px',
+          background: 'var(--bg, rgba(0,0,0,0.04))', borderRadius: 8, marginBottom: 20,
+        }}>
+          {limitLine}
+          {preview.active && (
+            <div style={{ color: '#991b1b', marginTop: 6 }}>
+              Es läuft bereits ein Export.
+            </div>
+          )}
+          {preview.limit_reached && !preview.active && (
+            <div style={{ color: '#991b1b', marginTop: 6 }}>
+              Das Monats-Limit ist erreicht.
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="admin-btn admin-btn-secondary" onClick={onClose}>
+            Abbrechen
+          </button>
+          {!blocked && (
+            <button className="admin-btn admin-btn-primary" onClick={onConfirm}>
+              Ja, jetzt sichern
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

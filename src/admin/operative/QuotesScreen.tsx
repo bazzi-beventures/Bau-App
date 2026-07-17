@@ -10,6 +10,7 @@ import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFor
 import { MaterialCombobox } from './MaterialCombobox'
 import { InfoHint } from '../components/InfoHint'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
+import { RichTextField } from '../components/RichTextField'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
@@ -41,6 +42,8 @@ interface Quote {
   xlsx_storage_path?: string | null
   reminder_sent_at: string | null
   projektleiter_id: string | null
+  customer_email?: string | null
+  thankyou_sent_at?: string | null
 }
 
 interface ProjektleiterOption {
@@ -1000,7 +1003,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           />
           <span>Standard-Bemerkungen verwenden</span>
         </label>
-        <textarea className="admin-form-input" rows={8} style={{ resize: 'vertical', minHeight: 140 }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen zur Offerte…" />
+        <RichTextField value={notes} onChange={setNotes} placeholder="Optionale Bemerkungen zur Offerte…" />
       </div>
 
       {/* Actions */}
@@ -1376,7 +1379,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
         <label className="admin-form-label">Bemerkungen</label>
-        <textarea className="admin-form-input" rows={8} style={{ resize: 'vertical', minHeight: 140 }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optionale Bemerkungen…" />
+        <RichTextField value={notes} onChange={setNotes} placeholder="Optionale Bemerkungen…" />
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
@@ -1418,6 +1421,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   // Send quote
   const [sendQuote, setSendQuote] = useState<Quote | null>(null)
+  // Danke-Mail bei Offerten-Annahme (Feature offerte_dank_mail): steuert den
+  // „Dankeschön senden"-Knopf bei angenommenen Offerten (Per-Knopfdruck-Modus bzw.
+  // Fallback, falls der Auto-Versand ausblieb).
+  const [dankEnabled, setDankEnabled] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -1429,6 +1436,23 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    getMe().then(me => setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))).catch(() => {})
+  }, [])
+
+  async function handleSendThankyou(id: number) {
+    setActing(id)
+    try {
+      const res = await apiFetch(`/pwa/admin/quotes/${id}/send-thankyou`, { method: 'POST' }) as { message?: string }
+      showToast(res.message || 'Danke-Mail gesendet', 'success')
+      load()
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen', 'error')
+    } finally {
+      setActing(null)
+    }
+  }
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff')
@@ -1571,6 +1595,11 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                         Erinnerung gesendet {fmtDate(q.reminder_sent_at)}
                       </div>
                     )}
+                    {dankEnabled && q.thankyou_sent_at && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                        Danke-Mail gesendet {fmtDate(q.thankyou_sent_at)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(q.created_at)}</td>
                   <td>
@@ -1613,6 +1642,16 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                           disabled={acting === q.id}
                         >
                           Senden
+                        </button>
+                      )}
+                      {dankEnabled && q.status === 'akzeptiert' && !q.thankyou_sent_at && (
+                        <button
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={() => handleSendThankyou(q.id)}
+                          disabled={acting === q.id}
+                          title="Dankesmail an den Kunden senden"
+                        >
+                          {acting === q.id ? '…' : 'Dankeschön senden'}
                         </button>
                       )}
                       {q.status === 'gesendet' && (

@@ -3,6 +3,7 @@ import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { fmtDate } from '../utils/format'
+import { RichTextField } from '../components/RichTextField'
 
 // Vorlagen für die Offerten-Sektionen "Montagepositionen" und "Sonderpositionen".
 // Spiegelt die Schnell-Buttons im Offerte-Formular — hier zentral pflegbar, ohne Migration.
@@ -96,6 +97,12 @@ function OffertenVorlagenPanel() {
   const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
   const [skontoIsDefault, setSkontoIsDefault] = useState(true)
   const [savingSkonto, setSavingSkonto] = useState(false)
+  // Danke-Text bei Offerten-Annahme (Feature offerte_dank_mail). Eigenes Tenant-Feld +
+  // System-Default; immer pflegbar (kein Feature-Flag, damit man ihn vorbereiten kann).
+  const [thankyouTxt, setThankyouTxt] = useState('')
+  const [thankyouTxtSaved, setThankyouTxtSaved] = useState('')
+  const [thankyouIsDefault, setThankyouIsDefault] = useState(true)
+  const [savingThankyou, setSavingThankyou] = useState(false)
   // Standard-Anhänge: pflegbar auch bei deaktiviertem Feature (nur der Versand-Dialog
   // hängt am Flag) — analog zu den Sonderpositionen mit Hinweis statt Ausblenden.
   const [attachments, setAttachments] = useState<QuoteAttachmentTpl[]>([])
@@ -108,12 +115,13 @@ function OffertenVorlagenPanel() {
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto, att] = await Promise.all([
+      const [data, notes, disc, discR, skonto, thankyou, att] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-thankyou-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-attachment-templates') as Promise<{ attachments: QuoteAttachmentTpl[] }>,
       ])
       setInstallation(data.installation ?? [])
@@ -131,6 +139,9 @@ function OffertenVorlagenPanel() {
       setSkontoTxt(skonto.text ?? '')
       setSkontoTxtSaved(skonto.text ?? '')
       setSkontoIsDefault(skonto.is_default)
+      setThankyouTxt(thankyou.text ?? '')
+      setThankyouTxtSaved(thankyou.text ?? '')
+      setThankyouIsDefault(thankyou.is_default)
     } finally {
       setLoading(false)
     }
@@ -213,6 +224,27 @@ function OffertenVorlagenPanel() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingSkonto(false)
+    }
+  }
+
+  async function saveQuoteThankyouText(reset = false) {
+    setSavingThankyou(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); leerer Editor-Wert wird serverseitig
+      // ebenfalls als Reset behandelt (leerer Danke-Text ergibt keine sinnvolle Mail).
+      const res = await apiFetch('/pwa/admin/quote-thankyou-text', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : thankyouTxt }),
+      }) as { text: string; is_default: boolean }
+      setThankyouTxt(res.text ?? '')
+      setThankyouTxtSaved(res.text ?? '')
+      setThankyouIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Danke-Text gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingThankyou(false)
     }
   }
 
@@ -527,13 +559,11 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
           <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
+            <RichTextField
               rows={10}
               value={stdNotes}
-              onChange={e => setStdNotes(e.target.value)}
+              onChange={setStdNotes}
               placeholder="Standard-Bemerkungstext für neue Offerten…"
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
@@ -571,13 +601,11 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
           <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
+            <RichTextField
               rows={4}
               value={stdDisc}
-              onChange={e => setStdDisc(e.target.value)}
+              onChange={setStdDisc}
               placeholder="Schlusstext / Disclaimer fürs Offerten-PDF…"
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
@@ -615,13 +643,11 @@ function OffertenVorlagenPanel() {
                 </div>
               </div>
               <div className="admin-table-wrap" style={{ padding: 16 }}>
-                <textarea
-                  className="admin-form-input"
+                <RichTextField
                   rows={4}
                   value={stdDiscR}
-                  onChange={e => setStdDiscR(e.target.value)}
+                  onChange={setStdDiscR}
                   placeholder="Schlusstext / Disclaimer für Richtofferten…"
-                  style={{ resize: 'vertical', lineHeight: 1.5 }}
                 />
                 <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
@@ -685,6 +711,50 @@ function OffertenVorlagenPanel() {
               </button>
               <span style={{ color: 'var(--muted)', fontSize: 13 }}>
                 Leer lassen setzt auf den System-Standardtext zurück.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Danke-Text bei Offerten-Annahme (Feature „Danke-Mail bei Offerten-Annahme") ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Danke-Text (Offerten-Annahme)</div>
+              <div className="admin-page-subtitle">
+                Inhalt der Dankesmail, die dem Kunden nach Annahme einer Offerte zugeht —
+                sobald das Feature „Danke-Mail bei Offerten-Annahme" aktiv ist (unter
+                Konfiguration). Platzhalter <code>{'{kunde}'}</code>, <code>{'{offerte}'}</code>{' '}
+                und <code>{'{projekt}'}</code> werden beim Versand aus der Offerte gefüllt.
+                Anrede und Grussformel gehören in den Text.
+                {thankyouIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={8}
+              value={thankyouTxt}
+              onChange={e => setThankyouTxt(e.target.value)}
+              placeholder="Guten Tag {kunde}&#10;&#10;Vielen Dank für die Annahme unserer Offerte {offerte}…"
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveQuoteThankyouText(false)}
+                disabled={savingThankyou || thankyouTxt === thankyouTxtSaved}
+              >
+                {savingThankyou ? 'Speichern…' : 'Danke-Text speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveQuoteThankyouText(true)}
+                disabled={savingThankyou || thankyouIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück.
               </span>
             </div>
           </div>
@@ -958,13 +1028,11 @@ function RechnungsVorlagenPanel() {
             </div>
           </div>
           <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
+            <RichTextField
               rows={3}
               value={footerTxt}
-              onChange={e => setFooterTxt(e.target.value)}
+              onChange={setFooterTxt}
               placeholder="Vielen Dank für Ihr Vertrauen und die angenehme Zusammenarbeit."
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
