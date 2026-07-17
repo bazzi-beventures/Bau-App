@@ -231,3 +231,33 @@ export interface FilterGroup {
   label: string
   options: { value: string; count: number }[]
 }
+
+/* ── Projekt-Pipeline (GET /pwa/kpi-projekt-pipeline) ─── */
+
+export interface PipelineOfferte {
+  status: string // entwurf | gesendet | akzeptiert | abgelehnt
+  betrag: number // brutto (backend-normalisiert via quote_gross_total)
+  datum: string | null // created_at, YYYY-MM-DD
+}
+
+export interface PipelineRechnung {
+  status: string // ausstehend | gesendet | bezahlt (archiviert/inaktiv gefiltert)
+  betrag: number
+  gesendet_am: string | null
+  bezahlt_am: string | null
+  bezahlt_betrag: number // paid_amount, Fallback betrag; 0 solange unbezahlt
+}
+
+export interface PipelineProjektRow {
+  project_id: string | null
+  projekt_nummer: string | null
+  projekt_name: string
+  projekt_status: string
+  kunde_name: string | null
+  customer_id: string | null
+  projektleiter_id: string | null
+  projektleiter_name: string | null
+  offerten: PipelineOfferte[]
+  rapporte: (string | null)[] // report_date je Rapport
+  rechnungen: PipelineRechnung[]
+}

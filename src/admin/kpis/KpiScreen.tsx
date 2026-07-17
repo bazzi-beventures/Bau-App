@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import UebersichtTab from './tabs/UebersichtTab'
+import PipelineTab from './tabs/PipelineTab'
 import ProjekteTab from './tabs/ProjekteTab'
 import FinanzenTab from './tabs/FinanzenTab'
 import ArbeitszeitTab from './tabs/ArbeitszeitTab'
@@ -9,10 +10,11 @@ import WartungTab from './tabs/WartungTab'
 import LeistungsartTab from './tabs/LeistungsartTab'
 import './kpi-dashboard.css'
 
-type Tab = 'uebersicht' | 'projekte' | 'finanzen' | 'arbeitszeit' | 'material' | 'pricing' | 'wartung' | 'leistungsart'
+type Tab = 'uebersicht' | 'pipeline' | 'projekte' | 'finanzen' | 'arbeitszeit' | 'material' | 'pricing' | 'wartung' | 'leistungsart'
 
 const TABS: { id: Tab; label: string; color: string }[] = [
   { id: 'uebersicht',  label: 'Übersicht',          color: '#0d9488' },
+  { id: 'pipeline',    label: 'Projekt-Pipeline',   color: '#c026d3' },
   { id: 'projekte',    label: 'Projekte & Reports', color: '#b45309' },
   { id: 'finanzen',    label: 'Finanzen',            color: '#be123c' },
   { id: 'arbeitszeit', label: 'Arbeitszeit & HR',   color: '#15803d' },
@@ -28,6 +30,7 @@ export default function KpiScreen() {
   function renderTab() {
     switch (activeTab) {
       case 'uebersicht':  return <UebersichtTab />
+      case 'pipeline':    return <PipelineTab />
       case 'projekte':    return <ProjekteTab />
       case 'finanzen':    return <FinanzenTab />
       case 'arbeitszeit': return <ArbeitszeitTab />

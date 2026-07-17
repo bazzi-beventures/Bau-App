@@ -16,3 +16,13 @@ export async function fetchKpiView<T>(
   const res = (await apiFetch(url)) as KpiViewResponse<T>
   return res.rows
 }
+
+interface PipelineResponse<T> {
+  rows: T[]
+  count: number
+}
+
+export async function fetchProjektPipeline<T>(): Promise<T[]> {
+  const res = (await apiFetch('/pwa/kpi-projekt-pipeline')) as PipelineResponse<T>
+  return res.rows
+}
