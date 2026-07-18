@@ -253,6 +253,7 @@ export interface PipelineProjektRow {
   projekt_nummer: string | null
   projekt_name: string
   projekt_status: string
+  is_closed: boolean
   kunde_name: string | null
   customer_id: string | null
   projektleiter_id: string | null

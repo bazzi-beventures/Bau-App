@@ -88,7 +88,10 @@ export function aggregatePipeline(
 
     const activity =
       offerten.length + rapporte.length + reVersendet.length + reBezahlt.length
-    if (dateActive && activity === 0) continue
+    // Offene Projekte bleiben unter jedem Datumsfilter sichtbar (Funnel-Start,
+    // ggf. mit Null-Zählern) — spiegelt die Backend-Regel in build_projekt_pipeline_rows.
+    // Nur GESCHLOSSENE Projekte ohne Ereignis im Zeitraum fallen weg.
+    if (dateActive && activity === 0 && row.is_closed) continue
 
     perProjekt.push({
       projektNummer: row.projekt_nummer,

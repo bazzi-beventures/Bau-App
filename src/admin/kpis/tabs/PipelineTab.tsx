@@ -82,7 +82,7 @@ export default function PipelineTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const [datePreset, setDatePreset] = useState<DatePreset>('year')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [plSel, setPlSel] = useState<Set<string> | null>(null) // null = alle

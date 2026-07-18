@@ -11,6 +11,7 @@ function row(overrides: Partial<PipelineProjektRow> = {}): PipelineProjektRow {
     projekt_nummer: '2600100',
     projekt_name: 'Projekt A',
     projekt_status: 'offen',
+    is_closed: false,
     kunde_name: 'Kunde AG',
     customer_id: 'c-1',
     projektleiter_id: 's-1',
@@ -112,16 +113,30 @@ describe('aggregatePipeline — Datumsfilter', () => {
     expect(perLeiter[0].rechnungenBezahlt).toBe(0)
   })
 
-  it('lässt Projekte ohne Ereignis im Zeitraum ganz weg', () => {
+  it('lässt GESCHLOSSENE Projekte ohne Ereignis im Zeitraum ganz weg', () => {
     const rows = [
-      row({ offerten: [offerte('gesendet', 100, '2026-01-01')] }),
-      row({ projekt_name: 'Projekt B', offerten: [offerte('gesendet', 100, '2026-05-05')] }),
+      row({ projekt_name: 'Projekt A', is_closed: true, offerten: [offerte('gesendet', 100, '2026-01-01')] }),
+      row({ projekt_name: 'Projekt B', is_closed: true, offerten: [offerte('gesendet', 100, '2026-05-05')] }),
     ]
     const mai = { ...ALLE, from: '2026-05-01', to: '2026-05-31' }
     const { perLeiter, perProjekt } = aggregatePipeline(rows, mai)
     expect(perProjekt).toHaveLength(1)
     expect(perProjekt[0].projektName).toBe('Projekt B')
     expect(perLeiter[0].projekte).toBe(1)
+  })
+
+  it('behält OFFENE Projekte auch ohne Ereignis im Zeitraum (Funnel-Start)', () => {
+    // Offenes Projekt, dessen einzige Offerte ausserhalb des Fensters liegt:
+    // bleibt sichtbar, aber mit Null-Zählern für den Zeitraum.
+    const rows = [
+      row({ projekt_name: 'Offen ohne 2026-Aktivität', is_closed: false, offerten: [offerte('gesendet', 100, '2025-11-01')] }),
+    ]
+    const mai = { ...ALLE, from: '2026-05-01', to: '2026-05-31' }
+    const { perLeiter, perProjekt } = aggregatePipeline(rows, mai)
+    expect(perProjekt).toHaveLength(1)
+    expect(perProjekt[0].offertenOffen).toBe(0)
+    expect(perLeiter[0].projekte).toBe(1)
+    expect(perLeiter[0].offertenOffen).toBe(0)
   })
 
   it('ohne Datumsfilter bleiben auch Projekte ohne datierbare Ereignisse drin', () => {
