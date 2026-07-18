@@ -689,6 +689,18 @@ export async function bulkSetMaterialStatus(
   }) as Promise<BulkMaterialStatusResult>
 }
 
+// Filter-Modus: wirkt auf ALLE Artikel des Filters (alle Seiten) — die
+// Ziel-Liste entsteht server-seitig aus denselben Filtern wie die Ansicht.
+export async function bulkSetMaterialStatusAll(
+  filter: { category?: string; supplier_id?: string; status?: string; szenario?: string },
+  isActive: boolean,
+): Promise<BulkMaterialStatusResult> {
+  return apiFetch('/pwa/admin/material-cleanup/bulk-status', {
+    method: 'POST',
+    body: JSON.stringify({ all_filtered: true, is_active: isActive, ...filter }),
+  }) as Promise<BulkMaterialStatusResult>
+}
+
 // ─── Aftersales ────────────────────────────────────────────
 
 export type AftersalesKind = 'feedback' | 'repair_check'

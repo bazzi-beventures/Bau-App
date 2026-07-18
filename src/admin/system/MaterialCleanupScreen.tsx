@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  scanMaterialCleanup, bulkSetMaterialStatus,
+  scanMaterialCleanup, bulkSetMaterialStatus, bulkSetMaterialStatusAll,
   MaterialCleanupScan, MaterialCleanupRow, MaterialSzenario,
 } from '../../api/admin'
 import { apiFetch, isOfflineError } from '../../api/client'
@@ -39,6 +39,9 @@ export default function MaterialCleanupScreen() {
 
   const [scan, setScan] = useState<MaterialCleanupScan | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // true = "alle Artikel im Filter" (über alle Seiten) — Massenbereinigung ohne
+  // Einzel-Auswahl; `selected` ist dann irrelevant.
+  const [allFiltered, setAllFiltered] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState<{ targetActive: boolean } | null>(null)
@@ -77,8 +80,14 @@ export default function MaterialCleanupScreen() {
   }, [category, supplierId, status, szenario, page])
 
   useEffect(() => { load() }, [load])
-  // Filter/Szenario/Seiten-Wechsel → Auswahl verwerfen (Massenaktion bleibt pro Seite).
-  useEffect(() => { setSelected(new Set()) }, [category, supplierId, status, szenario, page])
+  // Filter/Szenario-Wechsel → Auswahl verwerfen (auch die Filter-weite).
+  // Seiten-Wechsel behandelt goToPage: die Filter-weite Auswahl überlebt Blättern.
+  useEffect(() => { setSelected(new Set()); setAllFiltered(false) }, [category, supplierId, status, szenario])
+
+  function goToPage(p: number) {
+    setPage(p)
+    if (!allFiltered) setSelected(new Set())
+  }
 
   const supplierMap = useMemo(
     () => Object.fromEntries(suppliers.map(s => [s.id, s.name])) as Record<string, string>,
@@ -96,6 +105,13 @@ export default function MaterialCleanupScreen() {
   const allSelected = selectable.length > 0 && selectable.every(r => selected.has(r.art_nr))
 
   function toggle(artNr: string) {
+    if (allFiltered) {
+      // Einzel-Abwahl beendet den Filter-weiten Modus: zurück zur Seiten-Auswahl
+      // ohne den abgewählten Artikel.
+      setAllFiltered(false)
+      setSelected(new Set(selectable.filter(r => r.art_nr !== artNr).map(r => r.art_nr)))
+      return
+    }
     setSelected(prev => {
       const next = new Set(prev)
       next.has(artNr) ? next.delete(artNr) : next.add(artNr)
@@ -103,6 +119,7 @@ export default function MaterialCleanupScreen() {
     })
   }
   function toggleAll(checked: boolean) {
+    setAllFiltered(false)
     setSelected(checked ? new Set(selectable.map(r => r.art_nr)) : new Set())
   }
 
@@ -110,11 +127,16 @@ export default function MaterialCleanupScreen() {
     setSubmitting(true)
     setToast(null)
     try {
-      const res = await bulkSetMaterialStatus([...selected], targetActive)
+      const res = allFiltered
+        ? await bulkSetMaterialStatusAll(
+            { category, supplier_id: supplierId, status, szenario }, targetActive,
+          )
+        : await bulkSetMaterialStatus([...selected], targetActive)
       const parts = [`${res.updated} aktualisiert`]
       if (res.skipped_blocked) parts.push(`${res.skipped_blocked} gesperrt übersprungen`)
       setToast({ type: 'success', msg: parts.join(' · ') })
       setSelected(new Set())
+      setAllFiltered(false)
       setConfirm(null)
       await load()
     } catch (e) {
@@ -133,6 +155,9 @@ export default function MaterialCleanupScreen() {
   // im Aktiv-Filter nur „Auf Löschvormerkung setzen", sonst beide.
   const showDeactivate = status !== 'inactive'
   const showReactivate = status !== 'active'
+
+  // Anzahl, auf die eine Massenaktion wirkt (Filter-weit oder Seiten-Auswahl).
+  const effCount = allFiltered ? rowTotal : selected.size
 
   return (
     <div className="admin-page">
@@ -197,13 +222,60 @@ export default function MaterialCleanupScreen() {
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
         ) : (
           <>
+            {/* Massenaktionen — oben, wirken auf die Auswahl (Seite oder ganzer Filter) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '0 2px 12px' }}>
+              {showDeactivate && (
+                <button
+                  className="admin-btn admin-btn-danger"
+                  onClick={() => setConfirm({ targetActive: false })}
+                  disabled={submitting || effCount === 0}
+                >
+                  Auf {STATUS_TERMS.inactive} setzen ({effCount})
+                </button>
+              )}
+              {showReactivate && (
+                <button
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setConfirm({ targetActive: true })}
+                  disabled={submitting || effCount === 0}
+                >
+                  Reaktivieren ({effCount})
+                </button>
+              )}
+              {allFiltered ? (
+                <span className="admin-page-subtitle" style={{ margin: 0 }}>
+                  Alle {rowTotal} Artikel im Filter ausgewählt (alle Seiten) ·{' '}
+                  <button
+                    className="admin-btn admin-btn-secondary"
+                    onClick={() => { setAllFiltered(false); setSelected(new Set()) }}
+                    disabled={submitting}
+                  >
+                    Auswahl aufheben
+                  </button>
+                </span>
+              ) : allSelected && rowTotal > rows.length ? (
+                <span className="admin-page-subtitle" style={{ margin: 0 }}>
+                  Seite ausgewählt ·{' '}
+                  <button
+                    className="admin-btn admin-btn-secondary"
+                    onClick={() => setAllFiltered(true)}
+                    disabled={submitting}
+                  >
+                    Alle {rowTotal} Artikel im Filter auswählen
+                  </button>
+                </span>
+              ) : selected.size > 0 ? (
+                <span className="admin-page-subtitle" style={{ margin: 0 }}>{selected.size} ausgewählt</span>
+              ) : null}
+            </div>
+
             <table className="admin-table">
               <thead>
                 <tr>
                   <th style={{ width: 40 }}>
                     <input
                       type="checkbox"
-                      checked={allSelected}
+                      checked={allFiltered || allSelected}
                       onChange={e => toggleAll(e.target.checked)}
                       disabled={selectable.length === 0 || submitting}
                       title="Seite auswählen"
@@ -233,7 +305,7 @@ export default function MaterialCleanupScreen() {
                       <td onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          checked={selected.has(r.art_nr)}
+                          checked={allFiltered ? !prot : selected.has(r.art_nr)}
                           onChange={() => toggle(r.art_nr)}
                           disabled={prot || submitting}
                           title={prot ? 'Aktiver Bestand — geschützt' : undefined}
@@ -267,32 +339,10 @@ export default function MaterialCleanupScreen() {
                 {rowTotal === 0 ? '0 Artikel' : `${rangeStart}–${rangeEnd} von ${rowTotal}`}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button className="admin-btn admin-btn-secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || submitting}>Zurück</button>
+                <button className="admin-btn admin-btn-secondary" onClick={() => goToPage(Math.max(1, page - 1))} disabled={page <= 1 || submitting}>Zurück</button>
                 <span className="admin-page-subtitle" style={{ margin: 0 }}>Seite {page} / {totalPages}</span>
-                <button className="admin-btn admin-btn-secondary" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || submitting}>Weiter</button>
+                <button className="admin-btn admin-btn-secondary" onClick={() => goToPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages || submitting}>Weiter</button>
               </div>
-            </div>
-
-            {/* Massenaktionen (kontextabhängig; wirken auf die Auswahl der aktuellen Seite) */}
-            <div style={{ display: 'flex', gap: 10, padding: '4px 2px 12px' }}>
-              {showDeactivate && (
-                <button
-                  className="admin-btn admin-btn-danger"
-                  onClick={() => setConfirm({ targetActive: false })}
-                  disabled={submitting || selected.size === 0}
-                >
-                  Auf {STATUS_TERMS.inactive} setzen ({selected.size})
-                </button>
-              )}
-              {showReactivate && (
-                <button
-                  className="admin-btn admin-btn-secondary"
-                  onClick={() => setConfirm({ targetActive: true })}
-                  disabled={submitting || selected.size === 0}
-                >
-                  Reaktivieren ({selected.size})
-                </button>
-              )}
             </div>
           </>
         )}
@@ -302,9 +352,18 @@ export default function MaterialCleanupScreen() {
         <ConfirmDialog
           title={confirm.targetActive ? 'Artikel reaktivieren?' : `Auf ${STATUS_TERMS.inactive} setzen?`}
           message={confirm.targetActive ? (
-            <>{selected.size} Artikel wieder auf <strong>{STATUS_TERMS.active}</strong> setzen — sie erscheinen wieder in der Tenant-Ansicht.</>
+            <>
+              {allFiltered ? `Alle ${rowTotal} Artikel im Filter (über alle Seiten)` : `${selected.size} Artikel`} wieder
+              auf <strong>{STATUS_TERMS.active}</strong> setzen — sie erscheinen wieder in der Tenant-Ansicht.
+              {allFiltered && ' Bereits aktive Artikel bleiben unverändert.'}
+            </>
           ) : (
-            <>{selected.size} Artikel auf <strong>{STATUS_TERMS.inactive}</strong> setzen. Sie verschwinden aus der Tenant-Ansicht, bleiben aber vollständig in der Datenbank und können jederzeit reaktiviert werden. Es wird nichts gelöscht.</>
+            <>
+              {allFiltered ? `Alle ${rowTotal} Artikel im Filter (über alle Seiten)` : `${selected.size} Artikel`} auf{' '}
+              <strong>{STATUS_TERMS.inactive}</strong> setzen. Sie verschwinden aus der Tenant-Ansicht, bleiben aber
+              vollständig in der Datenbank und können jederzeit reaktiviert werden. Es wird nichts gelöscht.
+              {allFiltered && ' Geschützte Artikel (aktiver Bestand) werden automatisch übersprungen.'}
+            </>
           )}
           confirmLabel={confirm.targetActive ? 'Ja, reaktivieren' : `Ja, auf ${STATUS_TERMS.inactive} setzen`}
           busyLabel="Speichern…"

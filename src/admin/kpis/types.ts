@@ -259,5 +259,5 @@ export interface PipelineProjektRow {
   projektleiter_name: string | null
   offerten: PipelineOfferte[]
   rapporte: (string | null)[] // report_date je Rapport
-  rechnungen: PipelineRechnung[]
+  rechnungen: PipelineRechnung[] // max. 1 Eintrag: nur die aktuellste Rechnung des Projekts
 }

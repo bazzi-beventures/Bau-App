@@ -73,13 +73,14 @@ describe('aggregatePipeline — Gruppierung', () => {
     expect(perLeiter[0].rapporte).toBe(2)
   })
 
-  it('summiert Rechnungen versendet/bezahlt mit bezahlt_betrag', () => {
-    const rows = [row({
-      rechnungen: [
-        rechnung(),
-        rechnung({ status: 'bezahlt', bezahlt_am: '2026-06-20', bezahlt_betrag: 480 }),
-      ],
-    })]
+  it('summiert Rechnungen versendet/bezahlt über Projekte hinweg (Backend liefert max. 1 Rechnung pro Projekt)', () => {
+    const rows = [
+      row({ rechnungen: [rechnung()] }),
+      row({
+        projekt_name: 'Projekt B',
+        rechnungen: [rechnung({ status: 'bezahlt', bezahlt_am: '2026-06-20', bezahlt_betrag: 480 })],
+      }),
+    ]
     const { perLeiter } = aggregatePipeline(rows, ALLE)
     expect(perLeiter[0].rechnungenVersendet).toBe(2)
     expect(perLeiter[0].rechnungenChf).toBe(1000)
