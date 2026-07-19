@@ -44,6 +44,9 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const currentStock = material.inventory[0]?.quantity ?? 0
+  const minStock = material.inventory[0]?.min_quantity ?? null
+  // Negativer oder unter-Mindest-Bestand ist ein Problem → rot (wie in der Liste).
+  const stockLow = currentStock < 0 || (minStock !== null && currentStock <= minStock)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -72,9 +75,11 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
           <button className="admin-modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit} className="admin-modal-body">
+          {/* Stat-Kasten ist fix dunkel (#0f1117) → theme-unabhängige helle Farben,
+              nicht var(--text)/var(--muted) (im Light-Theme dunkel = schlechter Kontrast). */}
           <div style={{ background: '#0f1117', borderRadius: 9, padding: '12px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Aktueller Bestand</div>
-            <div style={{ fontSize: 28, fontWeight: 700 }}>{currentStock} {material.unit || ''}</div>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>Aktueller Bestand</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: stockLow ? '#ef4444' : '#f8fafc' }}>{currentStock} {material.unit || ''}</div>
           </div>
           {error && <div className="admin-form-error">{error}</div>}
           <div className="admin-form-group">

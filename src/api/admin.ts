@@ -522,9 +522,11 @@ export const SCHEDULING_FIELDS = [
 export interface SchedulingConfig {
   fields: Record<string, boolean>
   colors: Record<string, string>
-  // Uhrzeit 'HH:MM', ab der das Wochen-Zeitraster an Werktagen (Mo–Fr) rein
-  // visuell ausgegraut wird. '' = aus. Blockiert das Planen nicht.
+  // Nicht-Arbeitszeit-Fenster im Wochen-Zeitraster (Werktage Mo–Fr, rein visuell).
+  // grey_after = Fenster-Start 'HH:MM' ('' = aus), grey_until = Fenster-Ende 'HH:MM'
+  // ('' = bis Rasterende/Feierabend). Blockiert das Planen nicht.
   grey_after?: string
+  grey_until?: string
 }
 
 export interface TenantSchedulingResponse {

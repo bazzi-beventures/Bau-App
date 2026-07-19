@@ -1106,6 +1106,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
       fields: { ...def.fields, ...(cfg.fields || {}) },
       colors: { ...def.colors, ...(cfg.colors || {}) },
       grey_after: cfg.grey_after ?? def.grey_after ?? '',
+      grey_until: cfg.grey_until ?? def.grey_until ?? '',
     }
   }
 
@@ -1131,6 +1132,8 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
   }
 
   const dirty = JSON.stringify(config) !== original
+  // 'bis' muss nach 'von' liegen (HH:MM-Strings sind lexikografisch vergleichbar).
+  const rangeInvalid = !!config.grey_after && !!config.grey_until && config.grey_until <= config.grey_after
 
   function setField(key: string, value: boolean) {
     setConfig(prev => prev && { ...prev, fields: { ...prev.fields, [key]: value } })
@@ -1141,7 +1144,12 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
   }
 
   function setGreyAfter(value: string) {
-    setConfig(prev => prev && { ...prev, grey_after: value })
+    // Ohne Start ('von') ergibt ein Ende ('bis') keinen Sinn — mit leeren.
+    setConfig(prev => prev && { ...prev, grey_after: value, grey_until: value ? prev.grey_until : '' })
+  }
+
+  function setGreyUntil(value: string) {
+    setConfig(prev => prev && { ...prev, grey_until: value })
   }
 
   function resetToDefault() {
@@ -1203,18 +1211,30 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
 
       <div style={{ fontWeight: 600, marginBottom: 6 }}>Nicht-Arbeitszeit ausgrauen</div>
       <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
-        Blendet die Zeit ab dieser Uhrzeit an Werktagen (Mo–Fr) im Wochen-Kalender grau ein –
-        z.&nbsp;B. für einen Halbtag. Rein optisch, Einsätze lassen sich dort weiterhin planen.
-        Leer&nbsp;= aus.
+        Blendet ein Zeitfenster an Werktagen (Mo–Fr) im Wochen-Kalender grau ein –
+        z.&nbsp;B. die Mittagspause 12:00–13:00 oder einen Halbtag ab Mittag. Rein optisch,
+        Einsätze lassen sich dort weiterhin planen. „Bis" leer&nbsp;= bis Feierabend.
+        „Von" leer&nbsp;= aus.
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: rangeInvalid ? 6 : 24, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>von</span>
         <input
           type="time"
           className="admin-input"
           value={config.grey_after || ''}
           onChange={e => setGreyAfter(e.target.value)}
-          style={{ width: 130 }}
-          aria-label="Ausgrauen ab Uhrzeit"
+          style={{ width: 120 }}
+          aria-label="Ausgrauen von Uhrzeit"
+        />
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>bis</span>
+        <input
+          type="time"
+          className="admin-input"
+          value={config.grey_until || ''}
+          onChange={e => setGreyUntil(e.target.value)}
+          style={{ width: 120 }}
+          aria-label="Ausgrauen bis Uhrzeit"
+          disabled={!config.grey_after}
         />
         {config.grey_after && (
           <button
@@ -1226,12 +1246,17 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
           </button>
         )}
       </div>
+      {rangeInvalid && (
+        <div style={{ fontSize: 13, color: 'var(--danger, #c0392b)', marginBottom: 24 }}>
+          „Bis" muss nach „von" liegen.
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <button
           className="admin-btn admin-btn-primary"
           onClick={save}
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || rangeInvalid}
         >
           {saving ? 'Speichern…' : 'Speichern'}
         </button>

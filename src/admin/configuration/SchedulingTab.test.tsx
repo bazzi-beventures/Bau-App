@@ -26,6 +26,7 @@ const DEFAULTS = {
     werkstatt: '#0d9488', sonstiges: '#475569',
   },
   grey_after: '',
+  grey_until: '',
 }
 
 beforeEach(() => {
@@ -79,23 +80,57 @@ describe('SchedulingTab', () => {
     expect(await screen.findByLabelText('Bemerkung')).toBeChecked()
   })
 
-  it('Ausgrau-Uhrzeit wird geladen und mitgespeichert', async () => {
+  it('Ausgrau-Startzeit (von) wird geladen und mitgespeichert', async () => {
     mockGet.mockResolvedValue({ config: { grey_after: '12:00' }, defaults: DEFAULTS })
     mockUpdate.mockResolvedValue({ config: { ...DEFAULTS, grey_after: '13:30' } })
     const user = await openTab()
 
-    const timeInput = await screen.findByLabelText('Ausgrauen ab Uhrzeit')
-    expect(timeInput).toHaveValue('12:00')
+    const vonInput = await screen.findByLabelText('Ausgrauen von Uhrzeit')
+    expect(vonInput).toHaveValue('12:00')
 
     const saveBtn = screen.getByRole('button', { name: 'Speichern' })
     expect(saveBtn).toBeDisabled()  // noch nichts geändert
 
-    await user.clear(timeInput)
-    await user.type(timeInput, '13:30')
+    await user.clear(vonInput)
+    await user.type(vonInput, '13:30')
     expect(saveBtn).not.toBeDisabled()
 
     await user.click(saveBtn)
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
     expect(mockUpdate.mock.calls[0][0].grey_after).toBe('13:30')
+  })
+
+  it('Fenster-Ende (bis) wird gespeichert; "bis" ist ohne "von" deaktiviert', async () => {
+    mockGet.mockResolvedValue({ config: {}, defaults: DEFAULTS })
+    mockUpdate.mockResolvedValue({ config: { ...DEFAULTS, grey_after: '12:00', grey_until: '13:00' } })
+    const user = await openTab()
+
+    const bisInput = await screen.findByLabelText('Ausgrauen bis Uhrzeit')
+    expect(bisInput).toBeDisabled()  // ohne 'von' kein 'bis'
+
+    const vonInput = screen.getByLabelText('Ausgrauen von Uhrzeit')
+    await user.type(vonInput, '12:00')
+    expect(bisInput).not.toBeDisabled()
+
+    await user.type(bisInput, '13:00')
+    const saveBtn = screen.getByRole('button', { name: 'Speichern' })
+    expect(saveBtn).not.toBeDisabled()
+
+    await user.click(saveBtn)
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate.mock.calls[0][0].grey_after).toBe('12:00')
+    expect(mockUpdate.mock.calls[0][0].grey_until).toBe('13:00')
+  })
+
+  it('Speichern ist gesperrt, wenn "bis" nicht nach "von" liegt', async () => {
+    mockGet.mockResolvedValue({ config: { grey_after: '12:00', grey_until: '13:00' }, defaults: DEFAULTS })
+    const user = await openTab()
+
+    const bisInput = await screen.findByLabelText('Ausgrauen bis Uhrzeit')
+    await user.clear(bisInput)
+    await user.type(bisInput, '11:00')  // vor 'von'
+
+    expect(screen.getByText('„Bis" muss nach „von" liegen.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
   })
 })

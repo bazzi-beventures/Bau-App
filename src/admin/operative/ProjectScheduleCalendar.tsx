@@ -309,7 +309,7 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
 }
 
 function WeekView({
-  projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays, greyAfter,
+  projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil,
 }: {
   projects: Project[]
   staff: StaffLite[]
@@ -319,8 +319,10 @@ function WeekView({
   onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
   onCreateSlot?: (dayISO: string, startTime: string, endTime: string) => void
   holidays: Map<string, string>
-  // Uhrzeit 'HH:MM', ab der das Raster an Werktagen ausgegraut wird ('' = aus).
+  // Nicht-Arbeitszeit-Fenster: ab greyAfter grau ('' = aus), bis greyUntil
+  // ('' = bis Rasterende). Nur Werktage, rein visuell.
   greyAfter?: string
+  greyUntil?: string
 }) {
   const days = getWeekDays(currentDate)
   const [hoverDayISO, setHoverDayISO] = useState<string | null>(null)
@@ -339,12 +341,16 @@ function WeekView({
   for (let h = WEEK_HOURS_START; h <= WEEK_HOURS_END; h++) hours.push(h)
   const gridHeight = (WEEK_HOURS_END - WEEK_HOURS_START) * WEEK_HOUR_HEIGHT
 
-  // Ausgrau-Grenze (Nicht-Arbeitszeit): Y-Position ab der das Raster an
-  // Werktagen (Mo–Fr) grau hinterlegt wird. Auf das sichtbare Raster begrenzt;
-  // null = aus oder komplett unterhalb des Rasters (nichts auszugrauen).
+  // Ausgrau-Fenster (Nicht-Arbeitszeit): Y-Positionen des grauen Bereichs an
+  // Werktagen (Mo–Fr). greyTopPx = Fenster-Start (null = aus). greyBottomPx =
+  // Fenster-Ende; greyUntil leer/ungültig => bis Rasterende (Feierabend).
+  // Beide auf das sichtbare Raster begrenzt.
   const greyTopPx = greyAfter && /^\d{2}:\d{2}$/.test(greyAfter)
     ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyAfter)))
     : null
+  const greyBottomPx = greyUntil && /^\d{2}:\d{2}$/.test(greyUntil)
+    ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyUntil)))
+    : gridHeight
 
   const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
 
@@ -529,7 +535,7 @@ function WeekView({
           const lanes = computeLanes(timed)
           // Nur Werktage (Mo–Fr) ausgrauen; Wochenende bleibt normal.
           const dow = d.getDay() // 0 = So, 6 = Sa
-          const showDim = greyTopPx !== null && dow >= 1 && dow <= 5 && greyTopPx < gridHeight
+          const showDim = greyTopPx !== null && dow >= 1 && dow <= 5 && greyBottomPx > greyTopPx
           return (
             <div
               key={i}
@@ -554,7 +560,7 @@ function WeekView({
               {showDim && (
                 <div
                   className="project-cal-week-dim"
-                  style={{ top: greyTopPx!, height: gridHeight - greyTopPx! }}
+                  style={{ top: greyTopPx!, height: greyBottomPx - greyTopPx! }}
                   aria-hidden="true"
                 />
               )}
@@ -659,6 +665,7 @@ export default function ProjectScheduleCalendar({
   const isMobile = useIsMobile()
   const fields = schedulingConfig?.fields
   const greyAfter = schedulingConfig?.grey_after
+  const greyUntil = schedulingConfig?.grey_until
   // Einsatz-Art-Farben als scoped CSS-Variablen (--kind-*) auf dem Kalender-Root.
   const kindColorVars: React.CSSProperties = {}
   for (const [k, v] of Object.entries(schedulingConfig?.colors || {})) {
@@ -913,6 +920,7 @@ export default function ProjectScheduleCalendar({
           onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
           holidays={holidays}
           greyAfter={greyAfter}
+          greyUntil={greyUntil}
         />
       )}
 
