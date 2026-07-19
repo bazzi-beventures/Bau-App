@@ -7,6 +7,7 @@ import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
 import MultiDropdown from '../components/MultiDropdown'
+import ProjektDrillModal from '../components/ProjektDrillModal'
 
 const chf = (v: unknown) =>
   typeof v === 'number'
@@ -87,6 +88,7 @@ export default function PipelineTab() {
   const [customTo, setCustomTo] = useState('')
   const [plSel, setPlSel] = useState<Set<string> | null>(null) // null = alle
   const [search, setSearch] = useState('')
+  const [drill, setDrill] = useState<PipelineProjektAgg | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -164,6 +166,13 @@ export default function PipelineTab() {
     })
   }
 
+  // Klick auf eine Projektleiter-Zeile: nur diesen Leiter filtern; erneuter Klick
+  // auf den bereits allein gewählten Leiter hebt den Filter wieder auf. Der
+  // Datumsfilter bleibt dabei unberührt.
+  function selectLeiter(name: string) {
+    setPlSel((prev) => (prev && prev.size === 1 && prev.has(name) ? null : new Set([name])))
+  }
+
   if (loading) return <div className="admin-loading"><div className="kpi-admin-spinner" />Laden…</div>
   if (error) return <div className="admin-error">{error}</div>
 
@@ -233,16 +242,21 @@ export default function PipelineTab() {
       />
 
       {/* Pipeline pro Projektleiter */}
+      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+        Zeile anklicken, um nach diesem Projektleiter zu filtern (nochmal klicken hebt den Filter auf).
+      </div>
       <DataTable
         data={perLeiter}
         columns={LEITER_COLUMNS}
         defaultSort={{ key: 'offertenOffen', dir: 'desc' }}
+        onRowClick={(r) => selectLeiter(r.projektleiter)}
       />
 
       <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
         Offerten zählen aufs Erstellungsdatum, Rapporte aufs Rapportdatum, Rechnungen auf Versand- bzw. Zahlungsdatum.
         Archivierte Offerten (ersetzte Versionen) und archivierte/inaktive Rechnungen sind ausgeklammert;
         pro Projekt zählt nur die aktuellste Rechnung (Fehlversand-/Ersatz-Zeilen zählen nicht doppelt).
+        Projekt-Zeile anklicken für die Detail-Ansicht.
       </div>
 
       {/* Drill-down: einzelne Projekte */}
@@ -250,7 +264,12 @@ export default function PipelineTab() {
         data={perProjekt}
         columns={PROJEKT_COLUMNS}
         defaultSort={{ key: 'rechnungenChf', dir: 'desc' }}
+        onRowClick={(r) => setDrill(r)}
       />
+
+      {drill && (
+        <ProjektDrillModal projekt={drill} from={from} to={to} onClose={() => setDrill(null)} />
+      )}
     </div>
   )
 }

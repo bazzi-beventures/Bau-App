@@ -6,6 +6,7 @@ interface Props<T> {
   columns: ColumnDef<T>[]
   pageSize?: number
   defaultSort?: SortState
+  onRowClick?: (row: T) => void
 }
 
 export default function DataTable<T extends object>({
@@ -13,6 +14,7 @@ export default function DataTable<T extends object>({
   columns,
   pageSize = 25,
   defaultSort,
+  onRowClick,
 }: Props<T>) {
   const [sort, setSort] = useState<SortState>(defaultSort ?? { key: columns[0]?.key ?? '', dir: 'desc' })
   const [page, setPage] = useState(0)
@@ -72,7 +74,11 @@ export default function DataTable<T extends object>({
             <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Keine Daten</td></tr>
           )}
           {paged.map((row, ri) => (
-            <tr key={ri}>
+            <tr
+              key={ri}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              style={onRowClick ? { cursor: 'pointer' } : undefined}
+            >
               {columns.map((col) => (
                 <td key={col.key} style={{ textAlign: col.align ?? 'left' }}>
                   {col.render

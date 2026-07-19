@@ -146,6 +146,36 @@ describe('aggregatePipeline — Datumsfilter', () => {
   })
 })
 
+describe('aggregatePipeline — Drill-down-Detail', () => {
+  it('liefert die im Zeitraum liegenden Ereignisse plus Gesamtzahl fürs Projekt', () => {
+    const rows = [row({
+      offerten: [offerte('gesendet', 100, '2026-04-30'), offerte('akzeptiert', 200, '2026-05-10')],
+      rapporte: ['2026-04-01', '2026-05-15', null],
+      rechnungen: [rechnung({ gesendet_am: '2026-05-20', bezahlt_am: null })],
+    })]
+    const mai = { ...ALLE, from: '2026-05-01', to: '2026-05-31' }
+    const { perProjekt } = aggregatePipeline(rows, mai)
+    const p = perProjekt[0]
+    // nur die Mai-Ereignisse im Detail
+    expect(p.offertenDetail.map((o) => o.datum)).toEqual(['2026-05-10'])
+    expect(p.rapporteDetail).toEqual(['2026-05-15'])
+    expect(p.rechnungenDetail).toHaveLength(1)
+    // Gesamtzahlen fürs "+N ausserhalb"-Label (null-Rapport zählt nicht mit)
+    expect(p.offertenGesamt).toBe(2)
+    expect(p.rapporteGesamt).toBe(2)
+    expect(p.rechnungenGesamt).toBe(1)
+    expect(p.projektStatus).toBe('offen')
+    expect(p.isClosed).toBe(false)
+  })
+
+  it('ohne Datumsfilter enthält das Detail alle Ereignisse', () => {
+    const rows = [row({ offerten: [offerte('gesendet'), offerte('akzeptiert')] })]
+    const { perProjekt } = aggregatePipeline(rows, ALLE)
+    expect(perProjekt[0].offertenDetail).toHaveLength(2)
+    expect(perProjekt[0].offertenGesamt).toBe(2)
+  })
+})
+
 describe('aggregatePipeline — Projektleiter-/Suchfilter', () => {
   const rows = [
     row({ offerten: [offerte('gesendet')] }),

@@ -5,7 +5,7 @@
 // Offerten auf das Erstellungsdatum, Rapporte auf das Rapportdatum, Rechnungen
 // auf Versand- bzw. Zahlungsdatum. Bei aktivem Datumsfilter fallen Projekte
 // ganz weg, wenn keines ihrer Ereignisse im Zeitraum liegt.
-import type { PipelineProjektRow } from './types'
+import type { PipelineProjektRow, PipelineOfferte, PipelineRechnung } from './types'
 
 export const OHNE_PL = 'Ohne Projektleiter'
 
@@ -35,6 +35,8 @@ export interface PipelineLeiterAgg {
 export interface PipelineProjektAgg {
   projektNummer: string | null
   projektName: string
+  projektStatus: string
+  isClosed: boolean
   kunde: string
   projektleiter: string
   offertenOffen: number
@@ -44,6 +46,14 @@ export interface PipelineProjektAgg {
   rechnungenVersendet: number
   rechnungenChf: number
   bezahltChf: number
+  // Drill-down: die im Zeitraum liegenden Ereignisse (reconciliert mit den Zählern
+  // oben) plus Gesamtzahl auf dem Projekt für den "+N ausserhalb"-Hinweis.
+  offertenDetail: PipelineOfferte[]
+  rapporteDetail: string[]
+  rechnungenDetail: PipelineRechnung[]
+  offertenGesamt: number
+  rapporteGesamt: number
+  rechnungenGesamt: number
 }
 
 export function leiterName(row: PipelineProjektRow): string {
@@ -82,9 +92,13 @@ export function aggregatePipeline(
     const offen = offerten.filter((o) => o.status === 'entwurf' || o.status === 'gesendet')
     const versendet = offen.filter((o) => o.status === 'gesendet')
     const akzeptiert = offerten.filter((o) => o.status === 'akzeptiert')
-    const rapporte = row.rapporte.filter((d) => inRange(d, from, to))
+    const rapporte = row.rapporte.filter((d): d is string => inRange(d, from, to))
     const reVersendet = row.rechnungen.filter((r) => inRange(r.gesendet_am, from, to))
     const reBezahlt = row.rechnungen.filter((r) => inRange(r.bezahlt_am, from, to))
+    // Rechnungen fürs Drill-down: alle im Zeitraum (nach Versand- ODER Zahldatum).
+    const reDetail = row.rechnungen.filter(
+      (r) => inRange(r.gesendet_am, from, to) || inRange(r.bezahlt_am, from, to),
+    )
 
     const activity =
       offerten.length + rapporte.length + reVersendet.length + reBezahlt.length
@@ -96,6 +110,8 @@ export function aggregatePipeline(
     perProjekt.push({
       projektNummer: row.projekt_nummer,
       projektName: row.projekt_name,
+      projektStatus: row.projekt_status,
+      isClosed: row.is_closed,
       kunde: row.kunde_name ?? '—',
       projektleiter: pl,
       offertenOffen: offen.length,
@@ -105,6 +121,12 @@ export function aggregatePipeline(
       rechnungenVersendet: reVersendet.length,
       rechnungenChf: sum(reVersendet.map((r) => r.betrag)),
       bezahltChf: sum(reBezahlt.map((r) => r.bezahlt_betrag)),
+      offertenDetail: offerten,
+      rapporteDetail: rapporte,
+      rechnungenDetail: reDetail,
+      offertenGesamt: row.offerten.length,
+      rapporteGesamt: row.rapporte.filter(Boolean).length,
+      rechnungenGesamt: row.rechnungen.length,
     })
 
     let agg = byLeiter.get(pl)
