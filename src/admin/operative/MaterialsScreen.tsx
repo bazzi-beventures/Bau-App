@@ -705,7 +705,7 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
       {tab === 'inventory' && <MaterialInventoryPanel />}
       {tab === 'units' && <UnitsPanel />}
       {tab === 'frequent' && ersatzteilEnabled && <FrequentMaterialsPanel />}
-      {tab === 'import' && <ImportScreen />}
+      {tab === 'import' && <ImportScreen ownArticleEnabled={isFeatureEnabled(user, 'import_eigenartikel')} />}
     </div>
   )
 }

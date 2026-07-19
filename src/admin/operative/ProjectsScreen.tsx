@@ -150,6 +150,7 @@ interface ProjectsListResponse {
   total: number
   open_count: number
   closed_count: number
+  archived_count: number
   page: number
   page_size: number
 }
@@ -158,12 +159,13 @@ const PAGE_SIZE = 50
 
 export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScreenProps = {}) {
   const [data, setData] = useState<ProjectsListResponse>({
-    rows: [], total: 0, open_count: 0, closed_count: 0, page: 1, page_size: PAGE_SIZE,
+    rows: [], total: 0, open_count: 0, closed_count: 0, archived_count: 0, page: 1, page_size: PAGE_SIZE,
   })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showClosed, setShowClosed] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [sortKey, setSortKey] = useState<ProjectSortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
@@ -213,13 +215,15 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   }, [search])
 
   // Filter/Suche/Sort aendern → zurueck auf Seite 1.
-  useEffect(() => { setPage(1) }, [showClosed, debouncedSearch, sortKey, sortDir, projektleiterFilter])
+  useEffect(() => { setPage(1) }, [showClosed, showArchived, debouncedSearch, sortKey, sortDir, projektleiterFilter])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      // Archiv-Ansicht hat Vorrang; sonst offen (Default) bzw. offen+geschlossen.
+      const statusParam = showArchived ? 'archived' : (showClosed ? 'all' : 'open')
       const params = new URLSearchParams({
-        status: showClosed ? 'all' : 'open',
+        status: statusParam,
         sort: sortKey,
         dir: sortDir,
         page: String(page),
@@ -232,7 +236,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
     } finally {
       setLoading(false)
     }
-  }, [showClosed, debouncedSearch, sortKey, sortDir, page, projektleiterFilter])
+  }, [showClosed, showArchived, debouncedSearch, sortKey, sortDir, page, projektleiterFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -241,7 +245,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const { rows, total, open_count, closed_count } = data
+  const { rows, total, open_count, closed_count, archived_count } = data
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeEnd = Math.min(page * PAGE_SIZE, total)
@@ -263,11 +267,20 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Projekte</div>
-          <div className="admin-page-subtitle">{open_count} offen, {closed_count} geschlossen</div>
+          <div className="admin-page-subtitle">
+            {open_count} offen, {closed_count} geschlossen{archived_count > 0 ? `, ${archived_count} archiviert` : ''}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
+            className={`admin-btn admin-btn-sm ${showArchived ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            onClick={() => setShowArchived(s => !s)}
+          >
+            {showArchived ? 'Archiv ausblenden' : `Archiv${archived_count > 0 ? ` (${archived_count})` : ''}`}
+          </button>
+          <button
             className={`admin-btn admin-btn-sm ${showClosed ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+            disabled={showArchived}
             onClick={() => setShowClosed(s => !s)}
           >
             {showClosed ? 'Geschlossene ausblenden' : 'Geschlossene anzeigen'}

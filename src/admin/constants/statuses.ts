@@ -1,13 +1,15 @@
-export type ProjectStatus = 'offen' | 'abgeschlossen'
+export type ProjectStatus = 'offen' | 'abgeschlossen' | 'archiviert'
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   offen: 'Offen',
   abgeschlossen: 'Abgeschlossen',
+  archiviert: 'Archiviert',
 }
 
 export const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
   offen: 'admin-badge-active',
   abgeschlossen: 'admin-badge-closed',
+  archiviert: 'admin-badge-draft',
 }
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = {

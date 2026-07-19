@@ -98,6 +98,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [settingStatus, setSettingStatus] = useState(false)
   const [error, setError] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
+  const [confirmArchive, setConfirmArchive] = useState(false)
+  const [confirmReactivate, setConfirmReactivate] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
   // Wiedereröffnen
@@ -163,6 +165,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   const effectiveStatus: ProjectStatus = project?.status ?? (project?.is_closed ? 'abgeschlossen' : 'offen')
   const isClosed = effectiveStatus === 'abgeschlossen'
+  const isArchived = effectiveStatus === 'archiviert'
 
   useEffect(() => {
     document.querySelector('.admin-content')?.scrollTo({ top: 0 })
@@ -572,6 +575,24 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     } finally {
       setSettingStatus(false)
       setConfirmClose(false)
+    }
+  }
+
+  async function handleArchive() {
+    if (!project) return
+    setSettingStatus(true)
+    try {
+      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'archiviert' }),
+      })
+      showToast('Projekt archiviert')
+      setTimeout(onSaved, 1000)
+    } catch {
+      setError('Fehler beim Archivieren')
+    } finally {
+      setSettingStatus(false)
+      setConfirmArchive(false)
     }
   }
 
@@ -1297,7 +1318,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <div className="admin-table-wrap" style={{ padding: 20, maxWidth: 360 }}>
           <div className="admin-section-title">Status</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            {!isClosed && (
+            {!isClosed && !isArchived && (
               <button
                 type="button"
                 disabled={settingStatus}
@@ -1319,9 +1340,33 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 Wiedereröffnen
               </button>
             )}
+            {!isArchived && (
+              <button
+                type="button"
+                disabled={settingStatus}
+                className="admin-btn admin-btn-secondary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => setConfirmArchive(true)}
+              >
+                Archivieren
+              </button>
+            )}
+            {isArchived && (
+              <button
+                type="button"
+                disabled={reopening}
+                className="admin-btn admin-btn-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => setConfirmReactivate(true)}
+              >
+                Reaktivieren
+              </button>
+            )}
           </div>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
-            Abgeschlossene Projekte werden für Mitarbeiter ausgeblendet.
+            {isArchived
+              ? 'Archivierte Projekte sind aus Dashboard und Kennzahlen ausgeblendet – inkl. ihrer Offerten und Rechnungen. Reaktivieren macht das rückgängig.'
+              : 'Abgeschlossene Projekte werden für Mitarbeiter ausgeblendet. Archivieren nimmt das Projekt zusätzlich aus Dashboard und Kennzahlen (reversibel).'}
           </p>
         </div>
       )}
@@ -1462,6 +1507,31 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           variant="danger"
           onCancel={() => setConfirmClose(false)}
           onConfirm={handleClose}
+        />
+      )}
+
+      {confirmArchive && (
+        <ConfirmDialog
+          title="Projekt archivieren?"
+          message={<>«{project?.name}» wird samt seinen Offerten und Rechnungen aus Dashboard und Kennzahlen genommen. Nichts wird gelöscht – Reaktivieren macht es rückgängig.</>}
+          confirmLabel="Ja, archivieren"
+          busyLabel="Archivieren…"
+          busy={settingStatus}
+          variant="danger"
+          onCancel={() => setConfirmArchive(false)}
+          onConfirm={handleArchive}
+        />
+      )}
+
+      {confirmReactivate && (
+        <ConfirmDialog
+          title="Projekt reaktivieren?"
+          message={<>«{project?.name}» wird wieder als offenes Projekt geführt und zählt wieder in Dashboard und Kennzahlen.</>}
+          confirmLabel="Ja, reaktivieren"
+          busyLabel="Reaktivieren…"
+          busy={reopening}
+          onCancel={() => setConfirmReactivate(false)}
+          onConfirm={() => { setConfirmReactivate(false); handleReopen() }}
         />
       )}
 

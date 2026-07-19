@@ -17,14 +17,19 @@ interface ParseResult {
   columns: string[]
   fields: FieldDef[]
   mapping: Record<string, string | null>
+  supplier_field: { key: string; label: string }
+  supplier_guess: string | null
+  own_fields: FieldDef[]
+  own_mapping: Record<string, string | null>
   sample_rows: Record<string, string | number | null>[]
   row_count: number
 }
 
 type Action = 'new' | 'update' | 'unchanged'
+type Mode = 'single' | 'per_row' | 'own'
 
 interface PreviewRow {
-  manufacturer_art_nr: string
+  manufacturer_art_nr: string | null
   art_nr: string
   name: string
   unit: string
@@ -32,12 +37,17 @@ interface PreviewRow {
   cost_price: number | null
   old_cost_price: number | null
   unit_price: number
+  supplier_name: string | null
+  supplier_new: boolean
   action: Action
 }
 
 interface PreviewResult {
   preview: true
-  supplier_name: string
+  per_row: boolean
+  own_articles?: boolean
+  supplier_name: string | null
+  new_suppliers: string[]
   rows: PreviewRow[]
   errors: { row: number; message: string }[]
   summary: { new: number; update: number; unchanged: number; errors: number }
@@ -47,7 +57,13 @@ interface ImportResult {
   imported: number
   updated: number
   skipped: number
+  new_suppliers: string[]
   errors: { row: number; message: string }[]
+}
+
+interface Props {
+  /** Feature-Flag import_eigenartikel — schaltet den Modus „Eigene Artikel" frei. */
+  ownArticleEnabled?: boolean
 }
 
 const fmtChf = (n: number | null) => (n == null ? '—' : `CHF ${n.toFixed(2)}`)
@@ -58,8 +74,16 @@ const ACTION_LABEL: Record<Action, string> = {
   unchanged: 'Unverändert',
 }
 
-export default function ImportScreen() {
+const MODE_HINT: Record<Mode, string> = {
+  single: 'Alle Zeilen werden diesem einen Lieferanten zugeordnet.',
+  per_row: 'Für den Initialimport: Eine Spalte deiner Datei enthält den Lieferanten (Name oder Präfix). Unbekannte Lieferanten werden beim Import automatisch angelegt.',
+  own: 'Eigene Artikel ohne Lieferant. Die System-Artikelnummer wird automatisch nach der normalen Konvention vergeben (nächste freie Nummer); bestehende eigene Artikel werden anhand der Bezeichnung abgeglichen.',
+}
+
+export default function ImportScreen({ ownArticleEnabled = false }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const [mode, setMode] = useState<Mode>('single')
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [supplierId, setSupplierId] = useState('')
@@ -69,6 +93,7 @@ export default function ImportScreen() {
   const [parsing, setParsing] = useState(false)
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
+  const [supplierColumn, setSupplierColumn] = useState('')
 
   const [previewing, setPreviewing] = useState(false)
   const [previewData, setPreviewData] = useState<PreviewResult | null>(null)
@@ -95,14 +120,27 @@ export default function ImportScreen() {
     setFileName('')
     setParsed(null)
     setMapping({})
+    setSupplierColumn('')
     setPreviewData(null)
     setResult(null)
     setError('')
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  function switchMode(next: Mode) {
+    if (next === mode) return
+    setMode(next)
+    resetAll()
+  }
+
+  const perRow = mode === 'per_row'
+  const own = mode === 'own'
+  const canUpload = mode !== 'single' || !!supplierId
+  // Die im aktuellen Modus geltenden Mapping-Felder (Eigenartikel: ohne Lieferanten-Nr.)
+  const activeFields = parsed ? (own ? parsed.own_fields : parsed.fields) : []
+
   async function handleFile(f: File) {
-    if (!supplierId) {
+    if (mode === 'single' && !supplierId) {
       setError('Bitte zuerst einen Lieferanten wählen.')
       return
     }
@@ -119,9 +157,12 @@ export default function ImportScreen() {
     try {
       const res = await apiFormFetch('/pwa/admin/import/parse', fd) as ParseResult
       setParsed(res)
+      const fields = own ? res.own_fields : res.fields
+      const map = own ? res.own_mapping : res.mapping
       const initial: Record<string, string> = {}
-      for (const fld of res.fields) initial[fld.key] = res.mapping[fld.key] ?? ''
+      for (const fld of fields) initial[fld.key] = map[fld.key] ?? ''
       setMapping(initial)
+      setSupplierColumn(res.supplier_guess ?? '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Datei konnte nicht gelesen werden')
     } finally {
@@ -135,19 +176,33 @@ export default function ImportScreen() {
     setResult(null)
   }
 
+  function onSupplierColumnChange(column: string) {
+    setSupplierColumn(column)
+    setPreviewData(null)
+    setResult(null)
+  }
+
   function missingRequired(): string | null {
     if (!parsed) return null
-    for (const fld of parsed.fields) {
+    for (const fld of activeFields) {
       if (fld.required && !mapping[fld.key]) return fld.label
     }
+    if (perRow && !supplierColumn) return parsed.supplier_field.label
     return null
   }
 
   function buildFormData(preview: boolean): FormData {
     const fd = new FormData()
     fd.append('file', file as File)
-    fd.append('supplier_id', supplierId)
-    fd.append('mapping', JSON.stringify(mapping))
+    const mappingToSend: Record<string, string> = { ...mapping }
+    if (own) {
+      fd.append('own_articles', 'true')
+    } else if (perRow && parsed) {
+      mappingToSend[parsed.supplier_field.key] = supplierColumn
+    } else {
+      fd.append('supplier_id', supplierId)
+    }
+    fd.append('mapping', JSON.stringify(mappingToSend))
     fd.append('preview', preview ? 'true' : 'false')
     return fd
   }
@@ -174,7 +229,8 @@ export default function ImportScreen() {
     try {
       const res = await apiFormFetch('/pwa/admin/import/materials', buildFormData(false)) as ImportResult
       setResult(res)
-      showToast(`${res.imported} neu · ${res.updated} aktualisiert`)
+      const supMsg = res.new_suppliers.length ? ` · ${res.new_suppliers.length} Lieferant(en) neu` : ''
+      showToast(`${res.imported} neu · ${res.updated} aktualisiert${supMsg}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import fehlgeschlagen')
     } finally {
@@ -191,7 +247,7 @@ export default function ImportScreen() {
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Material-Import</div>
-          <div className="admin-page-subtitle">Lieferanten-Preisliste (XLSX / CSV) importieren</div>
+          <div className="admin-page-subtitle">Preisliste oder eigene Artikel (XLSX / CSV) importieren</div>
         </div>
         {(parsed || previewData) && (
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={resetAll}>Neu beginnen</button>
@@ -200,32 +256,66 @@ export default function ImportScreen() {
 
       {error && <div className="admin-form-error" style={{ margin: '0 0 14px' }}>{error}</div>}
 
-      {/* Schritt 1: Lieferant + Datei */}
+      {/* Schritt 1: Import-Art + (Lieferant) + Datei */}
       <div className="admin-table-wrap" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="admin-section-title">1 · Lieferant & Datei</div>
-        <div className="admin-form-group" style={{ maxWidth: 420, marginTop: 12 }}>
-          <label className="admin-form-label">Lieferant *</label>
-          <select
-            className="admin-form-input"
-            value={supplierId}
-            onChange={e => { setSupplierId(e.target.value); setPreviewData(null); setResult(null) }}
-          >
-            <option value="">— Lieferant wählen —</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>{s.name} ({s.prefix})</option>
-            ))}
-          </select>
-          {suppliers.length === 0 && (
-            <div className="admin-form-hint">
-              Noch keine Lieferanten erfasst — lege zuerst unter <strong>Lieferanten</strong> einen an.
-            </div>
-          )}
-          {selectedSupplier && (
-            <div className="admin-form-hint">
-              System-Artikelnummern werden als <code>{selectedSupplier.prefix}-&lt;Lieferanten-Nr.&gt;</code> erzeugt.
-            </div>
-          )}
+        <div className="admin-section-title">1 · Import-Art & Datei</div>
+
+        {/* Modus-Umschalter */}
+        <div className="admin-form-group" style={{ maxWidth: 620, marginTop: 12 }}>
+          <label className="admin-form-label">Was möchtest du importieren?</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`admin-btn admin-btn-sm ${mode === 'single' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+              onClick={() => switchMode('single')}
+            >
+              Ein Lieferant für alle
+            </button>
+            <button
+              type="button"
+              className={`admin-btn admin-btn-sm ${mode === 'per_row' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+              onClick={() => switchMode('per_row')}
+            >
+              Lieferant je Zeile (Spalte)
+            </button>
+            {ownArticleEnabled && (
+              <button
+                type="button"
+                className={`admin-btn admin-btn-sm ${mode === 'own' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => switchMode('own')}
+              >
+                Eigene Artikel
+              </button>
+            )}
+          </div>
+          <div className="admin-form-hint">{MODE_HINT[mode]}</div>
         </div>
+
+        {mode === 'single' && (
+          <div className="admin-form-group" style={{ maxWidth: 420, marginTop: 12 }}>
+            <label className="admin-form-label">Lieferant *</label>
+            <select
+              className="admin-form-input"
+              value={supplierId}
+              onChange={e => { setSupplierId(e.target.value); setPreviewData(null); setResult(null) }}
+            >
+              <option value="">— Lieferant wählen —</option>
+              {suppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.prefix})</option>
+              ))}
+            </select>
+            {suppliers.length === 0 && (
+              <div className="admin-form-hint">
+                Noch keine Lieferanten erfasst — lege zuerst unter <strong>Lieferanten</strong> einen an.
+              </div>
+            )}
+            {selectedSupplier && (
+              <div className="admin-form-hint">
+                System-Artikelnummern werden als <code>{selectedSupplier.prefix}-&lt;Lieferanten-Nr.&gt;</code> erzeugt.
+              </div>
+            )}
+          </div>
+        )}
 
         {!parsed && !parsing && (
           <div
@@ -233,15 +323,15 @@ export default function ImportScreen() {
             style={{
               padding: 32, textAlign: 'center', marginTop: 8,
               border: '2px dashed var(--border)', background: 'transparent',
-              cursor: supplierId ? 'pointer' : 'not-allowed', opacity: supplierId ? 1 : 0.5,
+              cursor: canUpload ? 'pointer' : 'not-allowed', opacity: canUpload ? 1 : 0.5,
             }}
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
-            onClick={() => { if (supplierId) fileRef.current?.click() }}
+            onClick={() => { if (canUpload) fileRef.current?.click() }}
           >
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>XLSX- oder CSV-Datei hier ablegen</div>
             <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              {supplierId ? 'oder klicken zum Auswählen' : 'zuerst Lieferant wählen'}
+              {canUpload ? 'oder klicken zum Auswählen' : 'zuerst Lieferant wählen'}
             </div>
             <input
               ref={fileRef} type="file"
@@ -273,7 +363,22 @@ export default function ImportScreen() {
             Ordne die Spalten deiner Datei den System-Feldern zu. Vorschläge sind bereits gesetzt.
           </p>
           <div style={{ display: 'grid', gap: 10, maxWidth: 520 }}>
-            {parsed.fields.map(fld => (
+            {perRow && (
+              <div className="admin-form-row admin-form-row-label">
+                <label className="admin-form-label" style={{ margin: 0 }}>
+                  {parsed.supplier_field.label}<span style={{ color: '#ef4444' }}> *</span>
+                </label>
+                <select
+                  className="admin-form-input"
+                  value={supplierColumn}
+                  onChange={e => onSupplierColumnChange(e.target.value)}
+                >
+                  <option value="">— Spalte wählen —</option>
+                  {parsed.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            {activeFields.map(fld => (
               <div key={fld.key} className="admin-form-row admin-form-row-label">
                 <label className="admin-form-label" style={{ margin: 0 }}>
                   {fld.label}{fld.required && <span style={{ color: '#ef4444' }}> *</span>}
@@ -289,6 +394,12 @@ export default function ImportScreen() {
               </div>
             ))}
           </div>
+
+          {own && (
+            <div className="admin-form-hint" style={{ marginTop: 10 }}>
+              Die Artikelnummer wird automatisch vergeben (nächste freie Nummer) — keine Nummern-Spalte nötig.
+            </div>
+          )}
 
           {parsed.sample_rows.length > 0 && (
             <div style={{ marginTop: 18 }}>
@@ -324,16 +435,26 @@ export default function ImportScreen() {
             <span><strong style={{ color: '#22c55e' }}>{previewData.summary.new}</strong> neu</span>
             <span><strong style={{ color: '#3b82f6' }}>{previewData.summary.update}</strong> Update</span>
             <span><strong style={{ color: 'var(--muted)' }}>{previewData.summary.unchanged}</strong> unverändert</span>
+            {previewData.new_suppliers.length > 0 && (
+              <span><strong style={{ color: '#a855f7' }}>{previewData.new_suppliers.length}</strong> Lieferant(en) neu</span>
+            )}
             {previewData.summary.errors > 0 && (
               <span style={{ color: '#ef4444' }}><strong>{previewData.summary.errors}</strong> Fehler</span>
             )}
           </div>
 
+          {previewData.new_suppliers.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+              Neu angelegt: {previewData.new_suppliers.join(', ')}
+            </div>
+          )}
+
           <div className="admin-table-wrap" style={{ marginBottom: 16, maxHeight: 460, overflowY: 'auto' }}>
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Lieferanten-Nr.</th>
+                  {previewData.per_row && <th>Lieferant</th>}
+                  {!previewData.own_articles && <th>Lieferanten-Nr.</th>}
                   <th>System-Nr.</th>
                   <th>Bezeichnung</th>
                   <th>EK-Preis</th>
@@ -344,7 +465,17 @@ export default function ImportScreen() {
               <tbody>
                 {previewData.rows.map((row, i) => (
                   <tr key={i}>
-                    <td style={{ fontFamily: 'var(--mono)' }}>{row.manufacturer_art_nr}</td>
+                    {previewData.per_row && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {row.supplier_name}
+                        {row.supplier_new && (
+                          <span className="admin-badge" style={{ marginLeft: 6, fontSize: 10, background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>neu</span>
+                        )}
+                      </td>
+                    )}
+                    {!previewData.own_articles && (
+                      <td style={{ fontFamily: 'var(--mono)' }}>{row.manufacturer_art_nr}</td>
+                    )}
                     <td style={{ fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{row.art_nr}</td>
                     <td>{row.name}</td>
                     <td style={{ fontFamily: 'var(--mono)' }}>
@@ -384,7 +515,8 @@ export default function ImportScreen() {
           {result && (
             <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
               <strong>Import abgeschlossen:</strong> {result.imported} neu angelegt, {result.updated} aktualisiert
-              {result.skipped > 0 && <>, {result.skipped} unverändert</>}.
+              {result.skipped > 0 && <>, {result.skipped} unverändert</>}
+              {result.new_suppliers.length > 0 && <>, {result.new_suppliers.length} Lieferant(en) neu angelegt</>}.
             </div>
           )}
 
