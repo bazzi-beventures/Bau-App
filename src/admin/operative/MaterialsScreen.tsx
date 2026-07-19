@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import UnitsPanel from './UnitsPanel'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
+import MaterialVkBulkPanel from './MaterialVkBulkPanel'
 import ImportScreen from '../system/ImportScreen'
 import { UserInfo } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -334,7 +335,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
             <label className="admin-form-label">Bild</label>
             {imagePreview ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img src={imagePreview} alt={name} title="Zum Vergrössern klicken" onClick={() => setLightboxOpen(true)} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }} />
+                <img src={imagePreview} alt={name} title="Zum Vergrössern klicken" onClick={() => setLightboxOpen(true)} style={{ height: 72, width: 'auto', maxWidth: 160, objectFit: 'contain', display: 'block', borderRadius: 8, border: '1px solid var(--border)', cursor: 'zoom-in' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer' }}>
                     Ändern
@@ -664,12 +665,14 @@ function MaterialInventoryPanel() {
   )
 }
 
-type MaterialTab = 'inventory' | 'units' | 'frequent' | 'import'
+type MaterialTab = 'inventory' | 'units' | 'frequent' | 'vkbulk' | 'import'
 
 export default function MaterialsScreen({ user }: { user: UserInfo }) {
   const [tab, setTab] = useState<MaterialTab>('inventory')
   // Tab "Häufig benutzte Produkte" nur, wenn der Workflow ersatzteil_prompt aktiv ist.
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
+  // Tab "VK-Massenänderung" nur, wenn eigene Artikel im Einsatz sind (import_eigenartikel).
+  const ownArticleEnabled = isFeatureEnabled(user, 'import_eigenartikel')
 
   return (
     <div className="admin-page">
@@ -694,6 +697,14 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
             Häufig benutzte Produkte
           </button>
         )}
+        {ownArticleEnabled && (
+          <button
+            className={`kpi-admin-tab${tab === 'vkbulk' ? ' active' : ''}`}
+            onClick={() => setTab('vkbulk')}
+          >
+            VK-Massenänderung
+          </button>
+        )}
         <button
           className={`kpi-admin-tab${tab === 'import' ? ' active' : ''}`}
           onClick={() => setTab('import')}
@@ -705,7 +716,8 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
       {tab === 'inventory' && <MaterialInventoryPanel />}
       {tab === 'units' && <UnitsPanel />}
       {tab === 'frequent' && ersatzteilEnabled && <FrequentMaterialsPanel />}
-      {tab === 'import' && <ImportScreen ownArticleEnabled={isFeatureEnabled(user, 'import_eigenartikel')} />}
+      {tab === 'vkbulk' && ownArticleEnabled && <MaterialVkBulkPanel />}
+      {tab === 'import' && <ImportScreen ownArticleEnabled={ownArticleEnabled} />}
     </div>
   )
 }

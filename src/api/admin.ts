@@ -522,6 +522,9 @@ export const SCHEDULING_FIELDS = [
 export interface SchedulingConfig {
   fields: Record<string, boolean>
   colors: Record<string, string>
+  // Uhrzeit 'HH:MM', ab der das Wochen-Zeitraster an Werktagen (Mo–Fr) rein
+  // visuell ausgegraut wird. '' = aus. Blockiert das Planen nicht.
+  grey_after?: string
 }
 
 export interface TenantSchedulingResponse {
@@ -699,6 +702,54 @@ export async function bulkSetMaterialStatusAll(
     method: 'POST',
     body: JSON.stringify({ all_filtered: true, is_active: isActive, ...filter }),
   }) as Promise<BulkMaterialStatusResult>
+}
+
+// ─── Massen-VK-Erhöhung (eigene Materialien ohne Lieferant) ──────
+export type VkBulkMode = 'markup' | 'fixed' | 'skip'
+
+export interface VkBulkRow {
+  art_nr: string
+  name: string
+  category: string | null
+  cost_price: number | null   // EK
+  old_vk: number              // aktueller VK
+  new_vk: number              // VK nach Anhebung (bei mode='skip' == old_vk)
+  mode: VkBulkMode            // markup = Aufschlag anheben, fixed = Fixpreis, skip = ohne Preis
+  skip_reason: string | null
+}
+
+export interface VkBulkPreview {
+  rows: VkBulkRow[]
+  total: number
+  applicable: number   // anhebbare Artikel (mode != skip)
+  skipped: number      // preislose Artikel
+  pct: number
+}
+
+export interface VkBulkApplyResult {
+  updated: number
+  skipped: number
+}
+
+export async function previewVkBulkIncrease(
+  pct: number, category = '',
+): Promise<VkBulkPreview> {
+  const params = new URLSearchParams({ pct: String(pct) })
+  if (category) params.set('category', category)
+  return apiFetch(`/pwa/admin/materials/vk-bulk/preview?${params.toString()}`) as Promise<VkBulkPreview>
+}
+
+export async function applyVkBulkIncrease(
+  pct: number,
+  target: { artNrs: string[] } | { allApplicable: true; category?: string },
+): Promise<VkBulkApplyResult> {
+  const body = 'artNrs' in target
+    ? { pct, art_nrs: target.artNrs }
+    : { pct, all_applicable: true, category: target.category ?? '' }
+  return apiFetch('/pwa/admin/materials/vk-bulk/apply', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }) as Promise<VkBulkApplyResult>
 }
 
 // ─── Aftersales ────────────────────────────────────────────

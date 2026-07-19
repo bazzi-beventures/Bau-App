@@ -70,6 +70,7 @@ const PROJEKT_COLUMNS: ColumnDef<PipelineProjektAgg>[] = [
   { key: 'kunde', label: 'Kunde' },
   { key: 'projektleiter', label: 'Projektleiter' },
   { key: 'offertenOffen', label: 'Off. offen', align: 'right' },
+  { key: 'offertenOffenChf', label: 'Offertenbetrag', align: 'right', format: chf },
   { key: 'offertenAkzeptiert', label: 'Akzeptiert', align: 'right' },
   { key: 'rapporte', label: 'Rapporte', align: 'right' },
   { key: 'rechnungenChf', label: 'Fakturiert', align: 'right', format: chf },

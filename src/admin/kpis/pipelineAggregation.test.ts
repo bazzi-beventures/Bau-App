@@ -58,10 +58,12 @@ describe('aggregatePipeline — Gruppierung', () => {
 
   it('zählt akzeptierte Offerten mit Betrag', () => {
     const rows = [row({ offerten: [offerte('akzeptiert', 1081), offerte('gesendet', 500)] })]
-    const { perLeiter } = aggregatePipeline(rows, ALLE)
+    const { perLeiter, perProjekt } = aggregatePipeline(rows, ALLE)
     expect(perLeiter[0].offertenAkzeptiert).toBe(1)
     expect(perLeiter[0].offertenAkzeptiertChf).toBe(1081)
     expect(perLeiter[0].offertenOffenChf).toBe(500)
+    // Pro Projekt: Offertenbetrag = Summe der offenen Offerten (Entwurf + Gesendet)
+    expect(perProjekt[0].offertenOffenChf).toBe(500)
   })
 
   it('zählt Projekte mit Rapport nur einmal, Rapporte aber alle', () => {

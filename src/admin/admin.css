@@ -2517,6 +2517,25 @@ button.admin-list-item {
   cursor: cell;
 }
 
+/* Ausgegraute Nicht-Arbeitszeit (ab konfigurierter Uhrzeit, nur Werktage).
+   Rein visuell: pointer-events aus, damit Planen/Verschieben dort weiter geht.
+   Ohne z-index → über den Rasterlinien, aber unter den (später im DOM
+   gerenderten) Einsatz-Blöcken, Drop-Linie und Aufzieh-Box. */
+.project-cal-week-dim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  border-top: 1px solid var(--border);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(100, 116, 139, 0.10),
+    rgba(100, 116, 139, 0.10) 6px,
+    rgba(100, 116, 139, 0.16) 6px,
+    rgba(100, 116, 139, 0.16) 12px
+  );
+}
+
 /* Vorschaubox beim Aufziehen eines neuen Termins. */
 .project-cal-week-create-box {
   position: absolute;

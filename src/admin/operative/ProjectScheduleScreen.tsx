@@ -129,6 +129,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         setSchedulingConfig({
           fields: { ...sched.defaults.fields, ...(sched.config.fields || {}) },
           colors: { ...sched.defaults.colors, ...(sched.config.colors || {}) },
+          grey_after: sched.config.grey_after ?? sched.defaults.grey_after ?? '',
         })
       }
     } catch {

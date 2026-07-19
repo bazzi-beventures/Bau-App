@@ -1105,6 +1105,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
     return {
       fields: { ...def.fields, ...(cfg.fields || {}) },
       colors: { ...def.colors, ...(cfg.colors || {}) },
+      grey_after: cfg.grey_after ?? def.grey_after ?? '',
     }
   }
 
@@ -1137,6 +1138,10 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
 
   function setColor(key: string, value: string) {
     setConfig(prev => prev && { ...prev, colors: { ...prev.colors, [key]: value } })
+  }
+
+  function setGreyAfter(value: string) {
+    setConfig(prev => prev && { ...prev, grey_after: value })
   }
 
   function resetToDefault() {
@@ -1194,6 +1199,32 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{config.colors[k.key]}</span>
           </label>
         ))}
+      </div>
+
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Nicht-Arbeitszeit ausgrauen</div>
+      <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+        Blendet die Zeit ab dieser Uhrzeit an Werktagen (Mo–Fr) im Wochen-Kalender grau ein –
+        z.&nbsp;B. für einen Halbtag. Rein optisch, Einsätze lassen sich dort weiterhin planen.
+        Leer&nbsp;= aus.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+        <input
+          type="time"
+          className="admin-input"
+          value={config.grey_after || ''}
+          onChange={e => setGreyAfter(e.target.value)}
+          style={{ width: 130 }}
+          aria-label="Ausgrauen ab Uhrzeit"
+        />
+        {config.grey_after && (
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => setGreyAfter('')}
+          >
+            Aus
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>

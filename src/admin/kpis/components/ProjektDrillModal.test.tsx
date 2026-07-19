@@ -12,6 +12,7 @@ function agg(over: Partial<PipelineProjektAgg> = {}): PipelineProjektAgg {
     kunde: 'Müller GmbH',
     projektleiter: 'Hans Muster',
     offertenOffen: 1,
+    offertenOffenChf: 1200,
     offertenVersendet: 1,
     offertenAkzeptiert: 0,
     rapporte: 1,

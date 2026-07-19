@@ -40,6 +40,7 @@ export interface PipelineProjektAgg {
   kunde: string
   projektleiter: string
   offertenOffen: number
+  offertenOffenChf: number
   offertenVersendet: number
   offertenAkzeptiert: number
   rapporte: number
@@ -115,6 +116,7 @@ export function aggregatePipeline(
       kunde: row.kunde_name ?? '—',
       projektleiter: pl,
       offertenOffen: offen.length,
+      offertenOffenChf: sum(offen.map((o) => o.betrag)),
       offertenVersendet: versendet.length,
       offertenAkzeptiert: akzeptiert.length,
       rapporte: rapporte.length,

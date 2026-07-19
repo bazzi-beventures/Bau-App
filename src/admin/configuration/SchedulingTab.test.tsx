@@ -25,6 +25,7 @@ const DEFAULTS = {
     project: '#3081ab', teamsitzung: '#7c3aed', lagerarbeit: '#d97706',
     werkstatt: '#0d9488', sonstiges: '#475569',
   },
+  grey_after: '',
 }
 
 beforeEach(() => {
@@ -76,5 +77,25 @@ describe('SchedulingTab', () => {
     await openTab()
 
     expect(await screen.findByLabelText('Bemerkung')).toBeChecked()
+  })
+
+  it('Ausgrau-Uhrzeit wird geladen und mitgespeichert', async () => {
+    mockGet.mockResolvedValue({ config: { grey_after: '12:00' }, defaults: DEFAULTS })
+    mockUpdate.mockResolvedValue({ config: { ...DEFAULTS, grey_after: '13:30' } })
+    const user = await openTab()
+
+    const timeInput = await screen.findByLabelText('Ausgrauen ab Uhrzeit')
+    expect(timeInput).toHaveValue('12:00')
+
+    const saveBtn = screen.getByRole('button', { name: 'Speichern' })
+    expect(saveBtn).toBeDisabled()  // noch nichts geändert
+
+    await user.clear(timeInput)
+    await user.type(timeInput, '13:30')
+    expect(saveBtn).not.toBeDisabled()
+
+    await user.click(saveBtn)
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate.mock.calls[0][0].grey_after).toBe('13:30')
   })
 })
