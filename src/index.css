@@ -398,7 +398,10 @@ input, textarea { font-family: var(--font); color: var(--text); }
 
 /* ── NAV BAR ────────────────────────────────────── */
 .nav-bar {
-  height: 56px;
+  /* Höhe muss den Safe-Area-Inset ADDIEREN: durch das globale border-box
+     würde ein festes height:56px das padding-bottom einrechnen — auf dem
+     iPhone (Home-Indicator ≈ 34px) blieben nur 22px für Icon + Label. */
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
   display: flex; align-items: center; justify-content: space-around;
   border-top: 1px solid var(--border);
   flex-shrink: 0;

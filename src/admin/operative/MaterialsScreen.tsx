@@ -75,11 +75,16 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
           <button className="admin-modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit} className="admin-modal-body">
-          {/* Stat-Kasten ist fix dunkel (#0f1117) → theme-unabhängige helle Farben,
-              nicht var(--text)/var(--muted) (im Light-Theme dunkel = schlechter Kontrast). */}
-          <div style={{ background: '#0f1117', borderRadius: 9, padding: '12px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>Aktueller Bestand</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: stockLow ? '#ef4444' : '#f8fafc' }}>{currentStock} {material.unit || ''}</div>
+          {/* Stat-Kasten folgt dem Theme: im Light-Theme heller Kasten mit dunklem
+              Text, im Dark-Theme umgekehrt. Kein fixes Dunkel mehr. Nur --surface/
+              --border/--text/--muted sind real definiert (--surface-2 nur als Fallback). */}
+          <div style={{
+            background: 'var(--surface-2, rgba(148,163,184,0.10))',
+            border: '1px solid var(--border)',
+            borderRadius: 9, padding: '12px 16px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Aktueller Bestand</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: stockLow ? '#ef4444' : 'var(--text)' }}>{currentStock} {material.unit || ''}</div>
           </div>
           {error && <div className="admin-form-error">{error}</div>}
           <div className="admin-form-group">
