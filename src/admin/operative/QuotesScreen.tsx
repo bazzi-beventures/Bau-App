@@ -44,6 +44,9 @@ interface Quote {
   xlsx_storage_path?: string | null
   reminder_sent_at: string | null
   projektleiter_id: string | null
+  // Text-Snapshot des Rechnungsempfängers (siehe quotes.customer_id) — für die
+  // Kunden-Spalte und die Suche in der Liste.
+  customer_name?: string | null
   customer_email?: string | null
   thankyou_sent_at?: string | null
 }
@@ -1612,8 +1615,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
 
   const filtered = quotes.filter(q => {
     const matchStatus = statusFilters.has(q.status)
-    const matchSearch = q.project_name.toLowerCase().includes(search.toLowerCase()) ||
-      q.quote_number.toLowerCase().includes(search.toLowerCase())
+    const needle = search.toLowerCase()
+    const matchSearch = q.project_name.toLowerCase().includes(needle) ||
+      q.quote_number.toLowerCase().includes(needle) ||
+      (q.customer_name ?? '').toLowerCase().includes(needle)
     const matchPl = !projektleiterFilter || q.projektleiter_id === projektleiterFilter
     return matchStatus && matchSearch && matchPl
   })
@@ -1657,7 +1662,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
         <div className="admin-filter-bar">
           <input
             className="admin-search"
-            placeholder="Projekt oder Offerten-Nr. suchen…"
+            placeholder="Projekt, Kunde oder Offerten-Nr. suchen…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -1682,6 +1687,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
               <tr>
                 <th>Nr.</th>
                 <th>Projekt</th>
+                <th>Kunde</th>
                 <th>Betrag</th>
                 <th>Status</th>
                 <th>Erstellt</th>
@@ -1690,11 +1696,12 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} className="admin-table-empty">Keine Offerten gefunden.</td></tr>
+                <tr><td colSpan={7} className="admin-table-empty">Keine Offerten gefunden.</td></tr>
               ) : filtered.map(q => (
                 <tr key={q.id}>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{q.quote_number}</td>
                   <td><strong>{q.project_name}</strong></td>
+                  <td style={{ color: 'var(--muted)' }}>{q.customer_name || '—'}</td>
                   <td style={{ fontWeight: 700 }}>{fmtCHF(q.total_amount)}</td>
                   <td>
                     <span className={`admin-badge ${STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>
