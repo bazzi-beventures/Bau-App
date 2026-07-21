@@ -89,17 +89,10 @@ export interface QuoteDetail {
   id: number
   quote_number: string
   project_name: string
-  status: string
   // Kunde der Offerte — eigenständig gegenüber dem Projektkunden (quotes.customer_id).
   // Alt-Offerten haben nur den Text-Snapshot customer_name, customer_id ist dort null.
   customer_id: string | null
   customer_name: string | null
-  // Objekt-Snapshot (Migration 20260707b) — eingefroren beim Erstellen, per
-  // "Objekt vom Projekt übernehmen" (refresh-object) explizit nachziehbar.
-  object_name: string | null
-  object_address: string | null
-  local_contact_name: string | null
-  local_contact_phone: string | null
   labor_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; hidden?: boolean }[]
   material_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number; optional?: boolean }[]
   travel_items: { description: string; total_price: number }[]
@@ -1113,41 +1106,8 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   // Rechnungen bleiben, wo sie sind.
   const [customerId, setCustomerId] = useState(quote.customer_id ?? '')
   const [customers, setCustomers] = useState<Customer[]>([])
-  // Objekt-Snapshot: eingefroren beim Erstellen, folgt Projektänderungen bewusst
-  // nicht automatisch — der Button "Objekt vom Projekt übernehmen" zieht ihn
-  // explizit nach (Spalten + PDF). Nur für Entwürfe.
-  const [objectName, setObjectName] = useState(quote.object_name ?? '')
-  const [objectAddress, setObjectAddress] = useState(quote.object_address ?? '')
-  const [localContact, setLocalContact] = useState(
-    [quote.local_contact_name, quote.local_contact_phone].filter(Boolean).join(', '))
-  const [refreshingObject, setRefreshingObject] = useState(false)
-  const [objectMsg, setObjectMsg] = useState<{ kind: 'ok' | 'warn' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  async function handleRefreshObject() {
-    setRefreshingObject(true)
-    setObjectMsg(null)
-    try {
-      const r = await apiFetch(`/pwa/admin/quotes/${quote.id}/refresh-object`, { method: 'POST' }) as {
-        pdf_updated: boolean
-        object_name: string
-        object_address: string
-        local_contact_name: string
-        local_contact_phone: string
-      }
-      setObjectName(r.object_name)
-      setObjectAddress(r.object_address)
-      setLocalContact([r.local_contact_name, r.local_contact_phone].filter(Boolean).join(', '))
-      setObjectMsg(r.pdf_updated
-        ? { kind: 'ok', text: 'Objekt vom Projekt übernommen — PDF aktualisiert.' }
-        : { kind: 'warn', text: 'Objekt übernommen, aber das PDF konnte nicht neu erzeugt werden. Nochmals versuchen oder die Offerte speichern.' })
-    } catch (err) {
-      setObjectMsg({ kind: 'error', text: err instanceof Error ? err.message : 'Fehler beim Übernehmen des Objekts' })
-    } finally {
-      setRefreshingObject(false)
-    }
-  }
 
   useEffect(() => {
     Promise.all([
@@ -1253,42 +1213,6 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           )}
         </div>
       </fieldset>
-
-      {/* Objekt — Snapshot vom Erstellzeitpunkt. Nachziehen nur explizit per Button,
-          und nur solange die Offerte ein Entwurf ist. */}
-      {quote.status === 'entwurf' && (
-        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-          <legend style={{ fontWeight: 600, padding: '0 8px' }}>Objekt</legend>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>
-            {objectName || objectAddress || localContact ? (
-              <>
-                {objectName && <div><strong style={{ color: 'var(--text)' }}>{objectName}</strong></div>}
-                {objectAddress && <div>{objectAddress}</div>}
-                {localContact && <div>Kontakt: {localContact}</div>}
-              </>
-            ) : (
-              <div>Kein Objekt auf der Offerte hinterlegt.</div>
-            )}
-          </div>
-          <button
-            type="button"
-            className="admin-btn admin-btn-secondary admin-btn-sm"
-            onClick={handleRefreshObject}
-            disabled={refreshingObject || saving}
-            title="Objektadresse, Baustellenkontakt und Eigentümer neu vom Projekt übernehmen und das PDF aktualisieren"
-          >
-            {refreshingObject ? 'Übernehme…' : 'Objekt vom Projekt übernehmen'}
-          </button>
-          {objectMsg && (
-            <div style={{
-              marginTop: 10, fontSize: 13,
-              color: objectMsg.kind === 'ok' ? 'var(--success, #15803d)' : objectMsg.kind === 'warn' ? '#b45309' : '#b91c1c',
-            }}>
-              {objectMsg.text}
-            </div>
-          )}
-        </fieldset>
-      )}
 
       {/* Labor */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>

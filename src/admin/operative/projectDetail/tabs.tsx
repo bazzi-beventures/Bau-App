@@ -578,6 +578,7 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                             className="admin-btn admin-btn-secondary admin-btn-sm"
                             disabled={regeneratingQuoteId === q.id}
                             onClick={() => onRegenerate(q.id)}
+                            title="Neue Offerten-Nummer mit gleichen Positionen — Kunde und Objekt werden vom aktuellen Projektstand übernommen"
                           >
                             {regeneratingQuoteId === q.id ? '…' : 'Neue Version'}
                           </button>
