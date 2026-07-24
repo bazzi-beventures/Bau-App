@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, ApiError, apiUrl } from '../api/client'
+import { QUOTE_STATUS_LABELS } from '../admin/constants/statuses'
 
 interface Quote {
   id: number
@@ -24,15 +25,9 @@ interface Props {
   onLoggedOut: () => void
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  entwurf: 'Entwurf',
-  gesendet: 'Gesendet',
-  akzeptiert: 'Akzeptiert',
-  abgelehnt: 'Abgelehnt',
-  absage: 'Absage',
-  archiviert: 'Archiviert',
-}
-
+// Labels zentral aus der kanonischen Map — sonst driften die Bezeichnungen zwischen
+// Admin-PWA und Mitarbeiter-PWA auseinander. Die Farben bleiben lokal: hier werden
+// farbige Pills gerendert, nicht die admin-badge-CSS-Klassen.
 const STATUS_COLORS: Record<string, string> = {
   entwurf: '#64748b',
   gesendet: '#2563eb',
@@ -117,7 +112,7 @@ export default function OffertenScreen({ logoUrl, onNavHome, onNavArbeitszeit, o
                     className="projekte-detail-badge"
                     style={{ background: STATUS_COLORS[q.status] || '#64748b', color: '#fff' }}
                   >
-                    {STATUS_LABELS[q.status] || q.status}
+                    {QUOTE_STATUS_LABELS[q.status] || q.status}
                   </span>
                 </div>
                 <div className="projekte-detail-row" style={{ marginTop: 6 }}>

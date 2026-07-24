@@ -43,6 +43,7 @@ const MODULE_LABELS: Record<string, ModuleMeta> = {
   hr_weekly_report: { label: 'Wochen-HR-Übersicht', desc: 'Wöchentliches HR-Journal per Mail am Montag (benötigt HR). Journal & Überstunden-Salden werden weiterhin erstellt — nur die Mail entfällt.', category: 'notifications', channel: 'mail' },
   violation_emails: { label: 'ArG-Verstoss-Mails', desc: 'Wöchentliche Verstoss-E-Mails an die Admins (benötigt ArG-Compliance)', category: 'notifications', channel: 'mail' },
   kpis_email:       { label: 'KPI-Analyse-Mail',  desc: 'Wöchentliche KI-Kennzahlen-Analyse per Mail am Montag (benötigt Kennzahlen)', category: 'notifications', channel: 'mail' },
+  rapport_check_mail:{ label: 'Rapport-Check-Mail', desc: 'Admin-Mail, wenn die gestempelte Zeit eines Mitarbeiters die auf Projekte verbuchten Stunden um mehr als 45 min übersteigt (Hinweis auf fehlende Rapporte). Standard aus — nur bei aktivem Modul (benötigt Zeiterfassung).', category: 'notifications', channel: 'mail' },
   // Benachrichtigungen — Push
   clock_in_reminder:{ label: 'Einstempel-Erinnerung', desc: 'Push werktags um 07:15 an eingeplante, noch nicht eingestempelte Mitarbeiter (benötigt Zeiterfassung)', category: 'notifications', channel: 'push' },
   clock_out_reminder:{ label: 'Ausstempel-Erinnerung', desc: 'Abend-Push (Standard 18:00, einstellbar) an Mitarbeiter, die noch eingestempelt sind — verhindert die automatische Schliessung um 23:59 (benötigt Zeiterfassung)', category: 'notifications', channel: 'push' },

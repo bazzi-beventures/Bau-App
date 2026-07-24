@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import {
   listAftersales, updateAftersales, regenerateAftersalesBody,
   sendAftersalesNow, cancelAftersales, reactivateAftersales,
@@ -286,7 +287,7 @@ export default function AftersalesScreen() {
 
       {/* Vorschau-/Bearbeiten-Modal */}
       {selected && (
-        <div className="admin-modal-overlay" onClick={() => setSelected(null)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => setSelected(null))}>
           <div className="admin-modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">

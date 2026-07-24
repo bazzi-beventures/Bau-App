@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiBlobFetch, apiFetch } from '../../api/client'
-import { upsertProject, updateProjectSchedule, getSchedulingConfig, SchedulingConfig } from '../../api/admin'
+import {
+  upsertProject, getSchedulingConfig, SchedulingConfig,
+  ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS,
+  listAppointments, createAppointment, updateAppointment, deleteAppointment,
+} from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
 import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
-import ProjectScheduleCalendar from './ProjectScheduleCalendar'
+import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalendar'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
-import { shiftISO, hhmmToMin, minToHHMM } from '../utils/calendarHelpers'
+import { shiftISO, hhmmToMin, minToHHMM, toDateStr } from '../utils/calendarHelpers'
 
 interface StaffLite {
   id: string
@@ -19,6 +23,8 @@ interface CustomerLite {
   billing_name: string | null
 }
 
+// Projekt-Stammdaten im Panel. Die TERMINE liegen seit Phase 2 nicht mehr hier,
+// sondern in project_appointments (eigener Editor-State ApptFormState).
 interface FormState {
   id: string
   name: string
@@ -26,11 +32,21 @@ interface FormState {
   customerId: string
   projektleiterId: string
   monteurIds: string[]
+  bemerkung: string
+}
+
+// Editor für EINEN Termin (id = null → neuer Termin).
+interface ApptFormState {
+  id: string | null
   startDate: string
   endDate: string
   startTime: string
   endTime: string
-  bemerkung: string
+  kind: AppointmentKind
+  label: string
+  // Eigenes Team nur für diesen Termin; aus = Projekt-Team gilt.
+  ownTeam: boolean
+  monteurIds: string[]
   // Beim Aufziehen eines neuen Termins gesetzt: mind. ein Monteur ist Pflicht.
   requireMonteur?: boolean
 }
@@ -53,20 +69,61 @@ function projectToForm(p: Project): FormState {
     customerId: p.customer_id ?? '',
     projektleiterId: p.projektleiter_id ?? '',
     monteurIds: p.monteur_ids ?? [],
-    startDate: p.start_date?.slice(0, 10) ?? '',
-    endDate: p.end_date?.slice(0, 10) ?? '',
-    startTime: p.start_time?.slice(0, 5) ?? '',
-    endTime: p.end_time?.slice(0, 5) ?? '',
     bemerkung: p.bemerkung ?? '',
   }
 }
 
-// 'YYYY-MM-DD' → z.B. "Di, 30.06." für die Termin-Vorschau im Panel.
+function apptToForm(a: ProjectAppointment): ApptFormState {
+  return {
+    id: a.id,
+    startDate: a.start_date?.slice(0, 10) ?? '',
+    endDate: a.end_date?.slice(0, 10) ?? '',
+    startTime: a.start_time?.slice(0, 5) ?? '',
+    endTime: a.end_time?.slice(0, 5) ?? '',
+    kind: a.kind,
+    label: a.label ?? '',
+    ownTeam: !!(a.monteur_ids && a.monteur_ids.length),
+    monteurIds: a.monteur_ids ?? [],
+  }
+}
+
+function emptyApptForm(kind: AppointmentKind = 'montage'): ApptFormState {
+  return {
+    id: null, startDate: '', endDate: '', startTime: '', endTime: '',
+    kind, label: '', ownTeam: false, monteurIds: [],
+  }
+}
+
+function slotToApptForm(slot: PendingSlot, kind: AppointmentKind = 'montage'): ApptFormState {
+  return {
+    id: null,
+    startDate: slot.startDate,
+    endDate: slot.endDate,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    kind,
+    label: '',
+    ownTeam: slot.monteurIds.length > 0,
+    monteurIds: [...slot.monteurIds],
+    requireMonteur: true,
+  }
+}
+
+// 'YYYY-MM-DD' → z.B. "Di, 30.06." für Termin-Zeilen im Panel.
 function fmtSlotDate(iso: string): string {
   if (!iso) return ''
   return new Date(`${iso}T00:00:00`).toLocaleDateString('de-CH', {
     weekday: 'short', day: '2-digit', month: '2-digit',
   })
+}
+
+function fmtApptRow(a: ProjectAppointment): string {
+  const from = fmtSlotDate(a.start_date)
+  const to = a.end_date && a.end_date !== a.start_date ? ` – ${fmtSlotDate(a.end_date)}` : ''
+  const t = a.start_time
+    ? `${a.start_time.slice(0, 5)}${a.end_time ? `–${a.end_time.slice(0, 5)}` : ''}`
+    : 'ganztägig'
+  return `${from}${to} · ${t}`
 }
 
 function emptyInternalForm(kind: ProjectKind): FormState {
@@ -77,10 +134,6 @@ function emptyInternalForm(kind: ProjectKind): FormState {
     customerId: '',
     projektleiterId: '',
     monteurIds: [],
-    startDate: '',
-    endDate: '',
-    startTime: '',
-    endTime: '',
     bemerkung: '',
   }
 }
@@ -92,11 +145,13 @@ interface Props {
 
 export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
+  const [appointments, setAppointments] = useState<ProjectAppointment[]>([])
   const [staff, setStaff] = useState<StaffLite[]>([])
   const [customers, setCustomers] = useState<CustomerLite[]>([])
   const [schedulingConfig, setSchedulingConfig] = useState<SchedulingConfig | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState<FormState | null>(null)
+  const [apptForm, setApptForm] = useState<ApptFormState | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -115,14 +170,19 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   async function loadAll() {
     setLoading(true)
     try {
-      const [proj, st, cust, sched] = await Promise.all([
+      // Termine in einem grosszügigen Fenster um heute laden — deckt jede
+      // realistische Kalender-Navigation ab, ohne Range-State durchzureichen.
+      const todayIso = toDateStr(new Date())
+      const [proj, appts, st, cust, sched] = await Promise.all([
         apiFetch('/pwa/admin/projects') as Promise<Project[]>,
+        listAppointments(shiftISO(todayIso, -400), shiftISO(todayIso, 600)).catch(() => [] as ProjectAppointment[]),
         apiFetch('/pwa/admin/staff') as Promise<StaffLite[]>,
         apiFetch('/pwa/admin/customers') as Promise<CustomerLite[]>,
         // Anzeige-Config ist optional — Fehler darf den Kalender nicht blockieren.
         getSchedulingConfig().catch(() => null),
       ])
       setProjects(proj.filter(p => !p.is_closed && p.status !== 'abgeschlossen'))
+      setAppointments(appts)
       setStaff(st)
       setCustomers(cust)
       if (sched) {
@@ -157,23 +217,17 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setTimeout(() => setToast(null), 3000)
   }
 
-  function selectProject(p: Project) {
-    const base = projectToForm(p)
-    // Aus einem aufgezogenen Termin: Zeiten überschreiben und den (in der
-    // Mitarbeiteransicht) vorausgewählten Monteur ergänzen; Monteur wird Pflicht.
+  function selectProject(p: Project, appt?: ProjectAppointment) {
+    setForm(projectToForm(p))
+    // Aus einem aufgezogenen Termin: neuen Termin mit den Zeiten vorbelegen;
+    // sonst den geklickten Termin in den Editor laden (oder keinen).
     if (pendingSlot) {
-      setForm({
-        ...base,
-        startDate: pendingSlot.startDate,
-        endDate: pendingSlot.endDate,
-        startTime: pendingSlot.startTime,
-        endTime: pendingSlot.endTime,
-        monteurIds: Array.from(new Set([...base.monteurIds, ...pendingSlot.monteurIds])),
-        requireMonteur: true,
-      })
+      setApptForm(slotToApptForm(pendingSlot, p.kind === 'project' ? 'montage' : 'sonstiges'))
       setPendingSlot(null)
+    } else if (appt) {
+      setApptForm(apptToForm(appt))
     } else {
-      setForm(base)
+      setApptForm(null)
     }
     setError(null)
     setPickerSearch('')
@@ -181,14 +235,24 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setPanelOpen(true)
   }
 
+  // Klick auf einen Kalenderblock: Entry-ID = Termin-ID → Termin + Projekt auflösen.
+  function handleCalendarSelect(entry: Project) {
+    const appt = appointments.find(a => a.id === entry.id)
+    const project = projects.find(p => p.id === (appt?.project_id ?? entry.id))
+    if (!project) return
+    selectProject(project, appt)
+  }
+
   function clearSelection() {
     setForm(null)
+    setApptForm(null)
     setError(null)
   }
 
   function closePanel() {
     setPanelOpen(false)
     setForm(null)
+    setApptForm(null)
     setPendingSlot(null)
     setError(null)
     setPickerOpen(false)
@@ -198,6 +262,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   // (Projekt-Picker + interner Einsatz), Zeiten gemerkt, Monteur ggf. vorbelegt.
   function handleCreateSlot(dateISO: string, startTime: string, endTime: string, monteurId: string | null) {
     setForm(null)
+    setApptForm(null)
     setPendingSlot({
       startDate: dateISO,
       endDate: dateISO,
@@ -215,18 +280,18 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     if (onNav) onNav('projects', 'new')
   }
 
-  // Drag-Verschiebung aus dem Kalender. deltaDays = Tagesversatz; startTime
-  // steuert die Uhrzeit: undefined = beibehalten (Monat), 'HH:MM' = neue
+  // Drag-Verschiebung aus dem Kalender: id = TERMIN-ID. deltaDays = Tagesversatz;
+  // startTime steuert die Uhrzeit: undefined = beibehalten (Monat), 'HH:MM' = neue
   // Startzeit (Dauer wird mitgezogen), null = Uhrzeit löschen (→ ganztägig).
   async function handleReschedule(id: string, deltaDays: number, startTime?: string | null) {
-    const proj = projects.find(p => p.id === id)
-    if (!proj || !proj.start_date || !proj.end_date) return
+    const appt = appointments.find(a => a.id === id)
+    if (!appt) return
 
-    const newStartDate = shiftISO(proj.start_date, deltaDays)
-    const newEndDate = shiftISO(proj.end_date, deltaDays)
+    const newStartDate = shiftISO(appt.start_date, deltaDays)
+    const newEndDate = appt.end_date ? shiftISO(appt.end_date, deltaDays) : null
 
-    let newStartTime = proj.start_time ? proj.start_time.slice(0, 5) : null
-    let newEndTime = proj.end_time ? proj.end_time.slice(0, 5) : null
+    let newStartTime = appt.start_time ? appt.start_time.slice(0, 5) : null
+    let newEndTime = appt.end_time ? appt.end_time.slice(0, 5) : null
     if (startTime === null) {
       newStartTime = null
       newEndTime = null
@@ -238,36 +303,29 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
 
     // Nichts geändert → keinen Schreibzugriff/Audit-Eintrag auslösen.
     if (
-      newStartDate === proj.start_date.slice(0, 10) &&
-      newEndDate === proj.end_date.slice(0, 10) &&
-      newStartTime === (proj.start_time?.slice(0, 5) ?? null) &&
-      newEndTime === (proj.end_time?.slice(0, 5) ?? null)
+      newStartDate === appt.start_date.slice(0, 10) &&
+      (newEndDate ?? null) === (appt.end_date?.slice(0, 10) ?? null) &&
+      newStartTime === (appt.start_time?.slice(0, 5) ?? null) &&
+      newEndTime === (appt.end_time?.slice(0, 5) ?? null)
     ) return
 
-    const optimistic: Project = {
-      ...proj,
+    const optimistic: ProjectAppointment = {
+      ...appt,
       start_date: newStartDate, end_date: newEndDate,
       start_time: newStartTime, end_time: newEndTime,
     }
-    setProjects(prev => prev.map(p => p.id === id ? optimistic : p))
-    if (form?.id === id) {
-      setForm(f => f && ({
-        ...f,
-        startDate: newStartDate, endDate: newEndDate,
-        startTime: newStartTime ?? '', endTime: newEndTime ?? '',
-      }))
-    }
+    setAppointments(prev => prev.map(a => a.id === id ? optimistic : a))
     try {
-      await updateProjectSchedule(id, newStartDate, newEndDate, newStartTime, newEndTime)
-    } catch {
-      setProjects(prev => prev.map(p => p.id === id ? proj : p))
-      if (form?.id === id) {
-        setForm(f => f && ({
-          ...f,
-          startDate: proj.start_date!.slice(0, 10), endDate: proj.end_date!.slice(0, 10),
-          startTime: proj.start_time?.slice(0, 5) ?? '', endTime: proj.end_time?.slice(0, 5) ?? '',
-        }))
+      // Partial-PATCH: '' = Feld explizit löschen (ganztägig), fehlend = unverändert.
+      const payload: Partial<ProjectAppointment> = { start_date: newStartDate }
+      if (appt.end_date) payload.end_date = newEndDate ?? ''
+      if (startTime !== undefined) {
+        payload.start_time = newStartTime ?? ''
+        payload.end_time = newEndTime ?? ''
       }
+      await updateAppointment(id, payload)
+    } catch {
+      setAppointments(prev => prev.map(a => a.id === id ? appt : a))
       showToast('Verschieben fehlgeschlagen.', 'error')
     }
   }
@@ -275,32 +333,34 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   async function handleSave() {
     if (!form) return
     setError(null)
-    if (form.startDate && form.endDate && form.endDate < form.startDate) {
-      setError('Enddatum muss nach Startdatum liegen.'); return
-    }
-    if (form.startTime && form.endTime && form.startDate === form.endDate && form.endTime < form.startTime) {
-      setError('Endzeit muss nach Startzeit liegen.'); return
-    }
     if (!form.name.trim()) {
       setError('Titel ist erforderlich.'); return
     }
-    if (form.requireMonteur && form.monteurIds.length === 0) {
-      setError('Mindestens ein Mitarbeiter ist erforderlich.'); return
+    if (apptForm) {
+      if (apptForm.id && !apptForm.startDate) {
+        setError('Startdatum des Termins fehlt — zum Entfernen das ✕ in der Terminliste nutzen.'); return
+      }
+      if (apptForm.startDate && apptForm.endDate && apptForm.endDate < apptForm.startDate) {
+        setError('Enddatum muss nach Startdatum liegen.'); return
+      }
+      if (apptForm.startTime && apptForm.endTime && (!apptForm.endDate || apptForm.endDate === apptForm.startDate)
+          && apptForm.endTime < apptForm.startTime) {
+        setError('Endzeit muss nach Startzeit liegen.'); return
+      }
+      const effectiveTeam = apptForm.ownTeam ? apptForm.monteurIds : form.monteurIds
+      if (apptForm.requireMonteur && effectiveTeam.length === 0) {
+        setError('Mindestens ein Mitarbeiter ist erforderlich.'); return
+      }
     }
     setSaving(true)
     const isInternal = form.kind !== 'project'
     try {
-      // upsertProject erwartet Partial<Project> (api/admin.ts), aber die
-      // FastAPI-Route akzeptiert mehr Felder (UpsertProjectRequest).
-      // Cast ist nötig, weil das api/admin-Interface bewusst schlank ist.
+      // Projekt-Stammdaten OHNE Terminfelder — Termine laufen über die
+      // appointment-Endpunkte (der Server spiegelt den Ersttermin selbst).
       const saved = await upsertProject({
         id: form.id || undefined,
         name: form.name,
         customer_id: isInternal ? null : (form.customerId || null),
-        start_date: form.startDate || null,
-        end_date: form.endDate || null,
-        start_time: form.startTime || null,
-        end_time: form.endTime || null,
         ...({
           kind: form.kind,
           projektleiter_id: form.projektleiterId || null,
@@ -308,13 +368,28 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           bemerkung: form.bemerkung || null,
         } as Record<string, unknown>),
       }) as unknown as { project?: { id?: string } } & { id?: string }
-      showToast(form.id ? 'Eintrag aktualisiert.' : 'Eintrag erstellt.', 'success')
       const targetId = form.id || saved.project?.id || saved.id
+      if (apptForm && apptForm.startDate && targetId) {
+        const payload: Partial<ProjectAppointment> = {
+          start_date: apptForm.startDate,
+          end_date: apptForm.endDate || '',
+          start_time: apptForm.startTime || '',
+          end_time: apptForm.endTime || '',
+          kind: apptForm.kind,
+          label: apptForm.label || '',
+          // Eigenes Team aus → [] (löscht ein evtl. gesetztes Termin-Team).
+          monteur_ids: apptForm.ownTeam ? apptForm.monteurIds : [],
+        }
+        if (apptForm.id) await updateAppointment(apptForm.id, payload)
+        else await createAppointment(targetId, payload)
+      }
+      showToast(form.id ? 'Eintrag aktualisiert.' : 'Eintrag erstellt.', 'success')
       await loadAll()
       if (targetId) {
         const fresh = (await (apiFetch('/pwa/admin/projects') as Promise<Project[]>)).find(p => p.id === targetId)
         if (fresh) setForm(projectToForm(fresh))
       }
+      setApptForm(null)
     } catch {
       setError('Speichern fehlgeschlagen.')
     } finally {
@@ -323,19 +398,9 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   }
 
   function handleNewInternal(kind: ProjectKind) {
-    const base = emptyInternalForm(kind)
+    setForm(emptyInternalForm(kind))
     // Aus einem aufgezogenen Termin: Zeiten + vorausgewählten Monteur übernehmen.
-    setForm(pendingSlot
-      ? {
-          ...base,
-          startDate: pendingSlot.startDate,
-          endDate: pendingSlot.endDate,
-          startTime: pendingSlot.startTime,
-          endTime: pendingSlot.endTime,
-          monteurIds: [...pendingSlot.monteurIds],
-          requireMonteur: true,
-        }
-      : base)
+    setApptForm(pendingSlot ? slotToApptForm(pendingSlot, 'sonstiges') : emptyApptForm('sonstiges'))
     setPendingSlot(null)
     setPickerSearch('')
     setPickerOpen(false)
@@ -343,13 +408,29 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setError(null)
   }
 
-  async function handleClearSchedule() {
-    if (!form) return
+  async function handleDeleteAppt(a: ProjectAppointment) {
     setSaving(true)
     try {
-      await updateProjectSchedule(form.id, null, null, null, null)
+      await deleteAppointment(a.id)
+      setAppointments(prev => prev.filter(x => x.id !== a.id))
+      if (apptForm?.id === a.id) setApptForm(null)
+      showToast('Termin entfernt.', 'success')
+    } catch {
+      showToast('Entfernen fehlgeschlagen.', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleClearSchedule() {
+    if (!form || !form.id) return
+    setSaving(true)
+    try {
+      for (const a of appointments.filter(x => x.project_id === form.id)) {
+        await deleteAppointment(a.id)
+      }
       showToast('Termine entfernt.', 'success')
-      setForm(f => f && ({ ...f, startDate: '', endDate: '', startTime: '', endTime: '' }))
+      setApptForm(null)
       await loadAll()
     } catch {
       showToast('Entfernen fehlgeschlagen.', 'error')
@@ -374,11 +455,43 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name)),
     [projektleiterOptions],
   )
-  const calendarProjects = useMemo(
+
+  const filteredByPl = useMemo(
     () => projektleiterFilter
       ? projects.filter(p => p.projektleiter_id === projektleiterFilter)
       : projects,
     [projects, projektleiterFilter],
+  )
+
+  // Kalender-Einträge: EIN Eintrag je Termin. id = Termin-ID (eindeutige Keys/
+  // Lanes/Drag), Terminfelder überlagern das Projekt; Team = Termin-Team,
+  // Fallback Projekt-Team. Badge nur bei Nicht-Standard-Typ (Aufmass/Service/…),
+  // damit der Normalfall (Montage) ruhig bleibt.
+  const calendarEntries = useMemo<CalendarEntry[]>(() => {
+    const projById = new Map(filteredByPl.map(p => [p.id, p]))
+    const entries: CalendarEntry[] = []
+    for (const a of appointments) {
+      const p = projById.get(a.project_id)
+      if (!p) continue // geschlossen/archiviert/gefiltert → nicht im Kalender
+      entries.push({
+        ...p,
+        id: a.id,
+        start_date: a.start_date,
+        end_date: a.end_date ?? a.start_date,
+        start_time: a.start_time,
+        end_time: a.end_time,
+        monteur_ids: (a.monteur_ids && a.monteur_ids.length ? a.monteur_ids : p.monteur_ids) ?? [],
+        termin_badge: p.kind === 'project' && a.kind !== 'montage'
+          ? (a.kind === 'sonstiges' && a.label ? a.label : APPOINTMENT_KIND_LABELS[a.kind])
+          : undefined,
+      })
+    }
+    return entries
+  }, [filteredByPl, appointments])
+
+  const scheduledProjectIds = useMemo(
+    () => new Set(appointments.map(a => a.project_id)),
+    [appointments],
   )
 
   // Picker-Suche: Filter über Name + Kundenname
@@ -392,6 +505,17 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       : projects
     return list.slice().sort((a, b) => a.name.localeCompare(b.name))
   }, [projects, pickerSearch])
+
+  // Termine des im Panel geöffneten Projekts, chronologisch.
+  const panelAppointments = useMemo(
+    () => form && form.id
+      ? appointments
+          .filter(a => a.project_id === form.id)
+          .slice()
+          .sort((a, b) => (a.start_date + (a.start_time ?? '99')).localeCompare(b.start_date + (b.start_time ?? '99')))
+      : [],
+    [appointments, form],
+  )
 
   async function exportSchedulePdf() {
     if (!visibleWeekIso || exporting) return
@@ -430,9 +554,22 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     }))
   }
 
+  function toggleApptMonteur(id: string) {
+    setApptForm(a => a && ({
+      ...a,
+      monteurIds: a.monteurIds.includes(id)
+        ? a.monteurIds.filter(x => x !== id)
+        : [...a.monteurIds, id],
+    }))
+  }
+
   const slotMonteurNames = pendingSlot
     ? pendingSlot.monteurIds.map(id => staff.find(s => s.id === id)?.name).filter(Boolean).join(', ')
     : ''
+
+  // Der Termin-Editor (Typ/Team-Sektion) gilt nur für Kundenprojekte — interne
+  // Einsätze behalten ihren einen Termin ohne Typ-/Team-Verwaltung.
+  const showApptExtras = form?.kind === 'project'
 
   return (
     <div className="admin-page admin-page-wide">
@@ -440,7 +577,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         <div>
           <div className="admin-page-title">Einsatzplanung</div>
           <div className="admin-page-subtitle">
-            {calendarProjects.filter(p => p.start_date).length} geplante Einsätze · {calendarProjects.filter(p => !p.start_date).length} ohne Termin
+            {calendarEntries.length} geplante Einsätze · {filteredByPl.filter(p => !scheduledProjectIds.has(p.id)).length} ohne Termin
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -480,11 +617,11 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       <div className={`project-schedule-layout${panelOpen ? '' : ' panel-collapsed'}`}>
         <div className="project-schedule-calendar">
           <ProjectScheduleCalendar
-            projects={calendarProjects}
+            projects={calendarEntries}
             staff={staffLite}
             loading={loading}
             canton={canton}
-            onSelect={selectProject}
+            onSelect={handleCalendarSelect}
             onReschedule={handleReschedule}
             onCreateSlot={handleCreateSlot}
             onVisibleWeekChange={setVisibleWeekIso}
@@ -553,7 +690,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                         >
                           <div className="project-schedule-picker-name">{p.name}</div>
                           <div className="project-schedule-picker-meta">
-                            {cust || '—'}{p.start_date ? ` · geplant` : ''}
+                            {cust || '—'}{scheduledProjectIds.has(p.id) ? ` · geplant` : ''}
                           </div>
                         </button>
                       )
@@ -662,10 +799,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
 
                 <div className="project-schedule-field">
                   <div className="project-schedule-field-head">
-                    <span>
-                      Monteure
-                      {form.requireMonteur && <span className="project-schedule-req"> *</span>}
-                    </span>
+                    <span>Monteure (Projekt-Team)</span>
                     {monteurOptions.length > 0 && (
                       <button
                         type="button"
@@ -696,54 +830,159 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                   </div>
                 </div>
 
-                <div className="project-schedule-row">
-                  <label className="project-schedule-field">
-                    <span>Start</span>
-                    <input
-                      type="date"
-                      className="admin-input"
-                      value={form.startDate}
-                      onChange={e => setForm(f => {
-                        if (!f) return f
-                        const v = e.target.value
-                        // Enddatum vorbelegen bzw. nachziehen: leer oder vor dem Start → gleicher Tag.
-                        const endDate = (v && (!f.endDate || f.endDate < v)) ? v : f.endDate
-                        return { ...f, startDate: v, endDate }
-                      })}
-                    />
-                  </label>
-                  <label className="project-schedule-field">
-                    <span>Ende</span>
-                    <input
-                      type="date"
-                      className="admin-input"
-                      value={form.endDate}
-                      min={form.startDate || undefined}
-                      onChange={e => setForm(f => f && ({ ...f, endDate: e.target.value }))}
-                    />
-                  </label>
-                </div>
+                {/* ── Termine ──────────────────────────────────────── */}
+                <div className="project-schedule-divider" />
 
-                <div className="project-schedule-row">
-                  <label className="project-schedule-field">
-                    <span>Startzeit</span>
-                    <input
-                      type="time"
-                      className="admin-input"
-                      value={form.startTime}
-                      onChange={e => setForm(f => f && ({ ...f, startTime: e.target.value }))}
-                    />
-                  </label>
-                  <label className="project-schedule-field">
-                    <span>Endzeit</span>
-                    <input
-                      type="time"
-                      className="admin-input"
-                      value={form.endTime}
-                      onChange={e => setForm(f => f && ({ ...f, endTime: e.target.value }))}
-                    />
-                  </label>
-                </div>
+                {showApptExtras && (
+                  <div className="project-schedule-field">
+                    <div className="project-schedule-field-head">
+                      <span>Termine</span>
+                      <button
+                        type="button"
+                        className="project-schedule-mini-btn"
+                        onClick={() => { setApptForm(emptyApptForm('montage')); setError(null) }}
+                      >
+                        + Termin
+                      </button>
+                    </div>
+                    {panelAppointments.length === 0 && !apptForm && (
+                      <div style={{ color: 'var(--muted)', fontSize: 12 }}>Noch keine Termine geplant.</div>
+                    )}
+                    {panelAppointments.map(a => (
+                      <div
+                        key={a.id}
+                        className={`project-schedule-appt-row${apptForm?.id === a.id ? ' active' : ''}`}
+                        onClick={() => { setApptForm(apptToForm(a)); setError(null) }}
+                      >
+                        <span className="project-schedule-appt-kind">
+                          {a.kind === 'sonstiges' && a.label ? a.label : APPOINTMENT_KIND_LABELS[a.kind]}
+                        </span>
+                        <span className="project-schedule-appt-when">{fmtApptRow(a)}</span>
+                        <button
+                          type="button"
+                          className="admin-btn-icon danger"
+                          title="Termin entfernen"
+                          onClick={e => { e.stopPropagation(); void handleDeleteAppt(a) }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {apptForm && (
+                  <>
+                    {showApptExtras && (
+                      <div className="project-schedule-row">
+                        <label className="project-schedule-field">
+                          <span>Termin-Typ</span>
+                          <select
+                            className="admin-input"
+                            value={apptForm.kind}
+                            onChange={e => setApptForm(a => a && ({ ...a, kind: e.target.value as AppointmentKind }))}
+                          >
+                            <option value="aufmass">Aufmass</option>
+                            <option value="montage">Montage</option>
+                            <option value="service">Service</option>
+                            <option value="sonstiges">Sonstiges</option>
+                          </select>
+                        </label>
+                        {apptForm.kind === 'sonstiges' && (
+                          <label className="project-schedule-field">
+                            <span>Bezeichnung</span>
+                            <input
+                              className="admin-input"
+                              value={apptForm.label}
+                              onChange={e => setApptForm(a => a && ({ ...a, label: e.target.value }))}
+                              placeholder="z.B. Besprechung"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="project-schedule-row">
+                      <label className="project-schedule-field">
+                        <span>Start</span>
+                        <input
+                          type="date"
+                          className="admin-input"
+                          value={apptForm.startDate}
+                          onChange={e => setApptForm(a => {
+                            if (!a) return a
+                            const v = e.target.value
+                            // Enddatum vorbelegen bzw. nachziehen: leer oder vor dem Start → gleicher Tag.
+                            const endDate = (v && (!a.endDate || a.endDate < v)) ? v : a.endDate
+                            return { ...a, startDate: v, endDate }
+                          })}
+                        />
+                      </label>
+                      <label className="project-schedule-field">
+                        <span>Ende</span>
+                        <input
+                          type="date"
+                          className="admin-input"
+                          value={apptForm.endDate}
+                          min={apptForm.startDate || undefined}
+                          onChange={e => setApptForm(a => a && ({ ...a, endDate: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="project-schedule-row">
+                      <label className="project-schedule-field">
+                        <span>Startzeit</span>
+                        <input
+                          type="time"
+                          className="admin-input"
+                          value={apptForm.startTime}
+                          onChange={e => setApptForm(a => a && ({ ...a, startTime: e.target.value }))}
+                        />
+                      </label>
+                      <label className="project-schedule-field">
+                        <span>Endzeit</span>
+                        <input
+                          type="time"
+                          className="admin-input"
+                          value={apptForm.endTime}
+                          onChange={e => setApptForm(a => a && ({ ...a, endTime: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+
+                    {showApptExtras && (
+                      <div className="project-schedule-field">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={apptForm.ownTeam}
+                            onChange={e => setApptForm(a => a && ({ ...a, ownTeam: e.target.checked }))}
+                          />
+                          Eigenes Team für diesen Termin
+                          {apptForm.requireMonteur && <span className="project-schedule-req"> *</span>}
+                        </label>
+                        {apptForm.ownTeam && (
+                          <div className="project-schedule-monteur-chips" style={{ marginTop: 6 }}>
+                            {monteurOptions.map(s => {
+                              const active = apptForm.monteurIds.includes(s.id)
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className={`project-schedule-chip${active ? ' active' : ''}`}
+                                  onClick={() => toggleApptMonteur(s.id)}
+                                >
+                                  {s.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
 
                 <label className="project-schedule-field">
                   <span>Bemerkung</span>
@@ -765,12 +1004,12 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                   >
                     {saving ? 'Speichern…' : 'Speichern'}
                   </button>
-                  {(form.startDate || form.endDate) && (
+                  {panelAppointments.length > 0 && (
                     <button
                       className="admin-btn admin-btn-secondary"
                       onClick={handleClearSchedule}
                       disabled={saving}
-                      title="Projekt aus dem Kalender entfernen, Stammdaten bleiben"
+                      title="Alle Termine des Projekts aus dem Kalender entfernen, Stammdaten bleiben"
                     >
                       Termine entfernen
                     </button>

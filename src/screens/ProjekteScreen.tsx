@@ -179,6 +179,9 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
 
   // Detail: Dateien, Kommentare & Aufgaben
   const [files, setFiles] = useState<ProjectFile[]>([])
+  // Inline-Umbenennen einer Datei/eines Fotos — auch als zugewiesener Monteur, nicht nur Admin.
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const [comments, setComments] = useState<ProjectComment[]>([])
   const [tasks, setTasks] = useState<ProjectTask[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -314,6 +317,23 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function handleRenameFile(fileId: string) {
+    const name = renameValue.trim()
+    if (!selected || !name) { setRenamingFileId(null); return }
+    try {
+      await apiFetch(`/pwa/projects/${selected.id}/files/${fileId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ filename: name }),
+      })
+      const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
+      setFiles(updated)
+    } catch {
+      // silently ignore rename errors in user view
+    } finally {
+      setRenamingFileId(null)
     }
   }
 
@@ -590,15 +610,43 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
               {files.map(f => (
                 <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
                   <span style={{ fontSize: 16 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
-                  <span className="projekte-detail-value" style={{ flex: 1 }}>
-                    {(f.storage_path || f.file_url)
-                      ? <a href={apiUrl(`/pwa/projects/${selected.id}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
-                      : f.filename
-                    }
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
-                      {f.category && CATEGORY_LABELS[f.category] ? `${CATEGORY_LABELS[f.category]} · ` : ''}{formatDateTime(f.created_at)}
+                  {renamingFileId === f.id ? (
+                    <span className="projekte-detail-value" style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); void handleRenameFile(f.id) }
+                          if (e.key === 'Escape') setRenamingFileId(null)
+                        }}
+                        style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--card-border, #ddd)', fontSize: 13, background: 'var(--surface, #fff)', color: 'var(--text)' }}
+                      />
+                      <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => void handleRenameFile(f.id)}>✓</button>
+                      <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => setRenamingFileId(null)}>✕</button>
                     </span>
-                  </span>
+                  ) : (
+                    <span className="projekte-detail-value" style={{ flex: 1 }}>
+                      {(f.storage_path || f.file_url)
+                        ? <a href={apiUrl(`/pwa/projects/${selected.id}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
+                        : f.filename
+                      }
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
+                        {f.category && CATEGORY_LABELS[f.category] ? `${CATEGORY_LABELS[f.category]} · ` : ''}{formatDateTime(f.created_at)}
+                      </span>
+                    </span>
+                  )}
+                  {renamingFileId !== f.id && (
+                    <button
+                      type="button"
+                      className="projekte-kontakt-link-btn"
+                      style={{ fontSize: 12 }}
+                      title="Umbenennen"
+                      onClick={() => { setRenamingFileId(f.id); setRenameValue(f.filename) }}
+                    >
+                      ✏️
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

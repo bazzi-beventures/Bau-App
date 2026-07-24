@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch, apiFormFetch } from '../../api/client'
 import UnitsPanel from './UnitsPanel'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
@@ -68,7 +69,7 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
   }
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Lager anpassen — {material.name}</div>
@@ -260,7 +261,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
 
   return (
     <>
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">{isNew ? 'Neues Material' : material.name}</div>

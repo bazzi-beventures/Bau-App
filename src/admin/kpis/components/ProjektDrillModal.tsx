@@ -1,17 +1,22 @@
 import { useEffect } from 'react'
+import { backdropCloseProps } from '../../../shared/backdropClose'
 import type { ReactNode } from 'react'
 import type { PipelineProjektAgg } from '../pipelineAggregation'
+import { QUOTE_STATUS_LABELS } from '../../constants/statuses'
 
 const chf = (v: number | null | undefined) =>
   typeof v === 'number'
     ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : '—'
 
-const OFFERTE_STATUS: Record<string, { label: string; color: string }> = {
-  entwurf: { label: 'Entwurf', color: '#94a3b8' },
-  gesendet: { label: 'Versendet', color: '#f59e0b' },
-  akzeptiert: { label: 'Akzeptiert', color: '#22c55e' },
-  abgelehnt: { label: 'Abgelehnt', color: '#ef4444' },
+// Labels zentral aus der kanonischen Map — vorher stand hier 'Versendet', während
+// dieselbe Offerte in Liste und Projekt-Detail 'Gesendet' hiess. Die Farben bleiben
+// lokal: dieses Modal rendert farbige Pills, nicht die admin-badge-CSS-Klassen.
+const OFFERTE_STATUS_COLOR: Record<string, string> = {
+  entwurf: '#94a3b8',
+  gesendet: '#f59e0b',
+  akzeptiert: '#22c55e',
+  abgelehnt: '#ef4444',
 }
 
 const RECHNUNG_STATUS: Record<string, { label: string; color: string }> = {
@@ -75,7 +80,7 @@ export default function ProjektDrillModal({ projekt: p, from, to, onClose }: Pro
   const rangeLabel = from || to ? `Zeitraum ${from ?? '…'} – ${to ?? '…'}` : 'Alle Datensätze'
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="admin-modal-header">
           <div className="admin-modal-title">
@@ -93,7 +98,10 @@ export default function ProjektDrillModal({ projekt: p, from, to, onClose }: Pro
           <Section title={`Offerten (${p.offertenDetail.length})`}>
             {p.offertenDetail.length === 0 && emptyLine}
             {p.offertenDetail.map((o, i) => {
-              const s = OFFERTE_STATUS[o.status] ?? { label: o.status, color: '#94a3b8' }
+              const s = {
+                label: QUOTE_STATUS_LABELS[o.status] ?? o.status,
+                color: OFFERTE_STATUS_COLOR[o.status] ?? '#94a3b8',
+              }
               return (
                 <div key={i} style={rowStyle}>
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

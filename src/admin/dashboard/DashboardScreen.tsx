@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import {
   AdminDashboard,
   PendingReminderQuote, getPendingReminderQuotes, sendQuoteReminder,
@@ -115,7 +116,7 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
   }
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Offerten-Erinnerungen</div>
@@ -216,7 +217,7 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
     sending?.id === id && sending?.type === type
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Überfällige Rechnungen</div>
@@ -339,7 +340,7 @@ function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
     busy?.id === id && busy?.type === type
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Bestellfreigaben für mich</div>
@@ -506,7 +507,7 @@ function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps)
     busy?.id === id && busy?.type === type
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Überfällige Projekte</div>

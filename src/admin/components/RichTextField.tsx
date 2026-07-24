@@ -28,6 +28,10 @@ const md = MarkdownIt('zero', { html: false, breaks: true }).enable([
   'emphasis', 'list', 'newline', 'escape',
 ])
 
+// Spacer für bewusst gesetzte Leerzeilen. NBSP (U+00A0) ist keine Markdown-Blankline,
+// daher behalten JS- und Python-markdown-it den Absatz (statt ihn zu kollabieren).
+const NBSP = String.fromCharCode(160)
+
 // HTML -> Markdown-Subset. Semantische Tags (<b>/<strong>, <i>/<em>, <ul>/<ol>) erwartet;
 // styleWithCSS wird unten abgeschaltet, damit execCommand keine <span style>-Bold erzeugt
 // (die turndown nicht in `**` überführen könnte).
@@ -36,6 +40,11 @@ const turndown = new TurndownService({
   strongDelimiter: '**',
   bulletListMarker: '-',
   headingStyle: 'atx',
+  // Leere Blöcke (leere Absätze — auch beim Neu-Laden erzeugte <p>NBSP</p>) als
+  // NBSP-Spacer serialisieren statt verwerfen, sonst driften bewusst gesetzte Leerzeilen
+  // beim ersten Edit nach dem Laden wieder weg (Roundtrip-Instabilität).
+  // node.isBlock ist ein Laufzeit-Feld von turndown, in @types/turndown (HTMLElement) nicht typisiert.
+  blankReplacement: (_content, node) => ((node as unknown as { isBlock: boolean }).isBlock ? '\n\n' + NBSP + '\n\n' : ''),
 })
 
 export function mdToHtml(value: string): string {
@@ -51,6 +60,10 @@ export function htmlToMd(html: string): string {
     .turndown(html || '')
     .replace(/^(\s*)([-*+])\s+/gm, '$1$2 ')
     .replace(/^(\s*)(\d+\.)\s+/gm, '$1$2 ')
+    // Frisch getippte Leerzeilen (<div><br></div>) rendert turndown als reine
+    // Leerzeichen-Zeile — markdown-it würde die kollabieren. → NBSP-Spacer, damit die
+    // Leerzeile in Editor UND PDF erhalten bleibt. (Rand-Leerzeilen entfernt .trim().)
+    .replace(/^[ \t]+$/gm, NBSP)
     .trim()
 }
 

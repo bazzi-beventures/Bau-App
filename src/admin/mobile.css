@@ -540,9 +540,19 @@
     align-items: start;
   }
   .quote-row > :first-child,
+  .quote-row > .quote-main,
   .quote-row > label,
   .quote-row > button {
     grid-column: 1 / -1;
+  }
+
+  /* Verschieben auf Touch: Griff (nativer Drag) weg, nur die ▲/▼-Pfeile bleiben. */
+  .quote-drag-handle {
+    display: none;
+  }
+  .quote-row-reorder {
+    justify-content: flex-start;
+    gap: 8px;
   }
 
   /* ─── Touch-Targets ──────────────────────────────────── */

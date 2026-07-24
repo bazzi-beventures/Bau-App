@@ -78,9 +78,19 @@ describe('ProjektDrillModal', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(2)
 
-    // Klick auf das Overlay (nicht auf den Panel-Inhalt) schliesst ebenfalls
+    // Klick auf das Overlay (nicht auf den Panel-Inhalt) schliesst ebenfalls —
+    // aber nur, wenn mousedown UND click dort landen (backdropCloseProps-Guard):
+    // eine im Inhalt begonnene Textauswahl, die auf dem Overlay endet, darf das
+    // Fenster NICHT schliessen.
     rerender(<ProjektDrillModal projekt={agg()} from={null} to={null} onClose={onClose} />)
-    fireEvent.click(container.querySelector('.admin-modal-overlay')!)
+    const overlay = container.querySelector('.admin-modal-overlay')!
+    fireEvent.mouseDown(overlay)
+    fireEvent.click(overlay)
+    expect(onClose).toHaveBeenCalledTimes(3)
+
+    // Textauswahl-Drag: mousedown im Inhalt, click landet auf dem Overlay → offen.
+    fireEvent.mouseDown(container.querySelector('.admin-modal')!)
+    fireEvent.click(overlay)
     expect(onClose).toHaveBeenCalledTimes(3)
   })
 })

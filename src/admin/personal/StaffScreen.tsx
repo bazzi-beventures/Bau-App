@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { getAdminStaff, deleteStaff, StaffMember } from '../../api/admin'
 import StaffDetailScreen from './StaffDetailScreen'
 import { AdminCardList } from '../components/AdminCardList'
@@ -156,7 +157,7 @@ export default function StaffScreen({ onNav }: Props) {
       </div>
 
       {confirmDelete && (
-        <div className="admin-modal-overlay" onClick={() => !deleting && setConfirmDelete(null)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => { if (!deleting) setConfirmDelete(null) })}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-title">Mitarbeiter deaktivieren</div>
             <p style={{ padding: '0 24px', color: 'var(--muted)' }}><strong>{confirmDelete.name}</strong> wird deaktiviert und anonymisiert. Bisherige Daten (Berichte, Stunden) bleiben für KPI erhalten.</p>

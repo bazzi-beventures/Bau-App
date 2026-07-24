@@ -360,6 +360,57 @@ export async function updateProjectSchedule(
   })
 }
 
+// ─── Termine (Einsatzplanung: mehrere Termine pro Projekt) ──
+// Spec: docs/specs/einsatzplanung-mehrere-termine.md. Die Legacy-Felder auf dem
+// Projekt spiegeln serverseitig den Ersttermin.
+
+export type AppointmentKind = 'aufmass' | 'montage' | 'service' | 'sonstiges'
+
+export const APPOINTMENT_KIND_LABELS: Record<AppointmentKind, string> = {
+  aufmass: 'Aufmass',
+  montage: 'Montage',
+  service: 'Service',
+  sonstiges: 'Sonstiges',
+}
+
+export interface ProjectAppointment {
+  id: string
+  project_id: string
+  start_date: string
+  end_date: string | null
+  start_time: string | null
+  end_time: string | null
+  kind: AppointmentKind
+  label: string | null
+  // Team dieses Termins; null/leer = Projekt-Team gilt.
+  monteur_ids: string[] | null
+}
+
+export async function listAppointments(dateFrom: string, dateTo: string): Promise<ProjectAppointment[]> {
+  return apiFetch(
+    `/pwa/admin/appointments?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`
+  ) as Promise<ProjectAppointment[]>
+}
+
+// Partial-PATCH-Semantik: fehlendes Feld = unverändert; '' bei end_date/
+// start_time/end_time = Wert löschen (Backend normalisiert '' → NULL);
+// monteur_ids [] = Termin-Team löschen (→ Projekt-Team gilt).
+export async function createAppointment(projectId: string, data: Partial<ProjectAppointment>): Promise<ProjectAppointment> {
+  return apiFetch(`/pwa/admin/projects/${projectId}/appointments`, {
+    method: 'POST', body: JSON.stringify(data),
+  }) as Promise<ProjectAppointment>
+}
+
+export async function updateAppointment(id: string, data: Partial<ProjectAppointment>): Promise<ProjectAppointment> {
+  return apiFetch(`/pwa/admin/appointments/${id}`, {
+    method: 'PATCH', body: JSON.stringify(data),
+  }) as Promise<ProjectAppointment>
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  await apiFetch(`/pwa/admin/appointments/${id}`, { method: 'DELETE' })
+}
+
 // ─── Invoices ──────────────────────────────────────────────
 
 export interface Invoice {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { backdropCloseProps } from '../shared/backdropClose'
 import { createPortal } from 'react-dom'
 import { fetchMaterialGallery, GalleryMaterialOption } from '../api/chat'
 import { ErsatzteilSelection } from './ErsatzteilPrompt'
@@ -88,7 +89,7 @@ export default function MaterialPhotoPicker({ onCancel, onApply }: Props) {
 
   return createPortal(
     <>
-    <div className="photo-picker-overlay" onClick={onCancel}>
+    <div className="photo-picker-overlay" {...backdropCloseProps(onCancel)}>
       <div className="photo-picker" onClick={e => e.stopPropagation()}>
         <div className="photo-picker-header">
           <div className="photo-picker-title">Artikel aus dem Katalog</div>

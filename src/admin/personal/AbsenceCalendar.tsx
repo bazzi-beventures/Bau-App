@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { Absence } from '../../api/admin'
 import { getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday } from '../utils/calendarHelpers'
 
@@ -46,7 +47,7 @@ function AbsenceDetailModal({ absence, onClose }: { absence: Absence; onClose: (
     absence.status === 'rejected' ? 'admin-badge-rejected' : 'admin-badge-pending'
 
   return (
-    <div className="absence-modal-backdrop" onClick={onClose}>
+    <div className="absence-modal-backdrop" {...backdropCloseProps(onClose)}>
       <div className="absence-modal" onClick={e => e.stopPropagation()}>
         <div className="absence-modal-header" style={{ borderLeft: `4px solid ${color}` }}>
           <div>

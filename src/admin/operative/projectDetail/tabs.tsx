@@ -65,6 +65,9 @@ export interface ProjectQuote {
   xlsx_storage_path?: string | null
   customer_email: string | null
   thankyou_sent_at?: string | null
+  variant_group_id?: string | null
+  variant_group_kind?: string | null
+  variant_rank?: number | null
 }
 
 export interface ProjectInvoice {
@@ -91,6 +94,9 @@ export interface ProjectReport {
   signature_timestamp: string | null
   invoice_id: number | null
   created_at: string
+  // Herkunft des Rapports: 'chat' (Standard, Monteur-App) oder 'admin_manual'
+  // (Projektleiter hat ihn im Projekt-Detail nacherfasst). Steuert das Badge.
+  source?: string
 }
 
 export interface ProjectTask {
@@ -469,13 +475,57 @@ interface QuotesTabProps {
   onSend: (quote: ProjectQuote) => void
   onSendThankyou: (quoteId: number) => void
   onEdit: (quoteId: number) => void
+  // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
+  addingVariantId?: number | null
+  onAddVariant?: (quoteId: number, kind: 'variante' | 'mehrfach') => void
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou, onEdit }: QuotesTabProps) {
+export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou, onEdit, addingVariantId, onAddVariant }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
   const hasWorkaroundInvoice = invoices.some(i => i.created_without_report)
+
+  // Anzahl Varianten (= Ketten) und Art je Variantengruppe — nur für die Label-Anzeige
+  // im Gruppenkopf (Option A/B bzw. Offerte 1/2). Die Art beim Anlegen bestimmt der
+  // geklickte Button (+ Variante / + Weitere Offerte), nicht mehr ein Dialog.
+  const groupInfo = new Map<string, { chains: Set<number | string>; kind: string }>()
+  for (const q of quotes) {
+    const gid = q.variant_group_id ?? `chain-${q.parent_id ?? q.id}`
+    if (!groupInfo.has(gid)) groupInfo.set(gid, { chains: new Set(), kind: q.variant_group_kind ?? 'variante' })
+    groupInfo.get(gid)!.chains.add(q.parent_id ?? q.id)
+  }
+  const groupSize = (q: ProjectQuote) => groupInfo.get(q.variant_group_id ?? `chain-${q.parent_id ?? q.id}`)?.chains.size ?? 1
+  const groupKind = (q: ProjectQuote): 'variante' | 'mehrfach' =>
+    (groupInfo.get(q.variant_group_id ?? `chain-${q.parent_id ?? q.id}`)?.kind === 'mehrfach' ? 'mehrfach' : 'variante')
+
+  // Ketten je Slot (Gruppe + Rang): teilen sich mehrere Ketten einen Rang, sind das
+  // Untervarianten eines Slots ("Offerte 3 · Option A/B", die zuerst erstellte = A).
+  const slotChains = new Map<string, (number | string)[]>()
+  for (const q of quotes) {
+    const gid = q.variant_group_id ?? `chain-${q.parent_id ?? q.id}`
+    const key = `${gid}:${q.variant_rank ?? 1}`
+    const root = q.parent_id ?? q.id
+    const arr = slotChains.get(key) ?? []
+    if (!arr.includes(root)) slotChains.set(key, [...arr, root].sort((a, b) => Number(a) - Number(b)))
+  }
+
+  function labelFor(q: ProjectQuote): string {
+    const rank = q.variant_rank ?? 1
+    if (groupKind(q) === 'variante') {
+      return rank >= 1 && rank <= 26 ? `Option ${String.fromCharCode(64 + rank)}` : `Option ${rank}`
+    }
+    const gid = q.variant_group_id ?? `chain-${q.parent_id ?? q.id}`
+    const chains = slotChains.get(`${gid}:${rank}`) ?? []
+    const base = `Offerte ${rank}`
+    if (chains.length > 1) {
+      const idx = chains.indexOf(q.parent_id ?? q.id)
+      const letter = idx >= 0 && idx < 26 ? String.fromCharCode(65 + idx) : String(idx + 1)
+      return `${base} · Option ${letter}`
+    }
+    return base
+  }
+
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -511,6 +561,14 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
             const showWorkaroundBadge = hasWorkaroundInvoice && groupIdx === 0
             return (
               <div key={latest.parent_id ?? latest.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface-2)' }}>
+                {groupSize(latest) > 1 && (
+                  <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="admin-badge admin-badge-approved" style={{ fontSize: 11 }}>{labelFor(latest)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {groupKind(latest) === 'mehrfach' ? 'zusätzliche Offerte (mehrere annehmbar)' : 'Variante (Kunde wählt eine)'}
+                    </span>
+                  </div>
+                )}
                 {showWorkaroundBadge && (
                   <div style={{ marginBottom: 8, fontSize: 12 }}>
                     <span className="admin-badge admin-badge-pending" title="Rechnung wurde direkt aus dieser Offerte erstellt, weil noch kein vom Kunden unterschriebener Arbeitsrapport vorliegt.">
@@ -561,8 +619,26 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                               {q.status === 'gesendet' ? 'Erneut senden' : 'Senden'}
                             </button>
                           )}
-                          {q.status === 'entwurf' && (
-                            <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onUpdateStatus(q.id, 'akzeptiert')}>Akzeptiert</button>
+                          {/* Auch bei 'gesendet': nach dem Versand will man den Ausgang
+                              festhalten — genau dann meldet sich der Kunde ja. Vorher war
+                              nur 'entwurf' erlaubt, was den Normalfall aussperrte. */}
+                          {['entwurf', 'gesendet'].includes(q.status) && (
+                            <>
+                              <button
+                                className="admin-btn admin-btn-success admin-btn-sm"
+                                onClick={() => onUpdateStatus(q.id, 'akzeptiert')}
+                                title="Kunde hat die Offerte angenommen"
+                              >
+                                Akzeptiert
+                              </button>
+                              <button
+                                className="admin-btn admin-btn-danger admin-btn-sm"
+                                onClick={() => onUpdateStatus(q.id, 'abgelehnt')}
+                                title="Kunde hat die Offerte abgelehnt"
+                              >
+                                Abgelehnt
+                              </button>
+                            </>
                           )}
                           {dankEnabled && q.status === 'akzeptiert' && !q.thankyou_sent_at && (
                             <button
@@ -582,6 +658,26 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
                           >
                             {regeneratingQuoteId === q.id ? '…' : 'Neue Version'}
                           </button>
+                          {onAddVariant && (
+                            <>
+                              <button
+                                className="admin-btn admin-btn-secondary admin-btn-sm"
+                                disabled={addingVariantId === q.id}
+                                onClick={() => onAddVariant(q.id, 'variante')}
+                                title="Kopiert diese Offerte als Variante — der Kunde wählt in einem Mail GENAU EINE (Option A/B/C)"
+                              >
+                                {addingVariantId === q.id ? '…' : '+ Variante'}
+                              </button>
+                              <button
+                                className="admin-btn admin-btn-secondary admin-btn-sm"
+                                disabled={addingVariantId === q.id}
+                                onClick={() => onAddVariant(q.id, 'mehrfach')}
+                                title="Eine eigenständige zusätzliche Offerte — der Kunde kann sie zusätzlich annehmen (Offerte 1/2)"
+                              >
+                                {addingVariantId === q.id ? '…' : '+ Weitere Offerte'}
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -601,16 +697,30 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
 
 interface ReportsTabProps {
   reports: ProjectReport[]
+  // Optional: öffnet das Popup zum manuellen Erfassen (spiegelbildlich zu QuotesTab).
+  // Fehlt der Prop, wird der Button nicht gezeigt (Abwärtskompatibilität).
+  onShowCreateForm?: () => void
 }
 
-export function ReportsTab({ reports }: ReportsTabProps) {
+export function ReportsTab({ reports, onShowCreateForm }: ReportsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div className="admin-section-title" style={{ margin: 0 }}>Rapporte</div>
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-          {reports.length === 0 ? 'keine' : `${reports.length} Rapport${reports.length === 1 ? '' : 'e'}`}
-        </span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+            {reports.length === 0 ? 'keine' : `${reports.length} Rapport${reports.length === 1 ? '' : 'e'}`}
+          </span>
+          {onShowCreateForm && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-primary"
+              onClick={onShowCreateForm}
+            >
+              + Neuer Rapport
+            </button>
+          )}
+        </div>
       </div>
       {reports.length === 0 ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Rapporte für dieses Projekt.</div>
@@ -619,18 +729,22 @@ export function ReportsTab({ reports }: ReportsTabProps) {
           {reports.map(r => {
             const signed = !!r.signature_timestamp
             const billed = !!r.invoice_id
+            const manual = r.source === 'admin_manual'
+            // Priorität: Abgerechnet > Unterschrieben > Manuell > Pendent.
+            const status: { label: string; cls: string } = billed
+              ? { label: 'Abgerechnet', cls: 'admin-badge-closed' }
+              : signed
+                ? { label: 'Unterschrieben', cls: 'admin-badge-paid' }
+                : manual
+                  ? { label: 'Manuell', cls: 'admin-badge-sent' }
+                  : { label: 'Pendent', cls: 'admin-badge-open' }
             return (
               <ActionRow key={r.id} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 18 }}>📋</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(r.report_date)}</span>
-                    <span className={`admin-badge ${signed ? 'admin-badge-paid' : 'admin-badge-open'}`}>
-                      {signed ? 'Unterschrieben' : 'Pendent'}
-                    </span>
-                    {billed && (
-                      <span className="admin-badge admin-badge-closed">Abgerechnet</span>
-                    )}
+                    <span className={`admin-badge ${status.cls}`}>{status.label}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                     {r.created_by ?? '—'}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -763,7 +764,7 @@ function OffertenVorlagenPanel() {
 
       {/* Edit/New Modal */}
       {editing !== null && (
-        <div className="admin-modal-overlay" onClick={() => setEditing(null)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => setEditing(null))}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">

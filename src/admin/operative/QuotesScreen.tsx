@@ -12,6 +12,7 @@ import { CustomerCombobox } from './CustomerCombobox'
 import type { Customer } from './CustomersScreen'
 import { InfoHint } from '../components/InfoHint'
 import { SpellcheckTextarea } from './SpellcheckTextarea'
+import { AutoGrowTextarea, RowReorder, useReorder } from './QuoteRowControls'
 import { RichTextField } from '../components/RichTextField'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
@@ -89,6 +90,7 @@ export interface QuoteDetail {
   id: number
   quote_number: string
   project_name: string
+  project_id?: string | null
   // Kunde der Offerte — eigenständig gegenüber dem Projektkunden (quotes.customer_id).
   // Alt-Offerten haben nur den Text-Snapshot customer_name, customer_id ist dort null.
   customer_id: string | null
@@ -462,6 +464,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   function addExtraProduct() { setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }]) }
   function removeExtraProduct(i: number) { setExtraProducts(r => r.filter((_, j) => j !== i)) }
 
+  // Verschieben (Griff + ▲/▼) für Material- und Freie-Positions-Zeilen.
+  const materialReorder = useReorder(setMaterialRows)
+  const extraReorder = useReorder(setExtraProducts)
+
   // ── Installation helpers ──
   function addInstallationFromTemplate(tpl: InstallationTemplate) {
     setInstallationRows(r => [...r, { description: tpl.label, unit_price: String(tpl.default_fee) }])
@@ -815,7 +821,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           </select>
         </div>
         {materialRows.map((row, i) => (
-          <div key={i} className="quote-row">
+          <div key={i} className="quote-row" {...materialReorder.rowProps(i)}>
+            <RowReorder index={i} count={materialRows.length} moveRow={materialReorder.moveRow} handleProps={materialReorder.handleProps} />
             <MaterialCombobox
               materials={materials}
               supplierMap={supplierMap}
@@ -823,6 +830,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
               categoryFilter={materialCategoryFilter}
               value={row.art_nr}
               onChange={artNr => updateMaterial(i, { art_nr: artNr })}
+              className="quote-main"
             />
             <input
               className="admin-form-input"
@@ -852,8 +860,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
           EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
-          <div key={i} className="quote-row">
-            <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={e => updateExtraProduct(i, { description: e.target.value })} />
+          <div key={i} className="quote-row" {...extraReorder.rowProps(i)}>
+            <RowReorder index={i} count={extraProducts.length} moveRow={extraReorder.moveRow} handleProps={extraReorder.handleProps} />
+            <AutoGrowTextarea className="admin-form-input quote-main" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description} onChange={v => updateExtraProduct(i, { description: v })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity} onChange={e => updateExtraProduct(i, { quantity: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Einheit" value={row.unit} onChange={e => updateExtraProduct(i, { unit: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 65 }} placeholder="EK" value={row.ek ?? ''} onChange={e => updateExtraProduct(i, { ek: e.target.value })} title="Einkaufspreis (optional) — füllt mit dem Aufschlag den Preis automatisch" />
@@ -1073,6 +1082,9 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       return next
     }))
   }
+  // Verschieben (Griff + ▲/▼) für Material- und Freie-Positions-Zeilen.
+  const materialReorder = useReorder(setMaterialRows)
+  const extraReorder = useReorder(setExtraProducts)
   const [extraCharges, setExtraCharges] = useState<EditChargeRow[]>(() =>
     quote.extra_charge_items.map(i => ({ description: i.description, total_price: String(i.total_price) }))
   )
@@ -1108,13 +1120,29 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   const [customers, setCustomers] = useState<Customer[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Material-Katalog + OCR im Bearbeiten-Formular (wie im Erstell-Formular). Erlaubt
+  // beim Bau einer Variante Katalog-Material zu picken und Lieferanten-PDFs einzulesen —
+  // vorher gab es hier nur Freitext-Material.
+  const [materials, setMaterials] = useState<Material[]>([])
+  const [materialSupplierFilter] = useState('')
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
+  const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const pendingPdfFile = useRef<File | null>(null)
+  const [supplierDocsToFile, setSupplierDocsToFile] = useState<File[]>([])
+  const supplierMap = useMemo(() => Object.fromEntries(suppliers.map(s => [s.id, s.name])), [suppliers])
 
   useEffect(() => {
     Promise.all([
       apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>,
       apiFetch('/pwa/admin/installation-templates') as Promise<InstallationTemplate[]>,
-    ]).then(([r, t]) => { setRoles(r); setInstallationTemplates(t) })
+      apiFetch('/pwa/admin/materials') as Promise<Material[]>,
+    ]).then(([r, t, m]) => { setRoles(r); setInstallationTemplates(t); setMaterials(m) })
     apiFetch('/pwa/admin/customers').then(d => setCustomers(d as Customer[])).catch(() => {})
+    apiFetch('/pwa/admin/suppliers').then(s => setSuppliers(s as Supplier[])).catch(() => {})
+    apiFetch('/pwa/admin/pricing-rules').then(r => setPricingRules(r as SupplierPricingRule[])).catch(() => {})
     // Sonderpositionen-Sektion nur wenn Feature für den Tenant aktiv.
     getMe().then(me => {
       setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
@@ -1126,6 +1154,63 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         .catch(() => {})
     }).catch(() => {})
   }, [])
+
+  // Katalog-Material an die (Freitext-)Materialliste anhängen: art_nr wird beim
+  // Bearbeiten NICHT gespeichert (das PATCH erwartet aufgelöste Zeilen), daher lösen
+  // wir Name + VK (calc_vk, sonst unit_price) client-seitig auf.
+  function addCatalogMaterial(artNr: string) {
+    const m = materials.find(x => String(x.art_nr) === String(artNr))
+    if (!m) return
+    setMaterialRows(rows => [...rows, {
+      description: m.name,
+      quantity: '1',
+      unit: m.unit || 'Stk',
+      unit_price: String(m.calc_vk ?? m.unit_price ?? 0),
+    }])
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
+      if (!result.products || result.products.length === 0) {
+        setError('Keine Produkte in der PDF erkannt.')
+        return
+      }
+      pendingPdfFile.current = file
+      setPdfReview(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  function handlePdfReviewConfirm(confirmed: ConfirmedExtraProduct[]) {
+    const rows: EditExtraRow[] = confirmed.map(c => ({
+      description: c.description,
+      quantity: String(c.quantity),
+      unit: c.unit,
+      unit_price: String(c.unit_price),
+      ek: String(c.ek_price),
+      margin_pct: String(factorToPct(c.margin_factor)),
+      supplier_id: c.supplier_id,
+      category: c.category,
+      positions: c.positions,
+    }))
+    setExtraProducts(prev => [...prev, ...rows])
+    if (pendingPdfFile.current) {
+      setSupplierDocsToFile(prev => [...prev, pendingPdfFile.current as File])
+      pendingPdfFile.current = null
+    }
+    setPdfReview(null)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -1179,6 +1264,20 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         customer_id: customerId,
       }
       await apiFetch(`/pwa/admin/quotes/${quote.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      // Per OCR eingelesene Lieferanten-PDFs als Projekt-Datei ablegen (Kategorie
+      // 'bestellungen'). Best-effort — die Offerte ist zu diesem Zeitpunkt gespeichert.
+      if (quote.project_id && supplierDocsToFile.length > 0) {
+        for (const f of supplierDocsToFile) {
+          try {
+            const form = new FormData()
+            form.append('file', f)
+            form.append('category', 'bestellungen')
+            await apiFormFetch(`/pwa/admin/projects/${quote.project_id}/files`, form)
+          } catch (err) {
+            console.error('Lieferanten-PDF konnte nicht im Projekt abgelegt werden:', err)
+          }
+        }
+      }
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
@@ -1258,9 +1357,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           <InfoHint text="Menge je Position erfassen. Eine als Option markierte Zeile ist eine Eventualposition: erscheint mit Preis auf der Offerte, zählt aber nicht ins Total." />
         </legend>
         {materialRows.map((row, i) => (
-          <div key={i} className="quote-row">
-            <input className="admin-form-input" style={{ flex: 3, minWidth: 180 }} placeholder="Bezeichnung" value={row.description}
-              onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} />
+          <div key={i} className="quote-row" {...materialReorder.rowProps(i)}>
+            <RowReorder index={i} count={materialRows.length} moveRow={materialReorder.moveRow} handleProps={materialReorder.handleProps} />
+            <AutoGrowTextarea className="admin-form-input quote-main" style={{ flex: 3, minWidth: 180 }} placeholder="Bezeichnung" value={row.description}
+              onChange={v => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, description: v } : r))} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Menge" value={row.quantity}
               onChange={e => setMaterialRows(rows => rows.map((r, j) => j === i ? { ...r, quantity: e.target.value } : r))} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 60 }} placeholder="Einheit" value={row.unit}
@@ -1276,7 +1376,21 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setMaterialRows(r => r.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setMaterialRows(r => [...r, { description: '', quantity: '', unit: 'Stk', unit_price: '' }])}>+ Materialposition</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setMaterialRows(r => [...r, { description: '', quantity: '', unit: 'Stk', unit_price: '' }])}>+ Materialposition</button>
+          {/* Aus dem Katalog wählen: fügt Name + VK als Zeile hinzu (art_nr wird beim
+              Bearbeiten nicht gespeichert, daher client-seitig aufgelöst). */}
+          <div style={{ flex: 1, minWidth: 220, maxWidth: 380 }}>
+            <MaterialCombobox
+              materials={materials}
+              supplierMap={supplierMap}
+              supplierFilter={materialSupplierFilter}
+              categoryFilter=""
+              value=""
+              onChange={artNr => { if (artNr) addCatalogMaterial(artNr) }}
+            />
+          </div>
+        </div>
       </fieldset>
 
       {/* Extra Products */}
@@ -1286,9 +1400,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
-          <div key={i} className="quote-row">
-            <input className="admin-form-input" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
-              onChange={e => updateExtra(i, { description: e.target.value })} />
+          <div key={i} className="quote-row" {...extraReorder.rowProps(i)}>
+            <RowReorder index={i} count={extraProducts.length} moveRow={extraReorder.moveRow} handleProps={extraReorder.handleProps} />
+            <AutoGrowTextarea className="admin-form-input quote-main" style={{ flex: 3, minWidth: 160 }} placeholder="Beschreibung" value={row.description}
+              onChange={v => updateExtra(i, { description: v })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Menge" value={row.quantity}
               onChange={e => updateExtra(i, { quantity: e.target.value })} />
             <input className="admin-form-input" style={{ flex: 1, minWidth: 55 }} placeholder="Einheit" value={row.unit}
@@ -1308,7 +1423,15 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
             <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => setExtraProducts(r => r.filter((_, j) => j !== i))}>✕</button>
           </div>
         ))}
-        <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }])}>+ Freie Position</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setExtraProducts(r => [...r, { description: '', quantity: '1', unit: 'Stk', unit_price: '' }])}>+ Freie Position</button>
+          {/* Lieferanten-PDF per OCR einlesen (Griesser/Stobag) — die erkannten Produkte
+              landen nach dem Review als Zeilen hier. */}
+          <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={uploading} />
+          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
+            {uploading ? 'Lese PDF…' : '📄 Lieferanten-PDF importieren'}
+          </button>
+        </div>
       </fieldset>
 
       <DescPriceFieldset
@@ -1425,6 +1548,17 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         </button>
         <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>Abbrechen</button>
       </div>
+
+      {pdfReview && (
+        <PdfExtractionReviewModal
+          data={pdfReview}
+          mode="pdf"
+          suppliers={suppliers}
+          pricingRules={pricingRules}
+          onCancel={() => { pendingPdfFile.current = null; setPdfReview(null) }}
+          onConfirm={handlePdfReviewConfirm}
+        />
+      )}
     </div>
   )
 }
@@ -1695,7 +1829,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                           {acting === q.id ? '…' : 'Dankeschön senden'}
                         </button>
                       )}
-                      {q.status === 'gesendet' && (
+                      {/* Auch bei 'entwurf': eine am Telefon zugesagte oder abgelehnte
+                          Offerte muss man abschliessen können, ohne sie vorher pro forma
+                          per Mail zu versenden. */}
+                      {['entwurf', 'gesendet'].includes(q.status) && (
                         <>
                           <button
                             className="admin-btn admin-btn-success admin-btn-sm"

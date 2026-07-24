@@ -151,6 +151,22 @@ describe('apiFetch — abgelaufene Session', () => {
   })
 })
 
+describe('apiFetch — Fehlermeldung', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('bevorzugt `detail` (app-weite FastAPI-Form)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes({ ok: false, status: 400, body: { detail: 'Ungültig' } })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({ status: 400, message: 'Ungültig' })
+  })
+
+  it('liest `error` als Fallback (z.B. manueller Rapport)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes({ ok: false, status: 400, body: { error: 'Kein Stundenansatz für Anna hinterlegt' } })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({ status: 400, message: 'Kein Stundenansatz für Anna hinterlegt' })
+  })
+})
+
 describe('apiFetch — timeoutMs', () => {
   afterEach(() => {
     vi.unstubAllGlobals()

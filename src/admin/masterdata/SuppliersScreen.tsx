@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
@@ -274,7 +275,7 @@ export default function SuppliersScreen() {
       </div>
 
       {showForm && (
-        <div className="admin-modal-overlay" onClick={() => setShowForm(false)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => setShowForm(false))}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">{editingId ? 'Lieferant bearbeiten' : 'Neuer Lieferant'}</div>

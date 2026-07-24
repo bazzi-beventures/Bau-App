@@ -2015,6 +2015,42 @@ button.admin-list-item {
   opacity: 0.8;
 }
 
+/* Termin-Zeilen im Planungs-Panel (mehrere Termine pro Projekt). */
+.project-schedule-appt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-top: 4px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.project-schedule-appt-row:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.project-schedule-appt-row.active {
+  border-color: var(--primary, #3b82f6);
+  background: color-mix(in srgb, var(--primary, #3b82f6) 8%, transparent);
+}
+
+.project-schedule-appt-kind {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.project-schedule-appt-when {
+  flex: 1;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .project-cal-filter {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -2258,6 +2294,41 @@ button.admin-list-item {
   flex-wrap: wrap;
 }
 
+/* ── Positionen verschieben (Griff + ▲/▼) ─────────────────────────── */
+.quote-row-reorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.quote-drag-handle {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.quote-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Kompakte Pfeil-Buttons — sollen die volle Zeile nicht dominieren. */
+.quote-move-btn {
+  padding: 4px 6px;
+  min-width: 0;
+  line-height: 1;
+}
+
+/* Ziel-Zeile beim Ziehen hervorheben. */
+.quote-row[data-drop-target='true'] {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
 /* ⓘ-Erklärungs-Button (InfoHint) */
 .admin-info-hint-btn {
   background: none;
@@ -2479,6 +2550,21 @@ button.admin-list-item {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* Termin-Typ-Badge auf Kalenderblöcken (z.B. "Aufmass") — nur bei
+   Nicht-Standard-Terminen gesetzt, damit der Normalfall ruhig bleibt. */
+.project-cal-termin-badge {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
 }
 
 /* Drop-Target Hervorhebung bei DragOver. */

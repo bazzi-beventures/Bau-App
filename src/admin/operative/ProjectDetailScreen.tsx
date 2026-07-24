@@ -7,6 +7,7 @@ import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, 
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
+import { ReportCreateForm } from './ReportCreateForm'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
@@ -22,6 +23,18 @@ import {
 // Kommentare sind nach 10 Minuten gesperrt (kein Bearbeiten/Löschen mehr) —
 // muss zur Backend-Sperre in db/project_comments.py (COMMENT_LOCK_SECONDS) passen.
 const COMMENT_LOCK_MS = 10 * 60 * 1000
+
+// Ein Rapport taugt als Rechnungsbasis, wenn er vom Kunden unterschrieben ODER
+// manuell vom Projektleiter erfasst wurde (source 'admin_manual' — per Design
+// ohne Unterschrift, das Backend behandelt ihn trotzdem als verrechnungsreif).
+// Steuert die use_quote-Heuristik und den „kein Rapport"-Warnhinweis, damit ein
+// manuell erfasster Rapport tatsächlich aus dem Rapport (nicht der Offerte)
+// verrechnet wird.
+export function hasBillableReport(
+  reports: Pick<ProjectReport, 'signature_timestamp' | 'source'>[],
+): boolean {
+  return reports.some(r => !!r.signature_timestamp || r.source === 'admin_manual')
+}
 
 interface StaffMember {
   id: string
@@ -131,16 +144,24 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [invoices, setInvoices] = useState<ProjectInvoice[]>([])
   const [reports, setReports] = useState<ProjectReport[]>([])
   const [showQuoteForm, setShowQuoteForm] = useState(false)
+  // Popup zum manuellen Erfassen eines Rapports (analog showQuoteForm).
+  const [showReportForm, setShowReportForm] = useState(false)
   // Lokaler, noch nicht abgeschickter Offert-Entwurf für dieses Projekt vorhanden?
   // Steuert den «Entwurf fortsetzen»-Button. resumeQuoteDraft = Form gezielt zum
   // Fortsetzen geöffnet (übernimmt den Entwurf automatisch statt nur per Banner).
   const [quoteDraftExists, setQuoteDraftExists] = useState(() => hasQuoteDraft(project?.name ?? ''))
   const [resumeQuoteDraft, setResumeQuoteDraft] = useState(false)
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
+  // Verhindert, dass eine im Textfeld begonnene Maus-Selektion, die auf dem Overlay
+  // endet (mouseup ausserhalb der Box), die Bearbeiten-Maske schliesst. Nur schliessen,
+  // wenn mousedown UND click auf dem Overlay selbst landen. Vgl. PdfExtractionReviewModal.
+  const editQuoteMouseDownOnOverlay = useRef(false)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   // Feature offerte_dank_mail: „Dankeschön senden"-Knopf bei angenommenen Offerten.
   const [dankEnabled, setDankEnabled] = useState(false)
+  // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
+  const [addingVariantId, setAddingVariantId] = useState<number | null>(null)
   const [sendingThankyouId, setSendingThankyouId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
@@ -382,13 +403,30 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  // „Weitere Offerte": kopiert die Offerte als neue Variante in dieselbe Gruppe. `kind`
+  // legt beim ersten Mal die Art fest ('variante' = Kunde wählt eine, 'mehrfach' = Kunde
+  // kann mehrere annehmen). Danach editiert der Anwender die kopierte Offerte.
+  async function handleAddVariant(quoteId: number, kind: 'variante' | 'mehrfach') {
+    setAddingVariantId(quoteId)
+    try {
+      await apiFetch(`/pwa/admin/quotes/${quoteId}/add-variant`, {
+        method: 'POST', body: JSON.stringify({ variant_group_kind: kind }),
+      })
+      showToast('Weitere Offerte erstellt — jetzt anpassen')
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler bei „Weitere Offerte"')
+    } finally {
+      setAddingVariantId(null)
+    }
+  }
+
   async function handleGenerateInvoice() {
     if (!project) return
-    // Workaround: Solange die Mitarbeiter-PWA nicht ausgerollt ist, fehlen
-    // unterschriebene Rapporte. In diesem Fall wird zwingend aus der Offerte
-    // gerechnet — das Backend setzt dann automatisch created_without_report.
-    const hasSigned = reports.some(r => r.signature_timestamp)
-    const useQuote = useAcceptedQuote || !hasSigned
+    // Fehlt ein verrechenbarer Rapport (unterschrieben ODER manuell erfasst,
+    // siehe hasBillableReport), wird zwingend aus der Offerte gerechnet — das
+    // Backend setzt dann automatisch created_without_report.
+    const useQuote = useAcceptedQuote || !hasBillableReport(reports)
     setGeneratingInvoice(true)
     try {
       await apiFetch('/pwa/admin/invoices/generate', {
@@ -1175,11 +1213,13 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onSend={q => setSendQuote(q)}
           onSendThankyou={handleSendThankyou}
           onEdit={handleEditQuote}
+          addingVariantId={addingVariantId}
+          onAddVariant={handleAddVariant}
         />
       )}
 
       {!isNew && activeTab === 'reports' && (
-        <ReportsTab reports={reports} />
+        <ReportsTab reports={reports} onShowCreateForm={() => setShowReportForm(true)} />
       )}
 
       {!isNew && activeTab === 'invoices' && (
@@ -1188,7 +1228,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           useAcceptedQuote={useAcceptedQuote}
           generatingInvoice={generatingInvoice}
           defaultEmail={selectedCustomer?.email ?? project?.customer?.email ?? ''}
-          hasSignedReport={reports.some(r => r.signature_timestamp)}
+          hasSignedReport={hasBillableReport(reports)}
           onUseAcceptedQuoteChange={setUseAcceptedQuote}
           onGenerateInvoice={handleGenerateInvoice}
           onMarkPaid={handleMarkInvoicePaid}
@@ -1295,13 +1335,35 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         </div>
       )}
 
+      {/* ── Dialog: Rapport manuell erfassen ─────────────────── */}
+      {showReportForm && project && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 640, maxHeight: '90vh', overflow: 'auto' }}>
+            <ReportCreateForm
+              project={project}
+              staff={staff}
+              quotes={quotes}
+              onDone={() => { setShowReportForm(false); reloadReports() }}
+              onCancel={() => setShowReportForm(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Dialog: Offerte bearbeiten (nur Entwürfe) ────────── */}
       {/* Klick ausserhalb (auf das Overlay) verlässt die Maske ohne zu speichern.
           Das PDF entsteht erst beim Speichern — Verlassen erzeugt nichts. Wieder
           rein kommt man per Klick auf den Entwurf in der Liste. */}
       {editQuote && (
-        <div className="admin-confirm-overlay" onClick={() => setEditQuote(null)}>
-          <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div
+          className="admin-confirm-overlay"
+          onMouseDown={e => { editQuoteMouseDownOnOverlay.current = e.target === e.currentTarget }}
+          onClick={e => {
+            if (e.target === e.currentTarget && editQuoteMouseDownOnOverlay.current) setEditQuote(null)
+            editQuoteMouseDownOnOverlay.current = false
+          }}
+        >
+          <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteEditForm
               quote={editQuote}
               onDone={() => { setEditQuote(null); reloadQuotes() }}

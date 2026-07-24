@@ -169,6 +169,8 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const [sortKey, setSortKey] = useState<ProjectSortKey>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
+  // Direkteingabe der Seitenzahl (Sprung). String, um Zwischenzustände beim Tippen zu erlauben.
+  const [pageInput, setPageInput] = useState('1')
   const [selected, setSelected] = useState<Project | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
@@ -217,6 +219,9 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   // Filter/Suche/Sort aendern → zurueck auf Seite 1.
   useEffect(() => { setPage(1) }, [showClosed, showArchived, debouncedSearch, sortKey, sortDir, projektleiterFilter])
 
+  // Eingabefeld mit der aktiven Seite synchron halten (Pfeile, Filter-Reset, Sprung).
+  useEffect(() => { setPageInput(String(page)) }, [page])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -249,6 +254,14 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeEnd = Math.min(page * PAGE_SIZE, total)
+
+  // Seitensprung: Eingabe auf [1, totalPages] klemmen; Ungültiges auf aktuelle Seite zurücksetzen.
+  function commitPageInput() {
+    const n = parseInt(pageInput, 10)
+    const clamped = Number.isNaN(n) ? page : Math.min(totalPages, Math.max(1, n))
+    setPage(clamped)
+    setPageInput(String(clamped))
+  }
 
   const thStyle: React.CSSProperties = { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 
@@ -420,8 +433,22 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
               >
                 ← Zurück
               </button>
-              <span style={{ fontSize: 13, color: 'var(--muted)', minWidth: 90, textAlign: 'center' }}>
-                Seite {page} / {totalPages}
+              <span style={{ fontSize: 13, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Seite
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={pageInput}
+                  disabled={loading}
+                  onChange={e => setPageInput(e.target.value)}
+                  onFocus={e => e.target.select()}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitPageInput() } }}
+                  onBlur={commitPageInput}
+                  aria-label="Zur Seite springen"
+                  style={{ width: 52, textAlign: 'center', padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, background: 'var(--bg, #fff)', color: 'inherit' }}
+                />
+                / {totalPages}
               </span>
               <button
                 className="admin-btn admin-btn-sm admin-btn-secondary"

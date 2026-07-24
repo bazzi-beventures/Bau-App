@@ -34,6 +34,21 @@ describe('RichTextField – Konvertierung', () => {
     }
   })
 
+  it('bewahrt bewusst gesetzte Leerzeilen als Spacer (Editor + PDF)', () => {
+    const NBSP = String.fromCharCode(160)
+    // Zwei Leerzeilen zwischen Text (contentEditable liefert <div><br></div>).
+    const md = htmlToMd('<div>Gruss</div><div><br></div><div><br></div><div>Firma</div>')
+    expect(md).toBe(`Gruss\n\n${NBSP}\n\n${NBSP}\n\nFirma`)
+    // markdown-it behält die NBSP-Absätze (kollabiert sie nicht) → 4 Absätze.
+    expect((mdToHtml(md).match(/<p>/g) || []).length).toBe(4)
+  })
+
+  it('Leerzeilen-Round-Trip bleibt stabil (kein Drift beim Edit nach Laden)', () => {
+    const md1 = htmlToMd('<div>A</div><div><br></div><div>B</div>')
+    // Laden (mdToHtml) → erneut serialisieren muss denselben Markdown ergeben.
+    expect(htmlToMd(mdToHtml(md1))).toBe(md1)
+  })
+
   it('rendert die Editor-Toolbar', () => {
     render(<RichTextField value="**a**" onChange={() => {}} />)
     expect(screen.getByTitle('Bold')).toBeInTheDocument()

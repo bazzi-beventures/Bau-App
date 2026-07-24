@@ -209,11 +209,18 @@ function CustomerComments({ customerId }: { customerId: string }) {
   )
 }
 
+// Zusatz-E-Mail-Adresse (reine Stammdaten — kein Versand-Feature; Hauptadresse bleibt email).
+export interface AdditionalEmail {
+  email: string
+  label: string | null
+}
+
 export interface Customer {
   id: string
   name: string
   company: string | null
   email: string | null
+  additional_emails: AdditionalEmail[] | null
   phone: string | null
   phone_landline: string | null
   address: string | null
@@ -241,6 +248,10 @@ function CustomerForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [company, setCompany] = useState(initial?.company ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
+  // Zusatzadressen: Formular-Zeilen (Label + Adresse); leere Zeilen filtert der Submit.
+  const [additionalEmails, setAdditionalEmails] = useState<{ email: string; label: string }[]>(
+    (initial?.additional_emails ?? []).map(a => ({ email: a.email, label: a.label ?? '' }))
+  )
   const [phone, setPhone] = useState(initial?.phone ?? '')
   const [phoneLandline, setPhoneLandline] = useState(initial?.phone_landline ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
@@ -283,6 +294,10 @@ function CustomerForm({
           name: name.trim(),
           company: company.trim() || null,
           email: email || null,
+          // Immer senden (auch []), damit Entfernen aller Zusatzadressen gespeichert wird.
+          additional_emails: additionalEmails
+            .map(a => ({ email: a.email.trim(), label: a.label.trim() || null }))
+            .filter(a => a.email),
           phone: phone || null,
           phone_landline: phoneLandline || null,
           address: address || null,
@@ -347,6 +362,47 @@ function CustomerForm({
         <div className="admin-form-group">
           <label className="admin-form-label">E-Mail</label>
           <input className="admin-form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+        </div>
+        {/* Zusatzadressen: reine Stammdaten (erfassen/anzeigen) — der Versand nutzt
+            weiterhin die Hauptadresse; bei Bedarf kopiert man eine Zusatzadresse
+            ins freie Empfängerfeld des Versand-Dialogs. */}
+        <div className="admin-form-group">
+          <label className="admin-form-label">Weitere E-Mail-Adressen</label>
+          {additionalEmails.map((a, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              <input
+                className="admin-form-input"
+                style={{ flex: '0 1 180px', minWidth: 0 }}
+                placeholder="Bezeichnung (z.B. Buchhaltung)"
+                value={a.label}
+                onChange={e => setAdditionalEmails(list => list.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+              />
+              <input
+                className="admin-form-input"
+                style={{ flex: 1, minWidth: 0 }}
+                type="email"
+                placeholder="adresse@firma.ch"
+                value={a.email}
+                onChange={e => setAdditionalEmails(list => list.map((x, j) => j === i ? { ...x, email: e.target.value } : x))}
+              />
+              <button
+                type="button"
+                className="admin-btn-icon danger"
+                title="Adresse entfernen"
+                onClick={() => setAdditionalEmails(list => list.filter((_, j) => j !== i))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => setAdditionalEmails(list => [...list, { email: '', label: '' }])}
+          >
+            + Adresse
+          </button>
         </div>
         <div className="admin-form-row">
           <div className="admin-form-group">
@@ -574,6 +630,9 @@ export default function CustomersScreen() {
                     {(c.email || c.phone) && (
                       <div className="admin-card-meta">{[c.email, c.phone].filter(Boolean).join(' · ')}</div>
                     )}
+                    {(c.additional_emails ?? []).map((a, i) => (
+                      <div key={i} className="admin-card-meta">{a.label ? `${a.label}: ${a.email}` : a.email}</div>
+                    ))}
                     {(c.billing_address ?? c.address) && (
                       <div className="admin-card-meta">{c.billing_address ?? c.address}</div>
                     )}
@@ -607,7 +666,17 @@ export default function CustomersScreen() {
                   <tr key={c.id} onClick={() => setEditing(c)}>
                     <td style={{ fontWeight: 500 }}>{c.name}</td>
                     <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
-                    <td style={{ color: 'var(--muted)' }}>{c.email ?? '—'}</td>
+                    <td style={{ color: 'var(--muted)' }}>
+                      {c.email ?? '—'}
+                      {(c.additional_emails?.length ?? 0) > 0 && (
+                        <span
+                          style={{ marginLeft: 6, fontSize: 12 }}
+                          title={c.additional_emails!.map(a => a.label ? `${a.label}: ${a.email}` : a.email).join('\n')}
+                        >
+                          +{c.additional_emails!.length}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ color: 'var(--muted)' }}>{c.phone ?? '—'}</td>
                     <td style={{ color: 'var(--muted)' }}>{c.phone_landline ?? '—'}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 13 }}>{c.billing_address ?? c.address ?? '—'}</td>

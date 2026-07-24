@@ -18,8 +18,14 @@ interface StaffLite {
   name: string
 }
 
+// Kalender-Eintrag = EIN Termin (project_appointments). Der Screen spreadet das
+// Projekt und überlagert die Terminfelder; `id` ist die TERMIN-ID — dadurch sind
+// Keys/Lanes/Drag&Drop je Termin eindeutig, auch bei mehreren Terminen desselben
+// Projekts. termin_badge: Typ-Label (z.B. "Aufmass"), leer beim Standardfall.
+export type CalendarEntry = Project & { termin_badge?: string }
+
 interface Props {
-  projects: Project[]
+  projects: CalendarEntry[]
   staff: StaffLite[]
   loading: boolean
   canton?: string
@@ -148,7 +154,7 @@ function CalendarLegend({ canton }: { canton: string }) {
 function MonthView({
   projects, staff, fields, currentDate, onSelect, onReschedule, holidays,
 }: {
-  projects: Project[]
+  projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
@@ -215,10 +221,11 @@ function MonthView({
                     className={`absence-cal-pill project-cal-pill${extra.length ? ' has-extra' : ''}`}
                     draggable
                     onDragStart={e => setDragPayload(e, p.id, dayISO)}
-                    title={`${p.name} · ${fmtRange(p)}`}
+                    title={`${p.name}${p.termin_badge ? ` (${p.termin_badge})` : ''} · ${fmtRange(p)}`}
                     style={{ background: pillBg(p) }}
                     onClick={() => onSelect(p)}
                   >
+                    {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
                     {pillLabel(p)}
                     {extra.map((line, k) => (
                       <div key={k} className="project-cal-pill-extra">{line}</div>
@@ -263,9 +270,25 @@ function yToSnappedTime(topPx: number): string {
   return minToHHMM(clamped)
 }
 
+// Effektive Block-Unterkante in Minuten für die Overlap-Erkennung. Blöcke werden
+// mindestens so hoch gerendert wie in renderBlock (22px-Floor, 44px ohne Endzeit, plus
+// Zusatzfelder); diese Mindesthöhe rechnen wir in Minuten zurück, damit zeitlich knappe,
+// aber visuell überlappende Blöcke getrennte Spalten bekommen statt sich zu überlagern.
+function effectiveEndMin(ev: Project, staff: StaffLite[], fields?: Record<string, boolean>): number {
+  const s = hhmmToMin(ev.start_time!)
+  const actualEnd = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
+  const extra = pillExtraLines(ev, staff, fields)
+  const extraMinHeight = extra.length ? 30 + extra.length * 14 : 0
+  const heightPx = ev.end_time
+    ? Math.max(blockHeightPx(ev.start_time!, ev.end_time), extraMinHeight)
+    : Math.max(WEEK_HOUR_HEIGHT, 44, extraMinHeight)
+  return Math.max(actualEnd, s + (heightPx / WEEK_HOUR_HEIGHT) * 60)
+}
+
 // Spalten-Layout für überlappende Events (Cluster-basiert, wie Google Calendar):
-// Events, die sich in der Zeit überlappen, werden auf parallele Lanes verteilt.
-function computeLanes(events: Project[]): Map<string, { col: number; total: number }> {
+// Events, die sich zeitlich ODER visuell (Mindesthöhe) überlappen, kommen auf parallele
+// Lanes. Overlap-Ende = effectiveEndMin (nicht die reine Endzeit).
+function computeLanes(events: Project[], staff: StaffLite[], fields?: Record<string, boolean>): Map<string, { col: number; total: number }> {
   const result = new Map<string, { col: number; total: number }>()
   const sorted = [...events].sort((a, b) => hhmmToMin(a.start_time!) - hhmmToMin(b.start_time!))
 
@@ -278,7 +301,7 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
     const assigns: number[] = []
     for (const ev of cluster) {
       const s = hhmmToMin(ev.start_time!)
-      const e = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
+      const e = effectiveEndMin(ev, staff, fields)
       let placed = -1
       for (let i = 0; i < colEnds.length; i++) {
         if (colEnds[i] <= s) { colEnds[i] = e; placed = i; break }
@@ -294,7 +317,7 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
 
   for (const ev of sorted) {
     const s = hhmmToMin(ev.start_time!)
-    const e = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
+    const e = effectiveEndMin(ev, staff, fields)
     if (cluster.length === 0 || s >= clusterEnd) {
       flush()
       cluster.push(ev)
@@ -311,7 +334,7 @@ function computeLanes(events: Project[]): Map<string, { col: number; total: numb
 function WeekView({
   projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil,
 }: {
-  projects: Project[]
+  projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
@@ -352,7 +375,7 @@ function WeekView({
     ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyUntil)))
     : gridHeight
 
-  const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
+  const projectsByDay: CalendarEntry[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
 
   // Vorschaubox aus dem laufenden Zug berechnen (auf das Raster begrenzt).
   function createBoxFrom(c: { dayISO: string; startPx: number; endPx: number }) {
@@ -426,7 +449,7 @@ function WeekView({
   }
 
   function renderBlock(
-    p: Project,
+    p: CalendarEntry,
     dayISO: string,
     allDay: boolean,
     lane?: { col: number; total: number },
@@ -472,7 +495,10 @@ function WeekView({
         {timeLabel && !allDay && (
           <div className="project-cal-week-event-time">{timeLabel}</div>
         )}
-        <div className="project-cal-week-event-name">{p.name}</div>
+        <div className="project-cal-week-event-name">
+          {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+          {p.name}
+        </div>
         {extra.map((line, k) => (
           <div key={k} className="project-cal-week-event-extra">{line}</div>
         ))}
@@ -532,7 +558,7 @@ function WeekView({
         {days.map((d, i) => {
           const dayISO = toDateStr(d)
           const timed = projectsByDay[i].filter(p => p.start_time)
-          const lanes = computeLanes(timed)
+          const lanes = computeLanes(timed, staff, fields)
           // Nur Werktage (Mo–Fr) ausgrauen; Wochenende bleibt normal.
           const dow = d.getDay() // 0 = So, 6 = Sa
           const showDim = greyTopPx !== null && dow >= 1 && dow <= 5 && greyBottomPx > greyTopPx
@@ -599,7 +625,7 @@ function WeekView({
 function AgendaView({
   projects, staff, fields, currentDate, onSelect, onCreateSlot, holidays,
 }: {
-  projects: Project[]
+  projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
@@ -608,7 +634,7 @@ function AgendaView({
   holidays: Map<string, string>
 }) {
   const days = getWeekDays(currentDate)
-  const projectsByDay: Project[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
+  const projectsByDay: CalendarEntry[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
   return (
     <div className="project-cal-agenda">
       {days.map((day, i) => {
@@ -642,7 +668,7 @@ function AgendaView({
                   onClick={() => onSelect(p)}
                 >
                   <span className="project-cal-agenda-event-time">{fmtTimeRange(p) || 'Ganztägig'}</span>
-                  <strong>{p.name}</strong>
+                  <strong>{p.termin_badge ? `${p.termin_badge} · ` : ''}{p.name}</strong>
                   {monteurs && <span className="project-cal-agenda-event-sub">{monteurs}</span>}
                   {extra.map((line, j) => <span key={j} className="project-cal-agenda-event-sub">{line}</span>)}
                 </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
 
 interface PricingRule {
@@ -178,7 +179,7 @@ export default function PricingRulesScreen() {
 
       {/* Edit/New Modal */}
       {editing !== null && (
-        <div className="admin-modal-overlay" onClick={() => setEditing(null)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => setEditing(null))}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">{editing === 'new' ? 'Neue Preisregel' : `${form.supplier_name} bearbeiten`}</div>

@@ -66,7 +66,10 @@ async function parseErrorDetail(res: Response): Promise<string> {
     if (body.detail && typeof body.detail === 'object' && typeof body.detail.message === 'string') {
       detail = body.detail.message
     } else {
-      detail = body.detail ?? detail
+      // `detail` ist die app-weite Fehlerform (FastAPI HTTPException). Manche
+      // neueren Endpoints (z.B. manueller Rapport) antworten mit `{ error: … }` —
+      // als Fallback lesen, damit die deutsche Meldung nicht auf "Bad Request" fällt.
+      detail = body.detail ?? body.error ?? detail
     }
   } catch {}
   return detail

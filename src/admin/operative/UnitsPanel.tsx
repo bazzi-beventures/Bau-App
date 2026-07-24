@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
 
 interface Unit {
@@ -157,7 +158,7 @@ export default function UnitsPanel() {
       </div>
 
       {editing !== null && (
-        <div className="admin-modal-overlay" onClick={() => setEditing(null)}>
+        <div className="admin-modal-overlay" {...backdropCloseProps(() => setEditing(null))}>
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">{editing === 'new' ? 'Neue Einheit' : `„${editing.code}" bearbeiten`}</div>

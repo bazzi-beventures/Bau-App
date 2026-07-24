@@ -27,6 +27,7 @@ interface Props {
   categoryFilter: string   // '' = alle
   value: string            // gewählte art_nr
   onChange: (artNr: string) => void
+  className?: string       // optionale Zusatzklasse am Wurzel-Element (z.B. quote-main)
 }
 
 const MAX_VISIBLE = 80
@@ -35,7 +36,7 @@ function labelOf(m: MaterialOption): string {
   return `${m.art_nr} — ${m.name} (${fmtCHF(m.calc_vk ?? m.unit_price)}/${m.unit})`
 }
 
-export function MaterialCombobox({ materials, supplierMap, supplierFilter, categoryFilter, value, onChange }: Props) {
+export function MaterialCombobox({ materials, supplierMap, supplierFilter, categoryFilter, value, onChange, className }: Props) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
@@ -187,7 +188,7 @@ export function MaterialCombobox({ materials, supplierMap, supplierFilter, categ
   }
 
   return (
-    <div style={{ flex: 2, minWidth: 0, position: 'relative' }}>
+    <div className={className} style={{ flex: 2, minWidth: 0, position: 'relative' }}>
       <input
         ref={inputRef}
         className="admin-form-input"

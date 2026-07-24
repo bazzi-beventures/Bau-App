@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
 import {
   ProjectDraft, getAdminProjectDrafts,
@@ -287,7 +288,7 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
   }
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose}>
+    <div className="admin-modal-overlay" {...backdropCloseProps(onClose)}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="admin-modal-header">
           <div className="admin-modal-title">Projekt-Entwurf</div>
