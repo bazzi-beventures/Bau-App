@@ -58,9 +58,12 @@ interface FixedMaterialRow {
   amount: string
   unit: string
   unitPrice: string
-  // true = aus der Offerte übernommen. Ein erneuter Import ersetzt nur diese
-  // Zeilen; von Hand erfasste (false) bleiben erhalten.
-  fromQuote?: boolean
+  // Gesetzt = aus DIESER Offerte übernommen. Ein erneuter Import ersetzt nur die
+  // Zeilen derselben Offerte; von Hand erfasste (undefined) und die anderer
+  // Offerten bleiben erhalten. Damit lässt sich bei mehreren angenommenen
+  // Offerten ('mehrfach'-Gruppe) das Material aller nacheinander übernehmen —
+  // früher warf jeder zweite Import den ersten weg.
+  fromQuoteId?: number
 }
 
 // Standard-Offerte für den Hinweis: die akzeptierte (bei mehreren die neueste),
@@ -125,6 +128,21 @@ export function ReportCreateForm({
     [quotes, selectedQuoteId],
   )
 
+  // Angenommene Offerten in Vereinigungs-Reihenfolge (variant_rank, dann id) — wie
+  // merge_accepted_quotes im Backend, damit Sammel-Import und Monteur-Chat-Rapport
+  // dieselbe Reihenfolge zeigen («Offerte 1» vor «Offerte 2»).
+  const acceptedQuotes = useMemo(
+    () => quotes
+      .filter(q => q.status === 'akzeptiert')
+      .sort((a, b) => ((a.variant_rank ?? 1) - (b.variant_rank ?? 1)) || (a.id - b.id)),
+    [quotes],
+  )
+  const acceptedCount = acceptedQuotes.length
+  const quoteNumberById = useMemo(
+    () => new Map(quotes.map(q => [q.id, q.quote_number])),
+    [quotes],
+  )
+
   // Esc schliesst das Fenster.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -183,40 +201,68 @@ export function ReportCreateForm({
     setFixedRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   }
   function addFixedRow() {
-    setFixedRows(rs => [...rs, { itemName: '', amount: '', unit: 'Stk', unitPrice: '', fromQuote: false }])
+    setFixedRows(rs => [...rs, { itemName: '', amount: '', unit: 'Stk', unitPrice: '' }])
   }
   function removeFixedRow(i: number) {
     setFixedRows(rs => rs.filter((_, j) => j !== i))
   }
 
-  // Material der gewählten Offerte laden und als bearbeitbare Fixpreis-Zeilen
-  // übernehmen. Bewusst NUR material_items (Produkte/Zuschläge/Montage/Spezial
-  // werden vom rapportbasierten Rechnungspfad bereits automatisch verrechnet —
-  // sie hier zusätzlich zu tragen würde doppelt verrechnen). Eventualpositionen
-  // (optional=true) werden übersprungen. Ein erneuter Klick ersetzt nur die zuvor
-  // übernommenen Zeilen; von Hand erfasste Positionen bleiben erhalten.
-  async function importQuoteMaterial() {
-    if (!selectedQuote) return
+  // Material von Offerten laden und als bearbeitbare Fixpreis-Zeilen übernehmen.
+  // Bewusst NUR material_items (Produkte/Zuschläge/Montage/Spezial werden vom
+  // rapportbasierten Rechnungspfad bereits automatisch verrechnet — sie hier
+  // zusätzlich zu tragen würde doppelt verrechnen). Eventualpositionen
+  // (optional=true) werden übersprungen.
+  //
+  // Additiv: ein Import ersetzt nur die Zeilen der IMPORTIERTEN Offerten. Von Hand
+  // erfasste Positionen (fromQuoteId undefined) und die anderer Offerten bleiben
+  // in jedem Fall erhalten.
+  async function importFromQuotes(toImport: ProjectQuote[], errorMessage: string): Promise<boolean> {
+    if (toImport.length === 0) return false
     setLoadingQuoteMaterial(true)
     setQuoteMaterialError('')
     try {
-      const detail = (await apiFetch(`/pwa/admin/quotes/${selectedQuote.id}`)) as QuoteDetail
-      const items = Array.isArray(detail.material_items) ? detail.material_items : []
-      const carried: FixedMaterialRow[] = items
-        .filter(it => !it.optional)
-        .map(it => ({
-          itemName: it.description ?? '',
-          amount: String(it.quantity ?? ''),
-          unit: it.unit || 'Stk',
-          unitPrice: String(it.unit_price ?? ''),
-          fromQuote: true,
-        }))
-      // Manuell erfasste Zeilen (fromQuote=false) behalten, alte Übernahme ersetzen.
-      setFixedRows(rs => [...rs.filter(r => !r.fromQuote), ...carried])
+      const details = await Promise.all(
+        toImport.map(q => apiFetch(`/pwa/admin/quotes/${q.id}`) as Promise<QuoteDetail>),
+      )
+      const carried: FixedMaterialRow[] = details.flatMap((detail, i) => {
+        const items = Array.isArray(detail.material_items) ? detail.material_items : []
+        return items
+          .filter(it => !it.optional)
+          .map(it => ({
+            itemName: it.description ?? '',
+            amount: String(it.quantity ?? ''),
+            unit: it.unit || 'Stk',
+            unitPrice: String(it.unit_price ?? ''),
+            fromQuoteId: toImport[i].id,
+          }))
+      })
+      const replaced = new Set(toImport.map(q => q.id))
+      setFixedRows(rs => [
+        ...rs.filter(r => r.fromQuoteId === undefined || !replaced.has(r.fromQuoteId)),
+        ...carried,
+      ])
+      return true
     } catch {
-      setQuoteMaterialError('Material der Offerte konnte nicht geladen werden.')
+      setQuoteMaterialError(errorMessage)
+      return false
     } finally {
       setLoadingQuoteMaterial(false)
+    }
+  }
+
+  // Einzelne Offerte (oben gewählt) übernehmen — für die gezielte Teil-Übernahme.
+  function importQuoteMaterial() {
+    if (!selectedQuote) return
+    return importFromQuotes([selectedQuote], 'Material der Offerte konnte nicht geladen werden.')
+  }
+
+  // ALLE angenommenen Offerten in einem Schritt — das Gegenstück zur Vereinigung im
+  // Monteur-Chat-Rapport (merge_accepted_quotes). Der Beschrieb-Vorschlag nennt danach
+  // alle Offertennummern («OFF-1 + OFF-2»), solange er nicht von Hand geändert wurde.
+  async function importAcceptedQuotesMaterial() {
+    const ok = await importFromQuotes(acceptedQuotes, 'Material der Offerten konnte nicht geladen werden.')
+    if (ok && !descTouched && acceptedQuotes.length > 1) {
+      setDescription(`Arbeiten gemäss Offerten ${acceptedQuotes.map(q => q.quote_number).join(' + ')}`)
     }
   }
 
@@ -402,6 +448,16 @@ export function ReportCreateForm({
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>Keine Offerte für dieses Projekt vorhanden.</div>
         ) : (
           <>
+            {/* Nicht blockierend: der Projektleiter darf den Rapport auch ohne Annahme
+                erfassen (er kann die Offerte selbst annehmen). Der Monteur dagegen ist
+                gesperrt, solange keine Offerte angenommen ist — dieser Hinweis erklärt,
+                warum der Rapport in der Mitarbeiter-App noch nicht möglich ist. */}
+            {acceptedCount === 0 && (
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+                Noch keine Offerte dieses Projekts ist angenommen — Monteure können dafür
+                keinen Rapport erfassen.
+              </div>
+            )}
             {quotes.length > 1 && (
               <select
                 className="admin-form-select"
@@ -521,9 +577,32 @@ export function ReportCreateForm({
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>
           Material aus Offerte
-          <InfoHint text="Optional. Übernimmt die Materialpositionen der gewählten Offerte als bearbeitbare Fixpreis-Zeilen (Bezeichnung, Menge, Einheit, Preis) und verrechnet sie 1:1. Produkte, Zuschläge und Montage werden NICHT übernommen — die rechnet der Rapport bereits automatisch. Eventualpositionen werden übersprungen. Freie Zeilen lassen sich auch ohne Offerte hinzufügen." />
+          <InfoHint text="Optional. Übernimmt Materialpositionen der Offerte(n) als bearbeitbare Fixpreis-Zeilen (Bezeichnung, Menge, Einheit, Preis) und verrechnet sie 1:1. Produkte, Zuschläge und Montage werden NICHT übernommen — die rechnet der Rapport bereits automatisch. Eventualpositionen werden übersprungen. Bei mehreren angenommenen Offerten übernimmt «Material aller angenommenen Offerten übernehmen» alle auf einmal; gezielt pro Offerte geht weiterhin über die Auswahl oben. Freie Zeilen lassen sich auch ohne Offerte hinzufügen." />
         </legend>
+        {acceptedCount > 1 && (
+          <div style={{
+            marginBottom: 12, fontSize: 13, padding: '8px 12px', borderRadius: 6,
+            background: 'var(--primary-soft)', color: 'var(--text)',
+          }}>
+            Dieses Projekt hat {acceptedCount} angenommene Offerten. «Material aller
+            angenommenen Offerten übernehmen» holt die Positionen <strong>aller auf
+            einmal</strong> — wie der Monteur-Rapport. Einzelne Offerten lassen sich
+            weiterhin oben wählen und gezielt übernehmen; schon übernommene Zeilen
+            bleiben dabei erhalten.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          {acceptedCount > 1 && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-primary admin-btn-sm"
+              disabled={loadingQuoteMaterial}
+              onClick={importAcceptedQuotesMaterial}
+              title="Materialpositionen aller angenommenen Offerten übernehmen"
+            >
+              {loadingQuoteMaterial ? 'Wird geladen…' : 'Material aller angenommenen Offerten übernehmen'}
+            </button>
+          )}
           <button
             type="button"
             className="admin-btn admin-btn-secondary admin-btn-sm"
@@ -545,6 +624,15 @@ export function ReportCreateForm({
         ) : (
           fixedRows.map((row, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {row.fromQuoteId != null && (
+                <span
+                  className="admin-badge admin-badge-open"
+                  style={{ fontFamily: 'var(--mono)', whiteSpace: 'nowrap' }}
+                  title="Aus dieser Offerte übernommen"
+                >
+                  {quoteNumberById.get(row.fromQuoteId) ?? 'Offerte'}
+                </span>
+              )}
               <input
                 className="admin-form-input"
                 style={{ flex: 3, minWidth: 160 }}

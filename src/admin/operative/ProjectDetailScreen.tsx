@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiFormFetch } from '../../api/client'
+import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
@@ -7,6 +7,7 @@ import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, 
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
+import { sammelrechnungHint } from './InvoicesScreen'
 import { ReportCreateForm } from './ReportCreateForm'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { WORK_TYPES } from '../../api/workTypes'
@@ -429,11 +430,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     const useQuote = useAcceptedQuote || !hasBillableReport(reports)
     setGeneratingInvoice(true)
     try {
-      await apiFetch('/pwa/admin/invoices/generate', {
+      const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
         body: JSON.stringify({ project_name: project.name, use_quote: useQuote }),
-      })
-      showToast('Rechnung erstellt')
+      }) as { quote_numbers?: string[] } | null
+      showToast('Rechnung erstellt' + sammelrechnungHint(res?.quote_numbers))
       await reloadInvoices()
       await reloadReports()
     } catch (err) {
@@ -1219,7 +1220,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {!isNew && activeTab === 'reports' && (
-        <ReportsTab reports={reports} onShowCreateForm={() => setShowReportForm(true)} />
+        <ReportsTab
+          reports={reports}
+          onShowCreateForm={() => setShowReportForm(true)}
+          paperRapportUrl={project ? apiUrl(`/pwa/admin/projects/${project.id}/paper-rapport.pdf`) : undefined}
+        />
       )}
 
       {!isNew && activeTab === 'invoices' && (

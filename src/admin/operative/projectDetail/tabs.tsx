@@ -700,9 +700,12 @@ interface ReportsTabProps {
   // Optional: öffnet das Popup zum manuellen Erfassen (spiegelbildlich zu QuotesTab).
   // Fehlt der Prop, wird der Button nicht gezeigt (Abwärtskompatibilität).
   onShowCreateForm?: () => void
+  // Optional: Link auf das Blanko-Rapportformular (PDF) für den Papier-Fallback.
+  // Reiner Download wie die PDF-Links der Rapport-Zeilen — kein State, kein Fetch.
+  paperRapportUrl?: string
 }
 
-export function ReportsTab({ reports, onShowCreateForm }: ReportsTabProps) {
+export function ReportsTab({ reports, onShowCreateForm, paperRapportUrl }: ReportsTabProps) {
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -711,6 +714,17 @@ export function ReportsTab({ reports, onShowCreateForm }: ReportsTabProps) {
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>
             {reports.length === 0 ? 'keine' : `${reports.length} Rapport${reports.length === 1 ? '' : 'e'}`}
           </span>
+          {paperRapportUrl && (
+            <a
+              href={paperRapportUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="admin-btn admin-btn-sm admin-btn-secondary"
+              title="Blanko-Formular drucken, auf der Baustelle von Hand ausfüllen, danach über «+ Neuer Rapport» erfassen"
+            >
+              Papier-Rapport (PDF)
+            </a>
+          )}
           {onShowCreateForm && (
             <button
               type="button"

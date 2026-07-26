@@ -514,4 +514,177 @@ describe('ReportCreateForm', () => {
     expect(postFired()).toBe(false)
     expect(screen.getByText('Fixposition: bitte eine Bezeichnung erfassen.')).toBeInTheDocument()
   })
+
+  // ── Mehrfach angenommene Offerten: additive Übernahme pro Offerte ──────────
+  // Kunde nimmt Offerte 1 UND Offerte 2 an ('mehrfach'-Gruppe). Früher warf der
+  // zweite Import den ersten weg (fromQuote: boolean) — jetzt ersetzt ein Import
+  // nur die Zeilen DERSELBEN Offerte (fromQuoteId).
+
+  const QUOTE_A = makeQuote({ id: 1, quote_number: 'OFF-2026-001', created_at: '2026-07-10T10:00:00Z' })
+  const QUOTE_B = makeQuote({ id: 2, quote_number: 'OFF-2026-002', created_at: '2026-07-20T10:00:00Z' })
+
+  const DETAIL_A = {
+    id: 1,
+    quote_number: 'OFF-2026-001',
+    material_items: [{ description: 'Storen Typ X', quantity: 2, unit: 'Stk', unit_price: 450, total_price: 900 }],
+  }
+  const DETAIL_B = {
+    id: 2,
+    quote_number: 'OFF-2026-002',
+    material_items: [{ description: 'Markise Typ Y', quantity: 1, unit: 'Stk', unit_price: 800, total_price: 800 }],
+  }
+
+  // Offert-Detail nach ID routen (statt für jede ID dasselbe Fixture zu liefern).
+  function routeFetchById() {
+    mockFetch.mockImplementation((path, options) => {
+      if (options?.method === 'POST') return Promise.resolve({ report_id: 42 })
+      if (path === '/pwa/admin/quotes/1') return Promise.resolve(DETAIL_A)
+      if (path === '/pwa/admin/quotes/2') return Promise.resolve(DETAIL_B)
+      return Promise.resolve([])
+    })
+  }
+
+  it('sammelt das Material zweier Offerten statt es zu ersetzen', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    const { onDone } = renderForm([QUOTE_B, QUOTE_A]) // Default: neueste akzeptierte = B
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '6')
+
+    // Offerte B (Default) übernehmen …
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    await waitFor(() => expect(screen.getByLabelText('Fixposition Bezeichnung 1')).toHaveValue('Markise Typ Y'))
+
+    // … dann auf Offerte A wechseln und ebenfalls übernehmen.
+    await user.selectOptions(screen.getByLabelText('Offerte wählen'), '1')
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(2))
+
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+
+    // BEIDE Material-Sets landen auf dem Rapport.
+    expect(lastPostBody().fixed_materials).toEqual([
+      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800 },
+      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450 },
+    ])
+  })
+
+  it('ersetzt beim erneuten Import nur die Zeilen derselben Offerte', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    renderForm([QUOTE_B, QUOTE_A])
+
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(1))
+    await user.selectOptions(screen.getByLabelText('Offerte wählen'), '1')
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(2))
+
+    // Nochmals Offerte A importieren: A wird ersetzt, B bleibt → weiterhin 2 Zeilen.
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(2))
+    expect(screen.getByLabelText('Fixposition Bezeichnung 1')).toHaveValue('Markise Typ Y')
+    expect(screen.getByLabelText('Fixposition Bezeichnung 2')).toHaveValue('Storen Typ X')
+  })
+
+  it('kennzeichnet übernommene Zeilen mit der Offertennummer', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    renderForm([QUOTE_B, QUOTE_A])
+
+    await user.click(screen.getByRole('button', { name: 'Material aus Offerte übernehmen' }))
+    // Die Offertennummer steht auch im Kopf der Sektion — hier gezielt das Zeilen-Badge.
+    await waitFor(() => expect(screen.getAllByTitle('Aus dieser Offerte übernommen')).toHaveLength(1))
+    expect(screen.getByTitle('Aus dieser Offerte übernommen')).toHaveTextContent('OFF-2026-002')
+
+    // Von Hand erfasste Zeilen tragen kein Badge.
+    await user.click(screen.getByRole('button', { name: '+ Position' }))
+    expect(screen.getAllByTitle('Aus dieser Offerte übernommen')).toHaveLength(1)
+  })
+
+  it('weist auf die Übernahme pro Offerte hin, wenn mehrere angenommen sind', () => {
+    renderForm([QUOTE_B, QUOTE_A])
+    expect(screen.getByText(/2 angenommene Offerten/)).toBeInTheDocument()
+  })
+
+  it('zeigt den Mehrfach-Hinweis nicht bei nur einer angenommenen Offerte', () => {
+    renderForm([QUOTE_A, makeQuote({ id: 3, quote_number: 'OFF-2026-003', status: 'gesendet' })])
+    expect(screen.queryByText(/angenommene Offerten/)).not.toBeInTheDocument()
+  })
+
+  // ── Sammel-Import: alle angenommenen Offerten in einem Schritt ─────────────
+  // Gegenstück zur Vereinigung im Monteur-Chat-Rapport (merge_accepted_quotes):
+  // ein Klick holt das Material ALLER angenommenen Offerten, Reihenfolge
+  // variant_rank/id («Offerte 1» vor «Offerte 2»).
+
+  it('übernimmt das Material aller angenommenen Offerten mit einem Klick', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    const { onDone } = renderForm([QUOTE_B, QUOTE_A])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '6')
+
+    await user.click(screen.getByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(2))
+    // Reihenfolge wie die Vereinigung: Offerte A (id 1) vor Offerte B (id 2).
+    expect(screen.getByLabelText('Fixposition Bezeichnung 1')).toHaveValue('Storen Typ X')
+    expect(screen.getByLabelText('Fixposition Bezeichnung 2')).toHaveValue('Markise Typ Y')
+
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    expect(lastPostBody().fixed_materials).toEqual([
+      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450 },
+      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800 },
+    ])
+  })
+
+  it('Sammel-Import ist idempotent und behält Handzeilen', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    renderForm([QUOTE_B, QUOTE_A])
+
+    await user.click(screen.getByRole('button', { name: '+ Position' }))
+    await user.type(screen.getByLabelText('Fixposition Bezeichnung 1'), 'Handposition')
+
+    await user.click(screen.getByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(3))
+    // Nochmals: ersetzt nur die Offerten-Zeilen, die Handzeile bleibt → weiterhin 3.
+    await user.click(screen.getByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(3))
+    expect(screen.getByLabelText('Fixposition Bezeichnung 1')).toHaveValue('Handposition')
+  })
+
+  it('setzt den Beschrieb-Vorschlag auf alle angenommenen Offertennummern', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    renderForm([QUOTE_B, QUOTE_A])
+
+    await user.click(screen.getByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }))
+    await waitFor(() => expect(screen.getByLabelText(/Arbeitsbeschrieb/)).toHaveValue(
+      'Arbeiten gemäss Offerten OFF-2026-001 + OFF-2026-002',
+    ))
+  })
+
+  it('überschreibt einen von Hand geänderten Beschrieb nicht', async () => {
+    const user = userEvent.setup()
+    routeFetchById()
+    renderForm([QUOTE_B, QUOTE_A])
+
+    const desc = screen.getByLabelText(/Arbeitsbeschrieb/)
+    await user.clear(desc)
+    await user.type(desc, 'Eigener Text')
+    await user.click(screen.getByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }))
+    await waitFor(() => expect(screen.getAllByLabelText(/Fixposition Bezeichnung/)).toHaveLength(2))
+    expect(desc).toHaveValue('Eigener Text')
+  })
+
+  it('zeigt den Sammel-Knopf nur bei mehreren angenommenen Offerten', () => {
+    renderForm([QUOTE_A])
+    expect(
+      screen.queryByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }),
+    ).not.toBeInTheDocument()
+  })
 })

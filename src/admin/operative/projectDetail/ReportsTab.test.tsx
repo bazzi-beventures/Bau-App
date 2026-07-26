@@ -60,3 +60,17 @@ describe('ReportsTab — Erstellen-Button', () => {
     expect(screen.queryByRole('button', { name: '+ Neuer Rapport' })).not.toBeInTheDocument()
   })
 })
+
+describe('ReportsTab — Papier-Rapport', () => {
+  it('verlinkt das Blanko-PDF, wenn paperRapportUrl gesetzt ist', () => {
+    render(<ReportsTab reports={[]} paperRapportUrl="https://api.test/pwa/admin/projects/p-1/paper-rapport.pdf" />)
+    const link = screen.getByRole('link', { name: 'Papier-Rapport (PDF)' })
+    expect(link).toHaveAttribute('href', 'https://api.test/pwa/admin/projects/p-1/paper-rapport.pdf')
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('zeigt den Link nicht ohne paperRapportUrl-Prop', () => {
+    render(<ReportsTab reports={[]} onShowCreateForm={vi.fn()} />)
+    expect(screen.queryByRole('link', { name: 'Papier-Rapport (PDF)' })).not.toBeInTheDocument()
+  })
+})

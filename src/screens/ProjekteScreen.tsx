@@ -91,6 +91,10 @@ interface Project {
   kontakte: Kontakt[]
   bemerkung: string | null
   geruestfach: number | null
+  // Vom Backend gesetzt (Feature rapport_offerten_annahme_pflicht): das Projekt hat
+  // mindestens eine nicht-archivierte Offerte, aber keine ist angenommen. Der
+  // Rapport-Knopf ist dann gesperrt. Fehlt das Feld (ältere API), gilt "nicht gesperrt".
+  rapport_blocked?: boolean
 }
 
 // Kategorien, die ein Mitarbeiter im Feld vergeben darf. Teilmenge der
@@ -452,26 +456,31 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             </div>
           )}
 
-          {/* Rapport erstellen */}
+          {/* Rapport erstellen — gesperrt, solange keine Offerte des Projekts
+              angenommen ist (Feature rapport_offerten_annahme_pflicht). Die
+              eigentliche Durchsetzung liegt im Backend: der Rapport-Chat lehnt das
+              Projekt ebenfalls ab, auch wenn es frei im Gespräch gewählt wird. */}
           <button
             type="button"
             onClick={() => onStartRapport(selected.name)}
+            disabled={!!selected.rapport_blocked}
+            title={selected.rapport_blocked ? 'Offerte noch nicht angenommen' : undefined}
             style={{
               width: '100%',
               padding: '14px 16px',
-              marginBottom: 12,
+              marginBottom: selected.rapport_blocked ? 6 : 12,
               borderRadius: 12,
               border: 'none',
-              background: 'var(--accent-blue)',
-              color: '#fff',
+              background: selected.rapport_blocked ? 'var(--surface-2, #d4d4d8)' : 'var(--accent-blue)',
+              color: selected.rapport_blocked ? 'var(--text-muted, #71717a)' : '#fff',
               fontSize: 15,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: selected.rapport_blocked ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              boxShadow: selected.rapport_blocked ? 'none' : '0 2px 8px rgba(0,0,0,0.12)',
             }}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
@@ -482,6 +491,12 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             </svg>
             Rapport erstellen
           </button>
+          {selected.rapport_blocked && (
+            <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-muted, #71717a)', textAlign: 'center' }}>
+              Die Offerte für dieses Projekt ist noch nicht angenommen. Der Rapport ist
+              möglich, sobald der Kunde oder der Projektleiter sie angenommen hat.
+            </div>
+          )}
 
           {/* Projektinfos */}
           <div className="projekte-detail-card">

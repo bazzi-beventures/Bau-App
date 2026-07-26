@@ -35,6 +35,15 @@ interface Project {
 
 const ALL_STATUSES = ['ausstehend', 'offen', 'gesendet', 'bezahlt', 'archiviert', 'inaktiv']
 
+// Sammelrechnung: hat der Kunde mehrere Offerten eines Projekts angenommen
+// ('mehrfach'-Gruppe), deckt EINE Rechnung alle noch unverrechneten ab. Das ist
+// nicht offensichtlich — deshalb im Erfolgs-Toast benennen, welche das waren.
+// Bei genau einer Offerte (Normalfall) bleibt der Text unverändert.
+export function sammelrechnungHint(quoteNumbers?: string[]): string {
+  if (!quoteNumbers || quoteNumbers.length < 2) return ''
+  return ` — Sammelrechnung über ${quoteNumbers.length} Offerten (${quoteNumbers.join(', ')})`
+}
+
 export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,8 +123,12 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
         body: JSON.stringify({ project_name: genProject, use_quote: genUseQuote }),
-      }) as { invoice_number: string; total_amount: number }
-      showToast(`Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`, 'success')
+      }) as { invoice_number: string; total_amount: number; quote_numbers?: string[] }
+      showToast(
+        `Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`
+        + sammelrechnungHint(res.quote_numbers),
+        'success',
+      )
       setShowGenerate(false)
       load()
       onBadgeChange?.()
