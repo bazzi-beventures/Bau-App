@@ -31,6 +31,11 @@ export interface RapportDraftState {
   pendingQuoteQuestion: boolean
   pendingSignReportId: number | null
   downloadReportId: number | null
+  // Wurde der gespeicherte Rapport vom Kunden unterschrieben (statt übersprungen)?
+  // Steuert, ob der Monteur ihn im Abschluss-Schritt noch selbst löschen darf —
+  // nach der Unterschrift ist er abgenommen. Fehlt im Draft (ältere Version),
+  // gilt "nicht unterschrieben"; der Server prüft es ohnehin selbst nach.
+  reportSigned?: boolean
 }
 
 interface StoredDraft extends RapportDraftState {

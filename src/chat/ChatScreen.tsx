@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, ChatResponse, DisambiguationOption, SummaryItem } from '../api/chat'
+import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, deleteOwnRapport, ChatResponse, DisambiguationOption, SummaryItem } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { UserInfo } from '../api/auth'
 import { getFeature, isFeatureEnabled, KleinmaterialPromptConfig } from '../api/modules'
@@ -83,6 +83,10 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(() => draft?.pendingSignReportId ?? null)
   const [downloadReportId, setDownloadReportId] = useState<number | null>(() => draft?.downloadReportId ?? null)
   const [pdfDownloading, setPdfDownloading] = useState(false)
+  // Unterschrieben (statt übersprungen)? Danach ist der Rapport abgenommen und
+  // der Monteur kann ihn nicht mehr selbst löschen — der Server sperrt es ebenfalls.
+  const [reportSigned, setReportSigned] = useState(() => draft?.reportSigned ?? false)
+  const [deletingReport, setDeletingReport] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Rapport-Zwischenstand persistieren, sobald sich relevanter State ändert.
@@ -91,11 +95,11 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     saveDraft(user.authorized_user_id, {
       messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
       summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
-      pendingSignReportId, downloadReportId,
+      pendingSignReportId, downloadReportId, reportSigned,
     }, Date.now())
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
       collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
-      pendingSignReportId, downloadReportId])
+      pendingSignReportId, downloadReportId, reportSigned])
 
   // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
   // zurücksetzen — das löscht zugleich den Draft, weil der Zustand wieder leer ist.
@@ -111,6 +115,35 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     setPendingQuoteQuestion(false)
     setPendingSignReportId(null)
     setDownloadReportId(null)
+    setReportSigned(false)
+  }
+
+  // Selbstkorrektur: falscher Auftrag erwischt oder versehentlich doppelt erfasst.
+  // Löscht den eben gespeicherten Rapport samt Stunden und Material und stellt den
+  // Chat auf einen frischen Stand — der Monteur kann direkt neu erfassen.
+  async function handleDeleteReport(reportId: number) {
+    if (!window.confirm('Rapport wirklich löschen? Erfasste Stunden und Material werden mitgelöscht.')) return
+    setDeletingReport(true)
+    try {
+      await deleteOwnRapport(reportId)
+      resetConversation()
+      addMessage({
+        role: 'bot',
+        text: 'Rapport gelöscht. Du kannst ihn jetzt neu erfassen.',
+        timestamp: now(),
+      })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      addMessage({
+        role: 'bot',
+        text: err instanceof ApiError
+          ? `Rapport konnte nicht gelöscht werden: ${err.message}`
+          : 'Rapport konnte nicht gelöscht werden. Bitte melde dich beim Projektleiter.',
+        timestamp: now(),
+      })
+    } finally {
+      setDeletingReport(false)
+    }
   }
 
   useEffect(() => {
@@ -151,6 +184,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingDisambiguation(false)
     } else if (res.action_taken === 'report_saved' && res.report_id) {
       setPendingSignReportId(Number(res.report_id))
+      setReportSigned(false)
       setPendingConfirm(false)
       setPendingDisambiguation(false)
       setPendingQuoteQuestion(false)
@@ -471,14 +505,27 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
 
         {/* Inline signature pad — shown after report is saved */}
         {pendingSignReportId !== null && (
-          <SignaturePad
-            reportId={pendingSignReportId}
-            onDone={() => {
-              setDownloadReportId(pendingSignReportId)
-              setPendingSignReportId(null)
-            }}
-            onLoggedOut={onLoggedOut}
-          />
+          <>
+            <SignaturePad
+              reportId={pendingSignReportId}
+              onDone={(signed) => {
+                setReportSigned(signed)
+                setDownloadReportId(pendingSignReportId)
+                setPendingSignReportId(null)
+              }}
+              onLoggedOut={onLoggedOut}
+            />
+            {/* Selbstkorrektur direkt nach dem Speichern — solange nicht unterschrieben */}
+            <div className="confirm-buttons">
+              <button
+                className="confirm-btn confirm-btn-no"
+                disabled={deletingReport}
+                onClick={() => void handleDeleteReport(pendingSignReportId)}
+              >
+                {deletingReport ? 'Wird gelöscht…' : '🗑 Rapport löschen'}
+              </button>
+            </div>
+          </>
         )}
 
         {/* PDF Download button — shown after signature is done or skipped */}
@@ -508,6 +555,20 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
             </button>
             <button className="confirm-btn confirm-btn-no" onClick={resetConversation}>
               Schliessen
+            </button>
+          </div>
+        )}
+
+        {/* Löschen bleibt auch nach übersprungener Unterschrift möglich — nach einer
+            echten Kundenunterschrift ist der Rapport abgenommen (Server sperrt es). */}
+        {downloadReportId !== null && !reportSigned && (
+          <div className="confirm-buttons">
+            <button
+              className="confirm-btn confirm-btn-no"
+              disabled={deletingReport}
+              onClick={() => void handleDeleteReport(downloadReportId)}
+            >
+              {deletingReport ? 'Wird gelöscht…' : '🗑 Rapport löschen'}
             </button>
           </div>
         )}

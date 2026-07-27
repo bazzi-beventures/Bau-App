@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError, apiFormFetch, apiUrl, isNetworkError } from '../api/client'
+import { deleteOwnRapport, fetchOwnProjectReports, OwnProjectReport } from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
@@ -95,17 +96,23 @@ interface Project {
   // mindestens eine nicht-archivierte Offerte, aber keine ist angenommen. Der
   // Rapport-Knopf ist dann gesperrt. Fehlt das Feld (ältere API), gilt "nicht gesperrt".
   rapport_blocked?: boolean
+  // Server-seitig aus projektleiter_id aufgelöst — wen der Monteur bei Rückfragen
+  // anruft. Null/fehlend, wenn dem Projekt kein Projektleiter zugewiesen ist.
+  projektleiter_name?: string | null
 }
 
 // Kategorien, die ein Mitarbeiter im Feld vergeben darf. Teilmenge der
 // Web-View-Kategorien (siehe admin/operative/projectDetail/tabs.tsx) plus
 // "lieferschein". Bestellungen/Auftragsbestätigung bleiben dem Admin vorbehalten.
-type FileCategory = 'fotos' | 'masse' | 'lieferschein' | 'sonstiges'
+type FileCategory = 'fotos' | 'masse' | 'lieferschein' | 'rapport' | 'sonstiges'
 
 const FILE_CATEGORIES: { key: FileCategory; label: string }[] = [
   { key: 'fotos', label: 'Fotos' },
   { key: 'masse', label: 'Masse' },
   { key: 'lieferschein', label: 'Lieferschein' },
+  // Ausgefülltes Papier-Rapport-Blatt direkt auf der Baustelle abfotografieren,
+  // statt es zurückzutragen. Landet im Rapporte-Tab des Projektleiters.
+  { key: 'rapport', label: 'Rapport' },
   { key: 'sonstiges', label: 'Sonstiges' },
 ]
 
@@ -113,6 +120,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   fotos: 'Fotos',
   masse: 'Masse',
   lieferschein: 'Lieferschein',
+  rapport: 'Rapport',
   sonstiges: 'Sonstiges',
   bestellungen: 'Bestellungen',
   auftragsbestaetigung: 'Auftragsbestätigung',
@@ -188,6 +196,10 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   const [renameValue, setRenameValue] = useState('')
   const [comments, setComments] = useState<ProjectComment[]>([])
   const [tasks, setTasks] = useState<ProjectTask[]>([])
+  // Eigene Rapporte des Projekts — für die Selbstkorrektur, wenn der Monteur den
+  // Fehler erst später merkt (im Chat gibt es den Knopf direkt nach dem Speichern).
+  const [ownReports, setOwnReports] = useState<OwnProjectReport[]>([])
+  const [deletingReportId, setDeletingReportId] = useState<number | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<FileCategory>('fotos')
@@ -216,15 +228,18 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     setFiles([])
     setComments([])
     setTasks([])
+    setOwnReports([])
     setLoadingDetail(true)
     Promise.all([
       apiFetch(`/pwa/projects/${selected.id}/files`).catch(() => []) as Promise<ProjectFile[]>,
       apiFetch(`/pwa/projects/${selected.id}/comments`).catch(() => []) as Promise<ProjectComment[]>,
       apiFetch(`/pwa/projects/${selected.id}/tasks`).catch(() => []) as Promise<ProjectTask[]>,
-    ]).then(([f, c, t]) => {
+      fetchOwnProjectReports(selected.id).catch(() => [] as OwnProjectReport[]),
+    ]).then(([f, c, t, r]) => {
       setFiles(f)
       setComments(c)
       setTasks(t)
+      setOwnReports(r)
     }).finally(() => setLoadingDetail(false))
   }, [selected?.id])
 
@@ -338,6 +353,27 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
       // silently ignore rename errors in user view
     } finally {
       setRenamingFileId(null)
+    }
+  }
+
+  // Eigenen Fehleintrag wegräumen. Der Server lässt nur eigene, unsignierte und
+  // unverrechnete Rapporte zu — hier wird der Knopf entsprechend nur dort gezeigt.
+  async function handleDeleteOwnReport(report: OwnProjectReport) {
+    if (!window.confirm(
+      `Rapport vom ${formatDate(report.report_date)} wirklich löschen? `
+      + 'Erfasste Stunden und Material werden mitgelöscht.'
+    )) return
+    setDeletingReportId(report.id)
+    try {
+      await deleteOwnRapport(report.id)
+      setOwnReports(prev => prev.filter(r => r.id !== report.id))
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      window.alert(err instanceof Error && err.message
+        ? err.message
+        : 'Rapport konnte nicht gelöscht werden. Bitte melde dich beim Projektleiter.')
+    } finally {
+      setDeletingReportId(null)
     }
   }
 
@@ -498,6 +534,58 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             </div>
           )}
 
+          {/* Meine Rapporte — Selbstkorrektur, wenn der Fehler erst später auffällt.
+              Nur die eigenen Einträge; löschbar solange ohne Unterschrift und ohne
+              Rechnung (der Server prüft dieselben Regeln nochmals). */}
+          {!loadingDetail && ownReports.length > 0 && (
+            <div className="projekte-detail-card">
+              <div className="projekte-detail-title">Meine Rapporte</div>
+              {ownReports.map(r => {
+                const billed = !!r.invoice_id
+                const signed = !!r.signature_timestamp
+                const canDelete = !billed && !signed
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: '8px 0', borderTop: '1px solid var(--border, #e5e7eb)',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {formatDate(r.report_date)}
+                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: 'var(--text-muted, #71717a)' }}>
+                          {billed ? 'abgerechnet' : signed ? 'unterschrieben' : 'ohne Unterschrift'}
+                        </span>
+                      </div>
+                      {r.description && (
+                        <div style={{ fontSize: 13, color: 'var(--text-muted, #71717a)', whiteSpace: 'pre-wrap' }}>
+                          {r.description}
+                        </div>
+                      )}
+                    </div>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteOwnReport(r)}
+                        disabled={deletingReportId === r.id}
+                        style={{
+                          flexShrink: 0, padding: '6px 10px', borderRadius: 8,
+                          border: '1px solid #e53e3e', background: 'transparent',
+                          color: '#e53e3e', fontSize: 13, fontWeight: 600,
+                          cursor: deletingReportId === r.id ? 'default' : 'pointer',
+                        }}
+                      >
+                        {deletingReportId === r.id ? '…' : 'Löschen'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Projektinfos */}
           <div className="projekte-detail-card">
             <div className="projekte-detail-title">Projektinfos</div>
@@ -519,7 +607,14 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 <span className="projekte-detail-value">{selected.object_address}</span>
               </div>
             )}
-            {!selected.customer && !selected.object_name && !selected.object_address && (
+            {selected.projektleiter_name && (
+              <div className="projekte-detail-row">
+                <span className="projekte-detail-label">Projektleiter</span>
+                <span className="projekte-detail-value">{selected.projektleiter_name}</span>
+              </div>
+            )}
+            {!selected.customer && !selected.object_name && !selected.object_address
+              && !selected.projektleiter_name && (
               <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
             )}
           </div>

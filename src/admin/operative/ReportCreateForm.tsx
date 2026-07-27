@@ -23,6 +23,9 @@ import type { QuoteDetail } from './QuotesScreen'
 export interface ReportFormProject {
   id: string
   name: string
+  // Nur eine uuid-Spalte ohne FK — der Name wird gegen die staff-Prop aufgelöst,
+  // die das Formular ohnehin schon bekommt (kein zusätzlicher Fetch).
+  projektleiter_id?: string | null
 }
 
 export interface ReportFormStaff {
@@ -101,6 +104,10 @@ export function ReportCreateForm({
   onCancel: () => void
 }) {
   const defaultQuote = useMemo(() => pickDefaultQuote(quotes), [quotes])
+  const projektleiterName = useMemo(
+    () => staff.find(s => s.id === project.projektleiter_id)?.name ?? null,
+    [staff, project.projektleiter_id],
+  )
 
   const [reportDate, setReportDate] = useState(todayISO())
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(defaultQuote?.id ?? null)
@@ -422,6 +429,7 @@ export function ReportCreateForm({
       </div>
       <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--muted)' }}>
         Projekt: <strong>{project.name}</strong>
+        {projektleiterName && <> · Projektleiter: <strong>{projektleiterName}</strong></>}
       </p>
 
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}

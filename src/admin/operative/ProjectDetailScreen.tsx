@@ -380,6 +380,30 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     } catch { /* ignore */ }
   }
 
+  // Rapport löschen — z.B. ein doppelt erfasster Rapport. Ohne das landen dessen
+  // Stunden und Material zusätzlich auf der nächsten Rechnung (billable_report_ids
+  // filtert nur bereits Verrechnetes, keine Dubletten). Abgerechnete Rapporte sperrt
+  // der Server mit 409; die Meldung geht dann als Toast raus.
+  async function handleDeleteReport(reportId: number) {
+    if (!project) return
+    try {
+      const res = await apiFetch(`/pwa/admin/projects/${project.id}/reports/${reportId}`, {
+        method: 'DELETE',
+      }) as { stock_restored?: number; warnings?: string[] }
+      await reloadReports()
+      if (res?.warnings?.length) {
+        showToast(`Rapport gelöscht — Lager-Rückbuchung unvollständig: ${res.warnings.join(', ')}`)
+      } else {
+        showToast(res?.stock_restored
+          ? `Rapport gelöscht (${res.stock_restored} Materialposition${res.stock_restored === 1 ? '' : 'en'} ins Lager zurückgebucht)`
+          : 'Rapport gelöscht')
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Rapport konnte nicht gelöscht werden')
+      throw err
+    }
+  }
+
   async function handleEditQuote(quoteId: number) {
     // Detail (alle Positionen) frisch laden — die ProjectQuote-Liste trägt nur
     // die Kopfdaten, das Bearbeiten-Formular braucht die vollständige Offerte.
@@ -1223,7 +1247,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <ReportsTab
           reports={reports}
           onShowCreateForm={() => setShowReportForm(true)}
+          onDelete={handleDeleteReport}
           paperRapportUrl={project ? apiUrl(`/pwa/admin/projects/${project.id}/paper-rapport.pdf`) : undefined}
+          files={files}
+          uploading={uploading}
+          uploadingCategory={uploadCategory}
+          onUploadFile={uploadFilesToCategory}
+          onDeleteFile={setConfirmDeleteFileId}
+          onRenameFile={handleRenameFile}
         />
       )}
 

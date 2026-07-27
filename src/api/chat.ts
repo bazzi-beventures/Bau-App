@@ -131,6 +131,29 @@ export async function downloadRapportPdf(reportId: number): Promise<{ blob: Blob
   return apiBlobFetch(`/pwa/chat/report/${reportId}/pdf`)
 }
 
+// Selbstkorrektur: eigenen Rapport löschen (falscher Auftrag, doppelt erfasst).
+// Server erlaubt nur eigene, unsignierte und unverrechnete Rapporte — Stunden,
+// Material und Fotos gehen mit, das Material wird ins Lager zurückgebucht.
+export async function deleteOwnRapport(reportId: number): Promise<void> {
+  await apiFetch(`/pwa/chat/report/${reportId}`, { method: 'DELETE' })
+}
+
+// Eigene Rapporte eines Projekts (Mitarbeiter-PWA, Projekt-Detail).
+export interface OwnProjectReport {
+  id: number
+  report_date: string
+  description: string | null
+  created_by: string | null
+  signature_timestamp: string | null
+  invoice_id: number | null
+  created_at: string
+  source: string | null
+}
+
+export async function fetchOwnProjectReports(projectId: string): Promise<OwnProjectReport[]> {
+  return apiFetch(`/pwa/projects/${projectId}/my-reports`) as Promise<OwnProjectReport[]>
+}
+
 // ─── Häufig benutzte Ersatzteile (Rapport-Abschluss) ─────────
 
 export interface FrequentMaterialOption {

@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 14
+export const APP_DATA_VERSION = 15
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -213,7 +213,20 @@ const migration_13_to_14: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14]
+// v14 → v15: RapportDraft bekommt `reportSigned` (wurde der gespeicherte Rapport
+// unterschrieben oder die Unterschrift übersprungen?). Steuert den «Rapport löschen»-
+// Knopf im Abschluss-Schritt. Additiv — loadDraft liest das Feld mit Fallback
+// (fehlend = nicht unterschrieben), und der Server prüft das Recht ohnehin selbst.
+// No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_14_to_15: Migration = {
+  from: 14,
+  to: 15,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

@@ -14,6 +14,7 @@ export type ProjectFileCategory =
   | 'lieferschein'
   | 'anhang'
   | 'prospekt' // Altbestand: frühere Kategorie der Offerten-Anhänge, wird unter 'anhang' angezeigt
+  | 'rapport'  // eingescanntes Papier-Blatt oder Rapport aus einem Fremdsystem (z.B. Sorba)
 
 export interface ProjectFile {
   id: string
@@ -40,12 +41,19 @@ const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'lieferschein', title: 'Lieferschein' },
 ]
 
+// Hochgeladene Rapporte, die nicht im System erfasst wurden: das ausgefüllte
+// Papier-Blatt und Rapporte aus Fremdsystemen (z.B. Sorba). Steht im Rapporte-Tab
+// unter der Rapport-Liste, nicht im Dokumente-Tab.
+const REPORT_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
+  { key: 'rapport', title: 'Hochgeladene Rapporte (Papier / Fremdsystem)' },
+]
+
 // Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der
 // "Sonstiges"-Sektion darf NUR echte Altlasten (null / unbekannte Kategorie)
 // auffangen – sonst würden Lieferanten-Dateien (z.B. auftragsbestaetigung)
 // zusätzlich unter "Sonstiges" doppelt erscheinen.
 const ALL_CATEGORY_KEYS = new Set<ProjectFileCategory>(
-  [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS].map(s => s.key),
+  [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS, ...REPORT_DOC_SECTIONS].map(s => s.key),
 )
 // Altbestand: wird in der Anhänge-Sektion angezeigt und darf nicht zusätzlich
 // unter "Sonstiges" auftauchen.
@@ -171,6 +179,7 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   lieferschein: 'Lieferschein',
   anhang: 'Anhang',
   prospekt: 'Prospekt',
+  rapport: 'Rapport',
 }
 
 interface FileSectionsProps {
@@ -703,9 +712,44 @@ interface ReportsTabProps {
   // Optional: Link auf das Blanko-Rapportformular (PDF) für den Papier-Fallback.
   // Reiner Download wie die PDF-Links der Rapport-Zeilen — kein State, kein Fetch.
   paperRapportUrl?: string
+  // Optional: löscht einen Rapport (inkl. Stunden/Material). Fehlt der Prop, wird
+  // kein Löschen-Knopf gezeigt (Abwärtskompatibilität).
+  onDelete?: (reportId: number) => Promise<void>
+  // Optional: Datei-Sektion für hochgeladene Rapporte (Papier-Blatt, Fremdsystem).
+  // Nur gezeigt, wenn die Upload-Props gesetzt sind — gleiche Handler wie der
+  // Dokumente-Tab, die Sektion bestimmt die Kategorie ('rapport') implizit.
+  files?: ProjectFile[]
+  uploading?: boolean
+  uploadingCategory?: ProjectFileCategory | null
+  onUploadFile?: (category: ProjectFileCategory, files: File[]) => void
+  onDeleteFile?: (fileId: string) => void
+  onRenameFile?: (fileId: string, filename: string) => Promise<void>
 }
 
-export function ReportsTab({ reports, onShowCreateForm, paperRapportUrl }: ReportsTabProps) {
+export function ReportsTab({
+  reports, onShowCreateForm, paperRapportUrl, onDelete,
+  files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
+}: ReportsTabProps) {
+  const [confirmDelete, setConfirmDelete] = useState<ProjectReport | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Abgerechnete Rapporte bleiben tabu: ihre Positionen stehen auf einer Rechnung.
+  // Alles andere darf der Projektleiter wegräumen — auch unterschriebene Rapporte,
+  // dann aber mit deutlicherem Hinweis. Server prüft dieselbe Regel nochmals.
+  async function handleDelete() {
+    if (!onDelete || !confirmDelete) return
+    setDeleting(true)
+    try {
+      await onDelete(confirmDelete.id)
+      setConfirmDelete(null)
+    } catch {
+      // Grund steht im Toast des Aufrufers (z.B. "hängt an einer Rechnung") —
+      // der Dialog bleibt offen, damit die Aktion nicht still verpufft.
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -720,7 +764,7 @@ export function ReportsTab({ reports, onShowCreateForm, paperRapportUrl }: Repor
               target="_blank"
               rel="noreferrer"
               className="admin-btn admin-btn-sm admin-btn-secondary"
-              title="Blanko-Formular drucken, auf der Baustelle von Hand ausfüllen, danach über «+ Neuer Rapport» erfassen"
+              title="Blanko-Formular drucken, auf der Baustelle von Hand ausfüllen, danach über «+ Neuer Rapport» erfassen und das ausgefüllte Blatt unten hochladen"
             >
               Papier-Rapport (PDF)
             </a>
@@ -772,10 +816,63 @@ export function ReportsTab({ reports, onShowCreateForm, paperRapportUrl }: Repor
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
                 )}
+                {onDelete && !billed && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-danger"
+                    onClick={() => setConfirmDelete(r)}
+                    title="Rapport inkl. Stunden und Material löschen"
+                  >
+                    Löschen
+                  </button>
+                )}
               </ActionRow>
             )
           })}
         </div>
+      )}
+
+      {/* Hochgeladene Rapporte: das ausgefüllte Papier-Blatt (siehe Knopf oben) oder
+          ein Rapport aus einem Fremdsystem. Bewusst hier statt im Dokumente-Tab —
+          und bewusst als Datei-Kategorie: solche Blätter haben oft keine erfasste
+          Rapport-Zeile, an die man sie hängen könnte. */}
+      {onUploadFile && onDeleteFile && onRenameFile && (
+        <div style={{ marginTop: 24 }}>
+          <FileSections
+            files={files ?? []}
+            sections={REPORT_DOC_SECTIONS}
+            uploading={!!uploading}
+            uploadingCategory={uploadingCategory ?? null}
+            onUpload={onUploadFile}
+            onDelete={onDeleteFile}
+            onRename={onRenameFile}
+          />
+        </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Rapport löschen?"
+          message={
+            <>
+              {confirmDelete.signature_timestamp && (
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                  Dieser Rapport ist vom Kunden unterschrieben.
+                </div>
+              )}
+              Rapport vom {fmtDate(confirmDelete.report_date)}
+              {confirmDelete.created_by ? ` (${confirmDelete.created_by})` : ''} wirklich löschen?
+              Erfasste Stunden, Material und Fotos werden mitgelöscht, das Material wird
+              ins Lager zurückgebucht. Das lässt sich nicht rückgängig machen.
+            </>
+          }
+          confirmLabel="Endgültig löschen"
+          busyLabel="Wird gelöscht…"
+          busy={deleting}
+          variant="danger"
+          onCancel={() => { if (!deleting) setConfirmDelete(null) }}
+          onConfirm={() => void handleDelete()}
+        />
       )}
     </div>
   )

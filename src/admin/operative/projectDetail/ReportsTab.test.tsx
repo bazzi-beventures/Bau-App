@@ -61,6 +61,85 @@ describe('ReportsTab — Erstellen-Button', () => {
   })
 })
 
+describe('ReportsTab — Löschen', () => {
+  it('zeigt keinen Löschen-Knopf ohne onDelete-Prop', () => {
+    render(<ReportsTab reports={[makeReport()]} />)
+    expect(screen.queryByRole('button', { name: 'Löschen' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt Löschen für einen pendenten Rapport', () => {
+    render(<ReportsTab reports={[makeReport()]} onDelete={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Löschen' })).toBeInTheDocument()
+  })
+
+  it('zeigt Löschen auch für einen unterschriebenen Rapport (PL verantwortet das Projekt)', () => {
+    render(<ReportsTab reports={[makeReport({ signature_timestamp: '2026-07-21T12:00:00Z' })]} onDelete={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Löschen' })).toBeInTheDocument()
+  })
+
+  it('zeigt KEIN Löschen für einen abgerechneten Rapport', () => {
+    // Die Positionen stehen auf einer Rechnung — der Server sperrt es ebenfalls (409).
+    render(<ReportsTab reports={[makeReport({ invoice_id: 7 })]} onDelete={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Löschen' })).not.toBeInTheDocument()
+  })
+
+  it('löscht erst nach Bestätigung im Dialog', async () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined)
+    render(<ReportsTab reports={[makeReport({ id: 99 })]} onDelete={onDelete} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    expect(onDelete).not.toHaveBeenCalled()          // Dialog offen, noch nichts passiert
+
+    await userEvent.click(screen.getByRole('button', { name: 'Endgültig löschen' }))
+    expect(onDelete).toHaveBeenCalledWith(99)
+  })
+
+  it('bricht ohne Löschen ab', async () => {
+    const onDelete = vi.fn()
+    render(<ReportsTab reports={[makeReport()]} onDelete={onDelete} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('warnt im Dialog zusätzlich bei unterschriebenem Rapport', async () => {
+    render(<ReportsTab reports={[makeReport({ signature_timestamp: '2026-07-21T12:00:00Z' })]} onDelete={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    expect(screen.getByText('Dieser Rapport ist vom Kunden unterschrieben.')).toBeInTheDocument()
+  })
+})
+
+describe('ReportsTab — hochgeladene Rapporte', () => {
+  const uploadProps = {
+    files: [],
+    uploading: false,
+    uploadingCategory: null,
+    onUploadFile: vi.fn(),
+    onDeleteFile: vi.fn(),
+    onRenameFile: vi.fn(),
+  }
+
+  it('zeigt die Upload-Sektion, wenn die Datei-Props gesetzt sind', () => {
+    render(<ReportsTab reports={[]} {...uploadProps} />)
+    expect(screen.getByText('Hochgeladene Rapporte (Papier / Fremdsystem)')).toBeInTheDocument()
+  })
+
+  it('zeigt die Sektion nicht ohne Datei-Props', () => {
+    render(<ReportsTab reports={[]} />)
+    expect(screen.queryByText('Hochgeladene Rapporte (Papier / Fremdsystem)')).not.toBeInTheDocument()
+  })
+
+  it('listet nur Dateien der Kategorie rapport', () => {
+    const files = [
+      { id: 'f-1', filename: 'papier-rapport.pdf', file_url: null, storage_path: 'p/1', mime_type: 'application/pdf', category: 'rapport' as const, created_at: '2026-07-27T08:00:00Z' },
+      { id: 'f-2', filename: 'baustellenfoto.jpg', file_url: null, storage_path: 'p/2', mime_type: 'image/jpeg', category: 'fotos' as const, created_at: '2026-07-27T08:00:00Z' },
+    ]
+    render(<ReportsTab reports={[]} {...uploadProps} files={files} />)
+    expect(screen.getByText('papier-rapport.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('baustellenfoto.jpg')).not.toBeInTheDocument()
+  })
+})
+
 describe('ReportsTab — Papier-Rapport', () => {
   it('verlinkt das Blanko-PDF, wenn paperRapportUrl gesetzt ist', () => {
     render(<ReportsTab reports={[]} paperRapportUrl="https://api.test/pwa/admin/projects/p-1/paper-rapport.pdf" />)

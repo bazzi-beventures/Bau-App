@@ -4,7 +4,9 @@ import { ApiError } from '../api/client'
 
 interface Props {
   reportId: number
-  onDone: () => void
+  // `signed` unterscheidet unterschrieben von übersprungen — nur ein unsignierter
+  // Rapport darf danach noch vom Monteur selbst gelöscht werden.
+  onDone: (signed: boolean) => void
   onLoggedOut: () => void
 }
 
@@ -85,7 +87,7 @@ export default function SignaturePad({ reportId, onDone, onLoggedOut }: Props) {
       const dataUrl = canvasRef.current!.toDataURL('image/png')
       await signReport(reportId, dataUrl)
       setStatus('ok')
-      setTimeout(onDone, 1500)
+      setTimeout(() => onDone(true), 1500)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
       setErrorMsg(err instanceof Error ? err.message : 'Unbekannter Fehler')
@@ -122,7 +124,7 @@ export default function SignaturePad({ reportId, onDone, onLoggedOut }: Props) {
       )}
       {status === 'error' && <p className="signature-status-error">❌ {errorMsg}</p>}
       {status !== 'ok' && (
-        <button className="signature-skip-btn" onClick={onDone}>
+        <button className="signature-skip-btn" onClick={() => onDone(false)}>
           Überspringen
         </button>
       )}
