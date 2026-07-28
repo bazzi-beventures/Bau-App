@@ -4,6 +4,7 @@ import { deleteOwnRapport, fetchOwnProjectReports, OwnProjectReport } from '../a
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
+import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 
 // Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle).
 // Siehe ProjektEntwurfScreen für das gleiche Muster (zeit_/projektEntwurf_queue).
@@ -698,7 +699,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept={PROJECT_FILE_ACCEPT}
                     multiple
                     style={{ display: 'none' }}
                     onChange={handleUpload}
@@ -719,7 +720,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
               )}
               {files.map(f => (
                 <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
-                  <span style={{ fontSize: 16 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+                  <span style={{ fontSize: 16 }}>{projectFileIcon(f.mime_type, f.filename)}</span>
                   {renamingFileId === f.id ? (
                     <span className="projekte-detail-value" style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
                       <input

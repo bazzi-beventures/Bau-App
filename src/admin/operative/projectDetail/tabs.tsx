@@ -4,6 +4,7 @@ import { fmtCHF, fmtDate } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ActionRow } from '../../components/ActionRow'
+import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../../../shared/projectFileTypes'
 
 export type ProjectFileCategory =
   | 'fotos'
@@ -296,7 +297,7 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
         <input
           ref={inputRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept={PROJECT_FILE_ACCEPT}
           multiple
           style={{ display: 'none' }}
           onChange={handleSelect}
@@ -325,7 +326,7 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {items.map(f => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 18 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+              <span style={{ fontSize: 18 }}>{projectFileIcon(f.mime_type, f.filename)}</span>
               {editingId === f.id ? (
                 <>
                   <input
