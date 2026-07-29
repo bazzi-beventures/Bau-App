@@ -56,6 +56,8 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [acting, setActing] = useState<number | null>(null)
   const isMobile = useIsMobile()
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
+  const [confirmUnpay, setConfirmUnpay] = useState<Invoice | null>(null)
+  const [confirmArchive, setConfirmArchive] = useState<Invoice | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   // Generate invoice
   const [showGenerate, setShowGenerate] = useState(false)
@@ -189,11 +191,27 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setActing(id)
     try {
       await apiFetch(`/pwa/admin/invoices/${id}/archive`, { method: 'POST' })
-      showToast('Rechnung archiviert', 'success')
+      showToast('Rechnung archiviert — Rapporte wieder verrechenbar', 'success')
+      setConfirmArchive(null)
       load()
       onBadgeChange?.()
-    } catch {
-      showToast('Fehler beim Archivieren', 'error')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Archivieren', 'error')
+    } finally {
+      setActing(null)
+    }
+  }
+
+  async function handleUnmarkPaid(id: number) {
+    setActing(id)
+    try {
+      await apiFetch(`/pwa/admin/invoices/${id}/unmark-paid`, { method: 'POST' })
+      showToast('Zahlung zurückgesetzt', 'success')
+      setConfirmUnpay(null)
+      load()
+      onBadgeChange?.()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler', 'error')
     } finally {
       setActing(null)
     }
@@ -280,13 +298,18 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                     </button>
                   )}
                   {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
-                    <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmPaid(inv)} disabled={acting === inv.id}>
-                      Als bezahlt markieren
-                    </button>
+                    <>
+                      <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmPaid(inv)} disabled={acting === inv.id}>
+                        Als bezahlt markieren
+                      </button>
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setConfirmArchive(inv)} disabled={acting === inv.id}>
+                        Archivieren
+                      </button>
+                    </>
                   )}
                   {inv.status === 'bezahlt' && (
-                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => handleArchive(inv.id)} disabled={acting === inv.id}>
-                      {acting === inv.id ? '…' : 'Archivieren'}
+                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setConfirmUnpay(inv)} disabled={acting === inv.id}>
+                      Zahlung zurücksetzen
                     </button>
                   )}
                 </div>
@@ -343,21 +366,30 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                         </button>
                       )}
                       {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
-                        <button
-                          className="admin-btn admin-btn-success admin-btn-sm"
-                          onClick={() => setConfirmPaid(inv)}
-                          disabled={acting === inv.id}
-                        >
-                          Als bezahlt markieren
-                        </button>
+                        <>
+                          <button
+                            className="admin-btn admin-btn-success admin-btn-sm"
+                            onClick={() => setConfirmPaid(inv)}
+                            disabled={acting === inv.id}
+                          >
+                            Als bezahlt markieren
+                          </button>
+                          <button
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            onClick={() => setConfirmArchive(inv)}
+                            disabled={acting === inv.id}
+                          >
+                            Archivieren
+                          </button>
+                        </>
                       )}
                       {inv.status === 'bezahlt' && (
                         <button
                           className="admin-btn admin-btn-secondary admin-btn-sm"
-                          onClick={() => handleArchive(inv.id)}
+                          onClick={() => setConfirmUnpay(inv)}
                           disabled={acting === inv.id}
                         >
-                          {acting === inv.id ? '…' : 'Archivieren'}
+                          Zahlung zurücksetzen
                         </button>
                       )}
                     </div>
@@ -386,6 +418,57 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 disabled={acting === confirmPaid.id}
               >
                 {acting === confirmPaid.id ? '…' : 'Ja, bezahlt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bestätigungsdialog Zahlung zurücksetzen */}
+      {confirmUnpay && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box">
+            <div className="admin-confirm-title">Zahlung zurücksetzen?</div>
+            <div className="admin-confirm-text">
+              {confirmUnpay.invoice_number} · {fmtCHF(confirmUnpay.total_amount)}<br />
+              Projekt: {confirmUnpay.project_name}<br />
+              Die Rechnung gilt danach wieder als offen (gesendet bzw. ausstehend)
+              und kann anschliessend archiviert werden.
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmUnpay(null)}>Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-danger"
+                onClick={() => handleUnmarkPaid(confirmUnpay.id)}
+                disabled={acting === confirmUnpay.id}
+              >
+                {acting === confirmUnpay.id ? '…' : 'Zahlung zurücksetzen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bestätigungsdialog Rechnung archivieren */}
+      {confirmArchive && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box">
+            <div className="admin-confirm-title">Rechnung archivieren?</div>
+            <div className="admin-confirm-text">
+              {confirmArchive.invoice_number} · {fmtCHF(confirmArchive.total_amount)}<br />
+              Projekt: {confirmArchive.project_name}<br />
+              Die Rechnung gilt danach als annulliert. Ihre Rapporte werden von der
+              Rechnung gelöst — sie sind wieder verrechenbar und können bei Bedarf
+              gelöscht oder korrigiert werden, bevor eine neue Rechnung erstellt wird.
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmArchive(null)}>Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-danger"
+                onClick={() => handleArchive(confirmArchive.id)}
+                disabled={acting === confirmArchive.id}
+              >
+                {acting === confirmArchive.id ? '…' : 'Archivieren'}
               </button>
             </div>
           </div>

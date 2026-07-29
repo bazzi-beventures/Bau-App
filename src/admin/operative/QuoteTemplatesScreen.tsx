@@ -872,12 +872,20 @@ function OffertenVorlagenPanel() {
   )
 }
 
-// Rechnungs-Vorlagen: aktuell der Skonto-Warnhinweis, der bei Abrechnung einer Offerte
-// mit Skonto auf der Rechnung erscheint. Eigenes Tenant-Feld + System-Default.
+// Rechnungs-Vorlagen: Zahlungskondition (immer), Skonto-Warnhinweis (nur bei Abrechnung
+// einer Offerte mit Skonto) und Schlusssatz. Je ein eigenes Tenant-Feld + System-Default.
 function RechnungsVorlagenPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
+  // Zahlungskondition ("Zahlbar innert 30 Tagen netto."). Steht auf JEDER Rechnung.
+  // 3 Zustände wie beim Schlusssatz; {tage} wird serverseitig beim Rendern durch die
+  // konfigurierte Frist ersetzt (paymentDays = dieselbe Frist, die die Fälligkeit treibt).
+  const [paymentTerms, setPaymentTerms] = useState('')
+  const [paymentTermsSaved, setPaymentTermsSaved] = useState('')
+  const [paymentIsDefault, setPaymentIsDefault] = useState(true)
+  const [paymentDays, setPaymentDays] = useState(30)
+  const [savingPayment, setSavingPayment] = useState(false)
   // Skonto-Warnhinweis auf der Rechnung ("Ungerechtfertigte Skontoabzüge werden
   // nachbelastet"). Erscheint bei Abrechnung einer Offerte mit Skonto.
   const [skontoWarn, setSkontoWarn] = useState('')
@@ -894,10 +902,15 @@ function RechnungsVorlagenPanel() {
   async function load() {
     setLoading(true)
     try {
-      const [skontoW, footer] = await Promise.all([
+      const [payment, skontoW, footer] = await Promise.all([
+        apiFetch('/pwa/admin/invoice-payment-terms') as Promise<{ text: string; is_default: boolean; days: number }>,
         apiFetch('/pwa/admin/invoice-skonto-warning') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/invoice-footer-text') as Promise<{ text: string; is_default: boolean }>,
       ])
+      setPaymentTerms(payment.text ?? '')
+      setPaymentTermsSaved(payment.text ?? '')
+      setPaymentIsDefault(payment.is_default)
+      setPaymentDays(payment.days ?? 30)
       setSkontoWarn(skontoW.text ?? '')
       setSkontoWarnSaved(skontoW.text ?? '')
       setSkontoWarnIsDefault(skontoW.is_default)
@@ -914,6 +927,28 @@ function RechnungsVorlagenPanel() {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
+  }
+
+  async function saveInvoicePaymentTerms(reset = false) {
+    setSavingPayment(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer String
+      // ist erlaubt und heisst "bewusst keine Zahlungskondition" (wird gespeichert).
+      const res = await apiFetch('/pwa/admin/invoice-payment-terms', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : paymentTerms }),
+      }) as { text: string; is_default: boolean; days: number }
+      setPaymentTerms(res.text ?? '')
+      setPaymentTermsSaved(res.text ?? '')
+      setPaymentIsDefault(res.is_default)
+      setPaymentDays(res.days ?? paymentDays)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Zahlungskondition gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingPayment(false)
+    }
   }
 
   async function saveInvoiceSkontoWarning(reset = false) {
@@ -973,8 +1008,52 @@ function RechnungsVorlagenPanel() {
         <>
           {error && <div className="admin-form-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
+          {/* ── Zahlungskondition (Nettofrist) — steht auf jeder Rechnung ── */}
           <div className="admin-page-header" style={{ marginTop: 8 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Zahlungskondition</div>
+              <div className="admin-page-subtitle">
+                Erscheint auf jeder Rechnung unter dem Total — unabhängig vom Skonto.
+                Der Platzhalter <code>{'{tage}'}</code> wird durch die Zahlungsfrist ersetzt
+                ({paymentDays} Tage); nach dieser Frist laufen auch Zahlungserinnerung und Mahnung.
+                {paymentIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+                {!paymentIsDefault && paymentTermsSaved.trim() === '' &&
+                  ' Aktuell ist keine Zahlungskondition gesetzt — die Rechnung nennt dem Kunden keine Frist.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={2}
+              value={paymentTerms}
+              onChange={e => setPaymentTerms(e.target.value)}
+              placeholder="Zahlbar innert {tage} Tagen netto."
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveInvoicePaymentTerms(false)}
+                disabled={savingPayment || paymentTerms === paymentTermsSaved}
+              >
+                {savingPayment ? 'Speichern…' : 'Zahlungskondition speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveInvoicePaymentTerms(true)}
+                disabled={savingPayment || paymentIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Feld leeren und speichern entfernt die Zahlungskondition ganz; „zurücksetzen" stellt den Standardtext wieder her.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
             <div>
               <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Warnhinweis (Rechnung)</div>
               <div className="admin-page-subtitle">

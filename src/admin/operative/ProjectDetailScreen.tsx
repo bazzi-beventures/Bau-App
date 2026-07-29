@@ -502,6 +502,27 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  async function handleUnmarkInvoicePaid(invoiceId: number) {
+    try {
+      await apiFetch(`/pwa/admin/invoices/${invoiceId}/unmark-paid`, { method: 'POST' })
+      showToast('Zahlung zurückgesetzt')
+      await reloadInvoices()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
+
+  async function handleArchiveInvoice(invoiceId: number) {
+    try {
+      await apiFetch(`/pwa/admin/invoices/${invoiceId}/archive`, { method: 'POST' })
+      showToast('Rechnung archiviert — Rapporte wieder verrechenbar')
+      // Rapporte neu laden: der «Abgerechnet»-Status der gelösten Rapporte ändert sich.
+      await Promise.all([reloadInvoices(), reloadReports()])
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+    }
+  }
+
   async function handleSendInvoice(invoiceId: number, recipientEmail: string): Promise<boolean> {
     try {
       await apiFetch('/pwa/admin/invoices/send', {
@@ -1268,6 +1289,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onUseAcceptedQuoteChange={setUseAcceptedQuote}
           onGenerateInvoice={handleGenerateInvoice}
           onMarkPaid={handleMarkInvoicePaid}
+          onUnmarkPaid={handleUnmarkInvoicePaid}
+          onArchive={handleArchiveInvoice}
           onSendInvoice={handleSendInvoice}
         />
       )}

@@ -33,7 +33,7 @@ const PROJECT_DOC_SECTIONS: { key: ProjectFileCategory; title: string; legacyFal
   { key: 'sonstiges', title: 'Sonstiges', legacyFallback: true },
   // Dokumente für den Kunden (z.B. Produktprospekt) — können beim Versand einer
   // Offerte als E-Mail-Anhang gewählt werden (Feature prospekt_mit_offerte).
-  { key: 'anhang', title: 'Anhänge' },
+  { key: 'anhang', title: 'Anhänge für Offerte' },
 ]
 
 const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
@@ -890,14 +890,19 @@ interface InvoicesTabProps {
   onUseAcceptedQuoteChange: (v: boolean) => void
   onGenerateInvoice: () => void
   onMarkPaid: (invoiceId: number) => void
+  onUnmarkPaid: (invoiceId: number) => Promise<void>
+  onArchive: (invoiceId: number) => Promise<void>
   onSendInvoice: (invoiceId: number, recipientEmail: string) => Promise<boolean>
 }
 
-export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onSendInvoice }: InvoicesTabProps) {
+export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onUnmarkPaid, onArchive, onSendInvoice }: InvoicesTabProps) {
   const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [confirmNoReport, setConfirmNoReport] = useState(false)
+  const [confirmArchive, setConfirmArchive] = useState<ProjectInvoice | null>(null)
+  const [confirmUnpay, setConfirmUnpay] = useState<ProjectInvoice | null>(null)
+  const [acting, setActing] = useState(false)
 
   async function handleSend() {
     if (!sendInvoice || !sendEmail) return
@@ -905,6 +910,22 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
     const ok = await onSendInvoice(sendInvoice.id, sendEmail)
     setSending(false)
     if (ok) setSendInvoice(null)
+  }
+
+  async function handleArchiveConfirm() {
+    if (!confirmArchive) return
+    setActing(true)
+    await onArchive(confirmArchive.id)
+    setActing(false)
+    setConfirmArchive(null)
+  }
+
+  async function handleUnpayConfirm() {
+    if (!confirmUnpay) return
+    setActing(true)
+    await onUnmarkPaid(confirmUnpay.id)
+    setActing(false)
+    setConfirmUnpay(null)
   }
 
   function handleGenerateClick() {
@@ -987,12 +1008,65 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                         <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
                       </>
                     )}
+                    {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setConfirmArchive(inv)}>
+                        Archivieren
+                      </button>
+                    )}
+                    {inv.status === 'bezahlt' && (
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setConfirmUnpay(inv)}>
+                        Zahlung zurücksetzen
+                      </button>
+                    )}
                   </ActionRow>
                 ))}
               </div>
             )
           })}
         </div>
+      )}
+
+      {/* Dialog: Rechnung archivieren (annullieren) */}
+      {confirmArchive && (
+        <ConfirmDialog
+          title="Rechnung archivieren?"
+          message={
+            <>
+              {confirmArchive.invoice_number} · {fmtCHF(confirmArchive.total_amount)}<br />
+              Die Rechnung gilt danach als annulliert. Die enthaltenen Rapporte werden
+              von der Rechnung gelöst — sie sind wieder verrechenbar und können bei
+              Bedarf gelöscht oder korrigiert werden, bevor eine neue Rechnung
+              generiert wird.
+            </>
+          }
+          confirmLabel="Archivieren"
+          busyLabel="Wird archiviert…"
+          busy={acting}
+          variant="danger"
+          onCancel={() => { if (!acting) setConfirmArchive(null) }}
+          onConfirm={() => void handleArchiveConfirm()}
+        />
+      )}
+
+      {/* Dialog: Zahlung zurücksetzen */}
+      {confirmUnpay && (
+        <ConfirmDialog
+          title="Zahlung zurücksetzen?"
+          message={
+            <>
+              {confirmUnpay.invoice_number} · {fmtCHF(confirmUnpay.total_amount)}<br />
+              Die Rechnung gilt danach wieder als offen (gesendet bzw. ausstehend)
+              und kann anschliessend archiviert werden. Bereits erzeugte
+              Aftersales-Aufgaben bleiben bestehen und sind im Dashboard löschbar.
+            </>
+          }
+          confirmLabel="Zahlung zurücksetzen"
+          busyLabel="Wird zurückgesetzt…"
+          busy={acting}
+          variant="danger"
+          onCancel={() => { if (!acting) setConfirmUnpay(null) }}
+          onConfirm={() => void handleUnpayConfirm()}
+        />
       )}
 
       {/* Dialog: Rechnung ohne unterschriebenen Rapport erstellen */}

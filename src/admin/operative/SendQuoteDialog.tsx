@@ -193,7 +193,7 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
               + Datei wählen
             </button>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-              Wird zusätzlich beim Projekt unter Dokumente → Anhänge abgelegt.
+              Wird zusätzlich beim Projekt unter Dokumente → Anhänge für Offerte abgelegt.
             </div>
           </div>
         )}
