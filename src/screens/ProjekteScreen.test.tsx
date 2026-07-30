@@ -105,3 +105,29 @@ describe('ProjekteScreen — Rapport-Sperre', () => {
     expect(button).toBeEnabled()
   })
 })
+
+// Der Fallback selbst liegt im Backend (db.project_contacts_with_customer_fallback) —
+// hier zählt nur, dass der abgeleitete Eintrag als solcher gekennzeichnet wird und der
+// Monteur nicht denkt, jemand habe diese Person für die Baustelle benannt.
+describe('ProjekteScreen — Kontakt aus dem Kundenstamm', () => {
+  it('kennzeichnet einen vom Kunden abgeleiteten Kontakt', async () => {
+    await openProject([project({
+      kontakte: [{
+        name: 'Muster AG', kommentar: 'Kunde', telefon: '079 111 22 33',
+        email: 'info@muster.ch', is_site_contact: false, from_customer: true,
+      }],
+    })])
+
+    expect(screen.getByText('Muster AG')).toBeInTheDocument()
+    expect(screen.getByText(/keine Ansprechperson hinterlegt/)).toBeInTheDocument()
+  })
+
+  it('zeigt bei einer echten Ansprechperson deren Kommentar', async () => {
+    await openProject([project({
+      kontakte: [{ name: 'Herr Meier', kommentar: 'Bauleiter', telefon: '079 5', email: '' }],
+    })])
+
+    expect(screen.getByText('Bauleiter')).toBeInTheDocument()
+    expect(screen.queryByText(/keine Ansprechperson hinterlegt/)).not.toBeInTheDocument()
+  })
+})

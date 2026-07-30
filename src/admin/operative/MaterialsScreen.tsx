@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch, apiFormFetch } from '../../api/client'
-import UnitsPanel from './UnitsPanel'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
 import MaterialVkBulkPanel from './MaterialVkBulkPanel'
 import ImportScreen from '../system/ImportScreen'
@@ -676,7 +675,9 @@ function MaterialInventoryPanel() {
   )
 }
 
-type MaterialTab = 'inventory' | 'units' | 'frequent' | 'vkbulk' | 'import'
+// Der frühere Reiter "Einheiten" sitzt jetzt in den Admin-Tools (admin/system/UnitsPanel):
+// ein Rename kaskadiert über den ganzen Materialstamm, das ist Wartung, kein Tagesgeschäft.
+type MaterialTab = 'inventory' | 'frequent' | 'vkbulk' | 'import'
 
 export default function MaterialsScreen({ user }: { user: UserInfo }) {
   const [tab, setTab] = useState<MaterialTab>('inventory')
@@ -693,12 +694,6 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
           onClick={() => setTab('inventory')}
         >
           Material / Lager
-        </button>
-        <button
-          className={`kpi-admin-tab${tab === 'units' ? ' active' : ''}`}
-          onClick={() => setTab('units')}
-        >
-          Einheiten
         </button>
         {ersatzteilEnabled && (
           <button
@@ -725,7 +720,6 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
       </div>
 
       {tab === 'inventory' && <MaterialInventoryPanel />}
-      {tab === 'units' && <UnitsPanel />}
       {tab === 'frequent' && ersatzteilEnabled && <FrequentMaterialsPanel />}
       {tab === 'vkbulk' && ownArticleEnabled && <MaterialVkBulkPanel />}
       {tab === 'import' && <ImportScreen ownArticleEnabled={ownArticleEnabled} />}

@@ -1505,6 +1505,40 @@ function FeatureField({
       </div>
     )
   }
+  if (field.type === 'key_list') {
+    // Mehrfachauswahl über feste Schlüssel (z.B. Beschaffungs-Arbeitsschritte).
+    // Bewusst Checkboxen statt <select multiple>: die Liste ist kurz, und man will alle
+    // Optionen gleichzeitig sehen. Die Reihenfolge kommt aus dem Server-Schema und ist
+    // nicht änderbar — sie ist chronologisch, nicht Geschmackssache.
+    const arr = Array.isArray(value) ? (value as string[]) : []
+    return (
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label className="admin-form-label">{field.label}</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(field.options ?? []).map(o => (
+            <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={arr.includes(o.value)}
+                disabled={disabled}
+                onChange={e => {
+                  const next = e.target.checked
+                    ? [...arr, o.value]
+                    : arr.filter(v => v !== o.value)
+                  // In Schema-Reihenfolge zurückschreiben, damit der gespeicherte Wert
+                  // nicht von der Klickreihenfolge abhängt.
+                  const order = (field.options ?? []).map(x => x.value)
+                  onChange(order.filter(v => next.includes(v)))
+                }}
+              />
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
+    )
+  }
   if (field.type === 'number_list') {
     const arr = Array.isArray(value) ? (value as number[]) : []
     return (

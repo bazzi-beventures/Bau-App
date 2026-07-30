@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
-import { isFeatureEnabled } from '../../api/modules'
+import { getFeature, isFeatureEnabled } from '../../api/modules'
+import { setProjectBeschaffung } from '../../api/admin'
+import { BeschaffungStep, beschaffungStep, daysSince, enabledBeschaffungSteps } from '../constants/beschaffungSteps'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
 import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
@@ -161,6 +163,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   // Feature offerte_dank_mail: „Dankeschön senden"-Knopf bei angenommenen Offerten.
   const [dankEnabled, setDankEnabled] = useState(false)
+  // Feature beschaffungsstatus: Arbeitsschritt der Materialbeschaffung. Eigener State
+  // statt direkt auf dem project-Prop, weil Dropdown UND Datei-Upload ihn ändern —
+  // ein Prop-Reload würde beides erst nach dem Schliessen des Detailscreens zeigen.
+  const [beschaffungSteps, setBeschaffungSteps] = useState<BeschaffungStep[]>([])
+  const [beschaffung, setBeschaffung] = useState<string | null>(project?.workflow_status ?? null)
+  const [beschaffungAt, setBeschaffungAt] = useState<string | null>(project?.workflow_status_at ?? null)
+  const [beschaffungSource, setBeschaffungSource] = useState<string | null>(project?.workflow_status_source ?? null)
+  const [savingBeschaffung, setSavingBeschaffung] = useState(false)
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
   const [addingVariantId, setAddingVariantId] = useState<number | null>(null)
   const [sendingThankyouId, setSendingThankyouId] = useState<number | null>(null)
@@ -215,6 +225,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       setCurrentUserId(me.authorized_user_id)
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
       setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
+      setBeschaffungSteps(
+        isFeatureEnabled(me, 'beschaffungsstatus')
+          ? enabledBeschaffungSteps(getFeature(me, 'beschaffungsstatus'))
+          : [],
+      )
     }).catch(() => {})
   }, [])
 
@@ -710,20 +725,56 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     setUploadCategory(category)
     try {
       // Backend nimmt eine Datei pro Request → sequentiell hochladen
+      let advancedTo: string | null = null
       for (const file of filesToUpload) {
         const form = new FormData()
         form.append('file', file)
         form.append('category', category)
-        await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form)
+        const res = await apiFormFetch(`/pwa/admin/projects/${project.id}/files`, form) as
+          { beschaffung_status?: string | null }
+        // Der Server meldet, wenn der Upload den Beschaffungsstatus vorgerückt hat.
+        // Die Vorwärts-Regel bleibt damit an EINER Stelle (services/project_workflow.py).
+        if (res?.beschaffung_status) advancedTo = res.beschaffung_status
       }
       const updated = await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[]
       setFiles(updated)
-      showToast(filesToUpload.length > 1 ? `${filesToUpload.length} Dateien hochgeladen` : 'Datei hochgeladen')
+      if (advancedTo) {
+        setBeschaffung(advancedTo)
+        setBeschaffungAt(new Date().toISOString())
+        setBeschaffungSource('auto')
+      }
+      showToast(
+        advancedTo
+          ? `Hochgeladen · Beschaffung: ${beschaffungStep(advancedTo)?.label ?? advancedTo}`
+          : filesToUpload.length > 1 ? `${filesToUpload.length} Dateien hochgeladen` : 'Datei hochgeladen',
+      )
     } catch {
       setError('Fehler beim Hochladen')
     } finally {
       setUploading(false)
       setUploadCategory(null)
+    }
+  }
+
+  async function handleBeschaffungChange(next: string | null) {
+    if (!project) return
+    const previous = { status: beschaffung, at: beschaffungAt, source: beschaffungSource }
+    // Optimistisch setzen: das Dropdown soll nicht auf den Roundtrip warten.
+    setBeschaffung(next)
+    setBeschaffungAt(new Date().toISOString())
+    setBeschaffungSource('manual')
+    setSavingBeschaffung(true)
+    try {
+      await setProjectBeschaffung(project.id, next)
+    } catch (err) {
+      // Zurückdrehen statt stehenlassen — ein Dropdown, das einen nicht gespeicherten
+      // Wert zeigt, ist schlimmer als eines, das die Änderung sichtbar verwirft.
+      setBeschaffung(previous.status)
+      setBeschaffungAt(previous.at)
+      setBeschaffungSource(previous.source)
+      showToast(err instanceof Error ? err.message : 'Fehler beim Speichern des Beschaffungsstatus')
+    } finally {
+      setSavingBeschaffung(false)
     }
   }
 
@@ -852,6 +903,26 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`} style={{ fontSize: 12 }}>
                   {PROJECT_STATUS_LABELS[effectiveStatus]}
                 </span>
+                {/* Beschaffungsschritt direkt neben dem Lebenszyklus-Status: die Frage
+                    "wo stehe ich?" muss beim Öffnen beantwortet sein, nicht erst nach
+                    einem Klick in den vierten Reiter. Gesetzt wird er dort, gezeigt hier. */}
+                {!!beschaffungSteps.length && beschaffungStep(beschaffung) && (
+                  <span
+                    className={`admin-badge ${beschaffungStep(beschaffung)!.badge}`}
+                    style={{ fontSize: 12 }}
+                    title={
+                      beschaffungSource === 'auto'
+                        ? 'Automatisch beim Datei-Upload gesetzt — im Reiter Lieferantendokumente änderbar'
+                        : 'Im Reiter Lieferantendokumente änderbar'
+                    }
+                  >
+                    {beschaffungStep(beschaffung)!.label}
+                    {(() => {
+                      const d = daysSince(beschaffungAt)
+                      return d !== null ? ` · seit ${d} Tag${d === 1 ? '' : 'en'}` : ''
+                    })()}
+                  </span>
+                )}
                 {project?.created_at && (
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>
                     Eröffnet am {fmtDate(project.created_at)}
@@ -1241,6 +1312,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onUpload={uploadFilesToCategory}
           onDelete={setConfirmDeleteFileId}
           onRename={handleRenameFile}
+          beschaffungSteps={beschaffungSteps}
+          beschaffungStatus={beschaffung}
+          beschaffungStatusAt={beschaffungAt}
+          beschaffungStatusSource={beschaffungSource}
+          savingBeschaffung={savingBeschaffung}
+          onBeschaffungChange={handleBeschaffungChange}
         />
       )}
 
@@ -1261,6 +1338,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onEdit={handleEditQuote}
           addingVariantId={addingVariantId}
           onAddVariant={handleAddVariant}
+          files={files}
+          uploading={uploading}
+          uploadingCategory={uploadCategory}
+          onUploadFile={uploadFilesToCategory}
+          onDeleteFile={setConfirmDeleteFileId}
+          onRenameFile={handleRenameFile}
         />
       )}
 

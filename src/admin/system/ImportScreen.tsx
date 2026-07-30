@@ -241,7 +241,7 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
   const selectedSupplier = suppliers.find(s => s.id === supplierId)
 
   // Rendert KEIN eigenes `admin-page` — eingebettet als Tab in MaterialsScreen,
-  // der den Seitenrahmen + Tab-Leiste liefert (analog UnitsPanel).
+  // der den Seitenrahmen + Tab-Leiste liefert (analog FrequentMaterialsPanel).
   return (
     <>
       <div className="admin-page-header">

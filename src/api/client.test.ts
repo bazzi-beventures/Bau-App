@@ -14,13 +14,19 @@ function makeRes(opts: {
   status: number
   body?: unknown
   headers?: Record<string, string>
+  statusText?: string
+  /** true = Body ist kein JSON (z.B. HTML-Fehlerseite vom Edge-Proxy) */
+  bodyNotJson?: boolean
 }): Response {
   const headers = opts.headers ?? {}
   return {
     ok: opts.ok,
     status: opts.status,
-    statusText: 'StatusText',
-    json: async () => opts.body ?? {},
+    statusText: opts.statusText ?? 'StatusText',
+    json: async () => {
+      if (opts.bodyNotJson) throw new SyntaxError('Unexpected token < in JSON')
+      return opts.body ?? {}
+    },
     blob: async () => new Blob(),
     headers: { get: (k: string) => headers[k] ?? null },
   } as unknown as Response
@@ -164,6 +170,48 @@ describe('apiFetch — Fehlermeldung', () => {
   it('liest `error` als Fallback (z.B. manueller Rapport)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeRes({ ok: false, status: 400, body: { error: 'Kein Stundenansatz für Anna hinterlegt' } })))
     await expect(apiFetch('/pwa/x')).rejects.toMatchObject({ status: 400, message: 'Kein Stundenansatz für Anna hinterlegt' })
+  })
+
+  // Der stille Fehler: die Screens rendern ihre Meldung mit `{error && …}`. Ein
+  // Leerstring zeigt dort NICHTS an — der Spinner stoppt und scheinbar passiert
+  // nichts. Genau das meldeten Nutzer beim Lieferanten-PDF-Upload.
+  it('fällt auf "Serverfehler (HTTP …)" zurück, wenn der Body kein JSON ist und statusText leer', async () => {
+    // Realfall: 502 vom Edge-Proxy — HTML-Body, und über HTTP/2 ist statusText
+    // IMMER leer, weil HTTP/2 keine Reason-Phrase mehr kennt.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      makeRes({ ok: false, status: 502, statusText: '', bodyNotJson: true })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({
+      status: 502, message: 'Serverfehler (HTTP 502)',
+    })
+  })
+
+  it('fällt zurück, wenn `detail` ein Leerstring ist', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      makeRes({ ok: false, status: 500, statusText: '', body: { detail: '   ' } })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({
+      status: 500, message: 'Serverfehler (HTTP 500)',
+    })
+  })
+
+  it('rendert FastAPI-Validierungsfehler (detail = Array) nicht als "[object Object]"', async () => {
+    const detail = [{ loc: ['body', 'menge'], msg: 'value is not a valid float', type: 'type_error.float' }]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      makeRes({ ok: false, status: 422, body: { detail } })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({
+      status: 422, message: 'Serverfehler (HTTP 422)',
+    })
+  })
+
+  it('reicht String-Codes unveraendert weiter (csrf_invalid bleibt erkennbar)', async () => {
+    // Regressionsschutz für den Fallback oben: er darf den Code nicht überschreiben,
+    // sonst greift die Sitzungs-abgelaufen-Erkennung nicht mehr.
+    resetSessionExpiredFlag()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      makeRes({ ok: false, status: 403, body: { detail: 'csrf_invalid' } })))
+    await expect(apiFetch('/pwa/x')).rejects.toMatchObject({
+      status: 403, message: 'Sitzung abgelaufen',
+    })
+    resetSessionExpiredFlag()
   })
 })
 

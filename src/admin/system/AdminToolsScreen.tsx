@@ -4,6 +4,7 @@ import ServiceStatusScreen from './ServiceStatusScreen'
 import PushTestScreen from './PushTestScreen'
 import LlmCostsScreen from '../llm/LlmCostsScreen'
 import MaterialCleanupScreen from './MaterialCleanupScreen'
+import UnitsPanel from './UnitsPanel'
 import ErrorLogsScreen from './ErrorLogsScreen'
 
 // Admin-Tools bündelt Konfiguration, Service-Status und Push-Test unter einem
@@ -12,7 +13,7 @@ import ErrorLogsScreen from './ErrorLogsScreen'
 // AdminApp.renderScreen erzwungen, hier erscheinen daher immer alle Tabs. Jeder
 // Tool-Screen bringt seinen eigenen admin-page-Rahmen (Titel + Aktionen) mit;
 // die Tab-Leiste sitzt darüber und übernimmt nur die Navigation.
-type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'material-cleanup' | 'error-logs'
+type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'units' | 'material-cleanup' | 'error-logs'
 
 interface Props {
   userRole: string
@@ -23,6 +24,7 @@ const TABS: { id: Tool; label: string }[] = [
   { id: 'service-status', label: 'Service-Status' },
   { id: 'push-test',      label: 'Push-Test' },
   { id: 'llm-costs',      label: 'LLM-Kosten' },
+  { id: 'units',          label: 'Einheiten' },
   { id: 'material-cleanup', label: 'Materialdatenbereinigung' },
   { id: 'error-logs',     label: 'Error-Logs' },
 ]
@@ -36,6 +38,7 @@ export default function AdminToolsScreen({ userRole }: Props) {
       case 'service-status': return <ServiceStatusScreen />
       case 'push-test':      return <PushTestScreen />
       case 'llm-costs':      return <LlmCostsScreen />
+      case 'units':          return <UnitsPanel />
       case 'material-cleanup': return <MaterialCleanupScreen />
       case 'error-logs':     return <ErrorLogsScreen />
     }

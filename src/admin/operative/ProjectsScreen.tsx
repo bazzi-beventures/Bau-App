@@ -4,6 +4,7 @@ import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import ProjectDetailScreen from './ProjectDetailScreen'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
+import { beschaffungStep } from '../constants/beschaffungSteps'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
@@ -90,6 +91,11 @@ export interface Project {
   wartung_last_at?: string | null
   wartung_next_due_at?: string | null
   status: ProjectStatus
+  // Beschaffungs-Arbeitsschritt (Feature `beschaffungsstatus`) — NICHT der Lebenszyklus
+  // oben, sondern "wo stehe ich im Beschaffungsablauf". null = nichts bestellt.
+  workflow_status?: string | null
+  workflow_status_at?: string | null
+  workflow_status_source?: string | null
   is_closed: boolean
   created_at: string
   created_by: string | null
@@ -115,7 +121,7 @@ const DOC_STATUS_BADGE: Record<string, string> = {
   archiviert: 'admin-badge-closed',
 }
 
-type ProjectSortKey = 'project_id_text' | 'name' | 'customer_name' | 'status' | 'created_at'
+type ProjectSortKey = 'project_id_text' | 'name' | 'customer_name' | 'status' | 'workflow' | 'created_at'
 
 export function projectCustomerName(p: { customer?: EmbeddedCustomer | null }): string {
   const c = p.customer
@@ -181,6 +187,8 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({})
   // Tenant-spezifische Projektleiter-Spalte (Feature-Flag, Default aus).
   const [showProjektleiterCol, setShowProjektleiterCol] = useState(false)
+  // Beschaffungs-Spalte (Feature `beschaffungsstatus`, Default aus).
+  const [showBeschaffungCol, setShowBeschaffungCol] = useState(false)
 
   useEffect(() => {
     apiFetch('/pwa/admin/staff')
@@ -199,7 +207,10 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
 
   useEffect(() => {
     getMe()
-      .then(me => setShowProjektleiterCol(isFeatureEnabled(me, 'projektleiter_spalte')))
+      .then(me => {
+        setShowProjektleiterCol(isFeatureEnabled(me, 'projektleiter_spalte'))
+        setShowBeschaffungCol(isFeatureEnabled(me, 'beschaffungsstatus'))
+      })
       .catch(() => {})
   }, [])
 
@@ -338,6 +349,15 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
                       {PROJECT_STATUS_LABELS[effectiveStatus]}
                     </span>
                   </div>
+                  {/* Auf dem Handy gibt es keine Spalten — der Beschaffungsschritt kommt
+                      als eigene Badge-Zeile, damit er nicht im Meta-Text untergeht. */}
+                  {showBeschaffungCol && beschaffungStep(p.workflow_status) && (
+                    <div style={{ marginTop: 4 }}>
+                      <span className={`admin-badge ${beschaffungStep(p.workflow_status)!.badge}`}>
+                        {beschaffungStep(p.workflow_status)!.label}
+                      </span>
+                    </div>
+                  )}
                   <div className="admin-card-meta">
                     {p.project_id_text || '—'} · {projectCustomerName(p) || '—'}
                   </div>
@@ -364,6 +384,11 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
                 {showProjektleiterCol && <th>Projektleiter</th>}
                 <th>Offerte</th>
                 <th>Rechnung</th>
+                {showBeschaffungCol && (
+                  <th style={thStyle} onClick={() => toggleSort('workflow')} title="Wo das Projekt im Beschaffungsablauf steht. Leer = nichts bestellt.">
+                    Beschaffung <SortIcon active={sortKey === 'workflow'} dir={sortDir} />
+                  </th>
+                )}
                 <th style={thStyle} onClick={() => toggleSort('status')}>
                   Status <SortIcon active={sortKey === 'status'} dir={sortDir} />
                 </th>
@@ -374,7 +399,7 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={showProjektleiterCol ? 8 : 7} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
+                <tr><td colSpan={7 + (showProjektleiterCol ? 1 : 0) + (showBeschaffungCol ? 1 : 0)} className="admin-table-empty">Keine Projekte gefunden.</td></tr>
               ) : rows.map(p => {
                 const effectiveStatus: ProjectStatus = p.status ?? (p.is_closed ? 'abgeschlossen' : 'offen')
                 return (
@@ -405,6 +430,19 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
                         <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
                       )}
                     </td>
+                    {showBeschaffungCol && (
+                      <td>
+                        {/* Leer statt "—": solange nichts bestellt ist, LÄUFT kein
+                            Beschaffungsvorgang. Ein Platzhalter würde suggerieren, dass
+                            hier etwas fehlt — bei einem Reparaturprojekt ohne Materialbezug
+                            fehlt aber nichts. */}
+                        {beschaffungStep(p.workflow_status) ? (
+                          <span className={`admin-badge ${beschaffungStep(p.workflow_status)!.badge}`}>
+                            {beschaffungStep(p.workflow_status)!.label}
+                          </span>
+                        ) : null}
+                      </td>
+                    )}
                     <td>
                       <span className={`admin-badge ${PROJECT_STATUS_BADGE[effectiveStatus]}`}>
                         {PROJECT_STATUS_LABELS[effectiveStatus]}

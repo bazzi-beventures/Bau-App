@@ -1,4 +1,24 @@
+import { ApiError } from '../../api/client'
+
 type DescPriceRow = { description: string; total_price: string }
+
+/** Fehlertext für den Lieferanten-PDF-Upload (OCR) — geteilt von Erstell- und Bearbeiten-Formular.
+ *
+ * Der OCR-Endpoint läuft lange (Mistral OCR + Retries). Bricht dabei die Verbindung ab,
+ * liefert der Client ApiError(0) mit dem generischen Text "Keine Internetverbindung" —
+ * was hier fast immer falsch ist: nicht das Gerät ist offline, sondern der Edge-Proxy
+ * hat die Verbindung gekappt, während die Analyse noch lief. Deshalb hier ein eigener,
+ * ehrlicher Text; nur wenn der Browser sich selbst als offline meldet, bleibt es bei
+ * der Offline-Aussage. */
+export function pdfUploadErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.status === 0) {
+    return typeof navigator !== 'undefined' && navigator.onLine === false
+      ? 'Keine Internetverbindung — die PDF konnte nicht gesendet werden. Bitte erneut versuchen.'
+      : 'Die Verbindung zum Server ist abgebrochen, bevor die PDF-Analyse fertig war. Bitte erneut versuchen.'
+  }
+  if (err instanceof Error && err.message.trim()) return err.message
+  return 'PDF-Extraktion fehlgeschlagen. Bitte erneut versuchen.'
+}
 
 interface DescPriceFieldsetProps<T extends DescPriceRow> {
   title: string

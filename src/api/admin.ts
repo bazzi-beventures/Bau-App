@@ -342,6 +342,22 @@ export async function closeProject(id: string): Promise<void> {
   await apiFetch(`/pwa/admin/projects/${id}/close`, { method: 'POST' })
 }
 
+/**
+ * Setzt den Beschaffungs-Arbeitsschritt (Feature `beschaffungsstatus`).
+ * `null` leert ihn (= kein Beschaffungsvorgang). Eigener Endpoint und nicht
+ * `upsertProject`: das ist ein Ein-Klick-Vorgang aus dem Dropdown, der nicht das ganze
+ * Projektformular mitschicken soll.
+ */
+export async function setProjectBeschaffung(
+  id: string,
+  status: string | null,
+): Promise<{ project: { workflow_status: string | null; workflow_status_at: string | null } }> {
+  return apiFetch(`/pwa/admin/projects/${id}/beschaffung`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  }) as Promise<{ project: { workflow_status: string | null; workflow_status_at: string | null } }>
+}
+
 export async function updateProjectSchedule(
   id: string,
   start_date: string | null,
@@ -600,7 +616,7 @@ export async function updateSchedulingConfig(
 
 // ─── Tenant Feature-Flags (Workflows) ───────────────────────
 
-export type FeatureFieldType = 'bool' | 'number' | 'select' | 'number_list'
+export type FeatureFieldType = 'bool' | 'number' | 'select' | 'number_list' | 'key_list'
 
 export interface FeatureFieldSchema {
   key: string

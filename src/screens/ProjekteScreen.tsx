@@ -46,6 +46,10 @@ interface Kontakt {
   telefon: string
   email: string
   is_site_contact?: boolean
+  // Vom Backend gesetzt, wenn das Projekt keine eigene Ansprechperson hat und der
+  // Kundenstamm eingesprungen ist (db.project_contacts_with_customer_fallback).
+  // Nicht persistiert — kommt bei jedem Request frisch aus dem Kunden-Embed.
+  from_customer?: boolean
 }
 
 interface EmbeddedCustomer {
@@ -125,6 +129,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   sonstiges: 'Sonstiges',
   bestellungen: 'Bestellungen',
   auftragsbestaetigung: 'Auftragsbestätigung',
+  // Vom Admin im Offerten-Reiter hochgeladen (Papier-/Fremdsystem-Offerte). Der
+  // Monteur kann sie nicht hochladen, sieht sie aber in der Dateiliste.
+  offerte: 'Offerte',
 }
 
 interface ProjectFile {
@@ -653,7 +660,9 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                         ★ Vor Ort
                       </span>
                     )}
-                    {k.kommentar && <span className="projekte-kontakt-item-rolle">{k.kommentar}</span>}
+                    {k.from_customer
+                      ? <span className="projekte-kontakt-item-rolle">Kunde (keine Ansprechperson hinterlegt)</span>
+                      : k.kommentar && <span className="projekte-kontakt-item-rolle">{k.kommentar}</span>}
                   </div>
                   <div className="projekte-kontakt-item-links">
                     {k.telefon && (

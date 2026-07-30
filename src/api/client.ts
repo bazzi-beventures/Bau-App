@@ -58,7 +58,7 @@ function handleExpiredSession(status: number, detail: string, path: string): boo
 }
 
 async function parseErrorDetail(res: Response): Promise<string> {
-  let detail = res.statusText
+  let detail: unknown = res.statusText
   try {
     const body = await res.json()
     // detail ist meist ein String-Code; strukturierte Fehler (z.B. Passwort-Policy)
@@ -72,7 +72,15 @@ async function parseErrorDetail(res: Response): Promise<string> {
       detail = body.detail ?? body.error ?? detail
     }
   } catch {}
-  return detail
+  // Nie leer und nie ein Objekt zurückgeben. Zwei reale Fälle laufen sonst als
+  // stumme Fehler durch, weil die Screens ihre Meldung mit `{error && …}` rendern
+  // und ein Leerstring dort NICHTS anzeigt (Spinner stoppt, sonst passiert nichts):
+  //   1. Antworten vom Edge-Proxy (502/504, Body ist HTML statt JSON) — dann greift
+  //      der statusText-Fallback, und der ist über HTTP/2 IMMER leer, weil HTTP/2
+  //      keine Reason-Phrase mehr kennt.
+  //   2. FastAPI-Validierungsfehler liefern `detail` als Array von Objekten.
+  const text = typeof detail === 'string' ? detail.trim() : ''
+  return text || `Serverfehler (HTTP ${res.status})`
 }
 
 export interface ApiFetchOptions extends RequestInit {

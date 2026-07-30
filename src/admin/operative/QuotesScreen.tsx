@@ -6,7 +6,7 @@ import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
-import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset } from './QuoteFormParts'
+import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset, pdfUploadErrorMessage } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
 import { CustomerCombobox } from './CustomerCombobox'
 import type { Customer } from './CustomersScreen'
@@ -281,6 +281,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
+  // Eigener Fehler-State für den PDF-Upload: `error` erscheint ganz oben am Formular,
+  // der Upload-Knopf sitzt aber weit unten bei den Positionen. Wer dort steht (erst
+  // recht am Handy), sah die Meldung nie — der Spinner stoppte und scheinbar passierte
+  // nichts. Diese Meldung wird direkt beim Knopf gerendert.
+  const [pdfError, setPdfError] = useState('')
   const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
   // Dieselbe Prüf-Maske dient zwei Zwecken: 'pdf' = OCR-Review, 'manual' = freie Erfassung
   // mit EK/Aufschlag und „separat"-Positionen, aber ohne PDF.
@@ -523,13 +528,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
-    setError('')
+    setPdfError('')
     try {
       const form = new FormData()
       form.append('file', file)
       const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
       if (!result.products || result.products.length === 0) {
-        setError('Keine Produkte in der PDF erkannt.')
+        setPdfError('Keine Produkte in der PDF erkannt. Erkannt werden Offerten von Griesser und Stobag — bitte prüfen, ob es sich um eine solche PDF handelt.')
         return
       }
       // Quelle-PDF merken, bis der Admin das Review bestätigt oder abbricht.
@@ -537,7 +542,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       setReviewMode('pdf')
       setPdfReview(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
+      setPdfError(pdfUploadErrorMessage(err))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -891,6 +896,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
             <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={uploading} />
           </label>
         </div>
+        {pdfError && (
+          <div className="admin-alert admin-alert-error" role="alert" style={{ marginTop: 8 }}>{pdfError}</div>
+        )}
       </fieldset>
 
       <DescPriceFieldset
@@ -1129,6 +1137,9 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
   const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
   const [uploading, setUploading] = useState(false)
+  // Eigener Fehler-State für den PDF-Upload — siehe Begründung im Erstell-Formular:
+  // `error` steht oben am Formular, der Upload-Knopf weit unten bei den Positionen.
+  const [pdfError, setPdfError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingPdfFile = useRef<File | null>(null)
   const [supplierDocsToFile, setSupplierDocsToFile] = useState<File[]>([])
@@ -1173,19 +1184,19 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
-    setError('')
+    setPdfError('')
     try {
       const form = new FormData()
       form.append('file', file)
       const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
       if (!result.products || result.products.length === 0) {
-        setError('Keine Produkte in der PDF erkannt.')
+        setPdfError('Keine Produkte in der PDF erkannt. Erkannt werden Offerten von Griesser und Stobag — bitte prüfen, ob es sich um eine solche PDF handelt.')
         return
       }
       pendingPdfFile.current = file
       setPdfReview(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'PDF-Extraktion fehlgeschlagen')
+      setPdfError(pdfUploadErrorMessage(err))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -1432,6 +1443,9 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
             {uploading ? 'Lese PDF…' : '📄 Lieferanten-PDF importieren'}
           </button>
         </div>
+        {pdfError && (
+          <div className="admin-alert admin-alert-error" role="alert" style={{ marginTop: 8 }}>{pdfError}</div>
+        )}
       </fieldset>
 
       <DescPriceFieldset

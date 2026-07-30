@@ -11,14 +11,17 @@ interface Unit {
 }
 
 /**
- * Einheiten-Vokabular pflegen (Tab im Material-Bereich).
+ * Einheiten-Vokabular pflegen (Tab in den Admin-Tools).
  *
  * Umbenennen wirkt auf alle Materialien mit dem alten Code; ein bereits
  * existierender Ziel-Code fuehrt die beiden Einheiten zusammen (Merge). Loeschen
  * ist gesperrt, solange die Einheit noch verwendet wird (Backend gibt 400).
  *
- * Rendert KEIN eigenes `admin-page` — der Tab-Container in MaterialsScreen liefert
- * das Layout.
+ * Wartungswerkzeug, kein Tagesgeschaeft: ein Rename kaskadiert ueber den ganzen
+ * Materialstamm. Steht deshalb neben der Materialdatenbereinigung in den Admin-Tools
+ * (superadmin-only) statt als Reiter im Material-Bereich.
+ *
+ * Bringt wie die uebrigen Tool-Screens seinen eigenen `admin-page`-Rahmen mit.
  */
 export default function UnitsPanel() {
   const [units, setUnits] = useState<Unit[]>([])
@@ -112,7 +115,7 @@ export default function UnitsPanel() {
     : undefined
 
   return (
-    <>
+    <div className="admin-page">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Einheiten</div>
@@ -210,6 +213,6 @@ export default function UnitsPanel() {
           <div className={`admin-toast ${toast.kind}`}>{toast.msg}</div>
         </div>
       )}
-    </>
+    </div>
   )
 }

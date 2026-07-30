@@ -149,3 +149,49 @@ describe('QuotesTab — Varianten', () => {
     expect(screen.getByText('Offerte 3 · Option B')).toBeInTheDocument()
   })
 })
+
+// Eingescannte Papier-Offerten und Offerten aus Fremdsystemen liegen als
+// Projektdatei der Kategorie 'offerte' im Offerten-Reiter — analog zu den
+// hochgeladenen Rapporten im Rapporte-Reiter.
+describe('QuotesTab — hochgeladene Offerten', () => {
+  const FILES = [
+    { id: 'f1', filename: 'Alt-Offerte_2019.pdf', file_url: null, mime_type: 'application/pdf', category: 'offerte' as const, created_at: '2026-07-01T09:00:00Z' },
+    { id: 'f2', filename: 'Prospekt.pdf', file_url: null, mime_type: 'application/pdf', category: 'anhang' as const, created_at: '2026-07-01T09:00:00Z' },
+  ]
+
+  function renderWithFiles(props: Record<string, unknown> = {}) {
+    render(
+      <QuotesTab
+        quotes={[makeQuote()]} invoices={[]} regeneratingQuoteId={null} hasLocalDraft={false}
+        dankEnabled={false} sendingThankyouId={null}
+        onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
+        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}} onEdit={() => {}}
+        {...props}
+      />
+    )
+  }
+
+  it('zeigt die Datei-Sektion, sobald die Upload-Handler gesetzt sind', () => {
+    renderWithFiles({
+      files: FILES, uploading: false, uploadingCategory: null,
+      onUploadFile: vi.fn(), onDeleteFile: vi.fn(), onRenameFile: vi.fn(),
+    })
+    expect(screen.getByText(/Hochgeladene Offerten/)).toBeInTheDocument()
+    expect(screen.getByText('Alt-Offerte_2019.pdf')).toBeInTheDocument()
+  })
+
+  it('zeigt dort nur Dateien der Kategorie offerte', () => {
+    renderWithFiles({
+      files: FILES, uploading: false, uploadingCategory: null,
+      onUploadFile: vi.fn(), onDeleteFile: vi.fn(), onRenameFile: vi.fn(),
+    })
+    // 'anhang' gehoert in den Dokumente-Reiter (geht mit der Offerten-Mail raus)
+    // und darf hier nicht mitgezaehlt werden.
+    expect(screen.queryByText('Prospekt.pdf')).not.toBeInTheDocument()
+  })
+
+  it('bleibt ohne Upload-Handler unsichtbar (Abwärtskompatibilität)', () => {
+    renderWithFiles()
+    expect(screen.queryByText(/Hochgeladene Offerten/)).not.toBeInTheDocument()
+  })
+})

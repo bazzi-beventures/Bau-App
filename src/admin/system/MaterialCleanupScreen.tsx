@@ -53,7 +53,9 @@ export default function MaterialCleanupScreen() {
       try {
         const [sups, meta] = await Promise.all([
           apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
-          apiFetch('/pwa/admin/materials/meta') as Promise<{ categories: string[] }>,
+          // include_inactive: dieses Tool arbeitet auf archivierten Artikeln — ohne den
+          // Parameter fehlen Kategorien, in denen bereits alles auf Loeschvormerkung steht.
+          apiFetch('/pwa/admin/materials/meta?include_inactive=1') as Promise<{ categories: string[] }>,
         ])
         setSuppliers(sups)
         setCategories(meta.categories ?? [])

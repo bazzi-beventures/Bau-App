@@ -5,6 +5,7 @@ import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ActionRow } from '../../components/ActionRow'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../../../shared/projectFileTypes'
+import { BeschaffungStep, daysSince } from '../../constants/beschaffungSteps'
 
 export type ProjectFileCategory =
   | 'fotos'
@@ -16,6 +17,7 @@ export type ProjectFileCategory =
   | 'anhang'
   | 'prospekt' // Altbestand: frühere Kategorie der Offerten-Anhänge, wird unter 'anhang' angezeigt
   | 'rapport'  // eingescanntes Papier-Blatt oder Rapport aus einem Fremdsystem (z.B. Sorba)
+  | 'offerte'  // eingescannte/externe Offerte, die nicht im System erstellt wurde
 
 export interface ProjectFile {
   id: string
@@ -49,12 +51,22 @@ const REPORT_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'rapport', title: 'Hochgeladene Rapporte (Papier / Fremdsystem)' },
 ]
 
+// Offerten, die nicht in diesem System entstanden sind: die eingescannte Papier-
+// Offerte, eine Offerte aus einem Vorgängersystem oder die eines Drittanbieters.
+// Steht im Offerten-Tab unter der Offerten-Liste — analog zu den hochgeladenen
+// Rapporten. NICHT zu verwechseln mit 'anhang' ("Anhänge für Offerte"): das sind
+// Dokumente, die MIT der Offerte an den Kunden rausgehen. Hier liegt das Dokument
+// nur am Projekt.
+const QUOTE_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
+  { key: 'offerte', title: 'Hochgeladene Offerten (Papier / Fremdsystem)' },
+]
+
 // Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der
 // "Sonstiges"-Sektion darf NUR echte Altlasten (null / unbekannte Kategorie)
 // auffangen – sonst würden Lieferanten-Dateien (z.B. auftragsbestaetigung)
 // zusätzlich unter "Sonstiges" doppelt erscheinen.
 const ALL_CATEGORY_KEYS = new Set<ProjectFileCategory>(
-  [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS, ...REPORT_DOC_SECTIONS].map(s => s.key),
+  [...PROJECT_DOC_SECTIONS, ...SUPPLIER_DOC_SECTIONS, ...REPORT_DOC_SECTIONS, ...QUOTE_DOC_SECTIONS].map(s => s.key),
 )
 // Altbestand: wird in der Anhänge-Sektion angezeigt und darf nicht zusätzlich
 // unter "Sonstiges" auftauchen.
@@ -181,6 +193,7 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   anhang: 'Anhang',
   prospekt: 'Prospekt',
   rapport: 'Rapport',
+  offerte: 'Offerte',
 }
 
 interface FileSectionsProps {
@@ -450,10 +463,72 @@ export function DocumentsTab({ files, uploading, uploadingCategory, onUpload, on
   )
 }
 
-export function SupplierDocumentsTab({ files, uploading, uploadingCategory, onUpload, onDelete, onRename }: DocumentsTabProps) {
+interface SupplierDocumentsTabProps extends DocumentsTabProps {
+  // Feature `beschaffungsstatus`: Dropdown über den Datei-Sektionen. Fehlen die Props,
+  // sieht der Tab aus wie vorher (Feature aus / Abwärtskompatibilität mit den Tests).
+  beschaffungSteps?: BeschaffungStep[]
+  beschaffungStatus?: string | null
+  beschaffungStatusAt?: string | null
+  beschaffungStatusSource?: string | null
+  savingBeschaffung?: boolean
+  onBeschaffungChange?: (status: string | null) => void
+}
+
+export function SupplierDocumentsTab({
+  files, uploading, uploadingCategory, onUpload, onDelete, onRename,
+  beschaffungSteps, beschaffungStatus, beschaffungStatusAt, beschaffungStatusSource,
+  savingBeschaffung, onBeschaffungChange,
+}: SupplierDocumentsTabProps) {
+  const showBeschaffung = !!beschaffungSteps?.length && !!onBeschaffungChange
+  const days = daysSince(beschaffungStatusAt)
   return (
     <div className="admin-table-wrap" style={{ padding: 24 }}>
       <div className="admin-section-title" style={{ marginBottom: 14 }}>Lieferantendokumente</div>
+
+      {/* Beschaffungsstatus: bewusst hier und nicht im Status-Reiter (dort steht der
+          Lebenszyklus). Man setzt den Schritt in dem Moment, in dem man auch das
+          Dokument ablegt — Bedienung und Beleg am selben Ort. */}
+      {showBeschaffung && (
+        <div style={{
+          marginBottom: 20,
+          padding: '14px 16px',
+          borderRadius: 8,
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <label className="admin-form-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+            Beschaffungsstatus
+          </label>
+          <select
+            className="admin-form-input"
+            style={{ width: 'auto', minWidth: 200 }}
+            value={beschaffungStatus ?? ''}
+            disabled={savingBeschaffung}
+            onChange={e => onBeschaffungChange!(e.target.value || null)}
+          >
+            <option value="">— nichts bestellt</option>
+            {beschaffungSteps!.map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+          {savingBeschaffung && (
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Wird gespeichert…</span>
+          )}
+          {!savingBeschaffung && beschaffungStatus && (
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {days !== null ? `seit ${days} Tag${days === 1 ? '' : 'en'}` : 'heute gesetzt'}
+              {/* Woher der Wert kommt, entscheidet über das Vertrauen in die Spalte:
+                  ein automatischer Sprung ohne Erklärung liest sich als Fehler. */}
+              {beschaffungStatusSource === 'auto' && ' · automatisch beim Upload gesetzt'}
+            </span>
+          )}
+        </div>
+      )}
+
       <FileSections
         files={files}
         sections={SUPPLIER_DOC_SECTIONS}
@@ -488,9 +563,23 @@ interface QuotesTabProps {
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
   addingVariantId?: number | null
   onAddVariant?: (quoteId: number, kind: 'variante' | 'mehrfach') => void
+  // Optional: Datei-Sektion für hochgeladene Offerten (Papier, Fremdsystem).
+  // Nur gezeigt, wenn die Upload-Props gesetzt sind — gleiche Handler wie der
+  // Dokumente-Tab, die Sektion bestimmt die Kategorie ('offerte') implizit.
+  files?: ProjectFile[]
+  uploading?: boolean
+  uploadingCategory?: ProjectFileCategory | null
+  onUploadFile?: (category: ProjectFileCategory, files: File[]) => void
+  onDeleteFile?: (fileId: string) => void
+  onRenameFile?: (fileId: string, filename: string) => Promise<void>
 }
 
-export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId, onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou, onEdit, addingVariantId, onAddVariant }: QuotesTabProps) {
+export function QuotesTab({
+  quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId,
+  onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou,
+  onEdit, addingVariantId, onAddVariant,
+  files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
+}: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
   // werden Rechnungen direkt aus der Offerte erstellt. Eine solche Rechnung
   // markiert die zugehörige Offertengruppe mit einem Badge.
@@ -697,6 +786,24 @@ export function QuotesTab({ quotes, invoices, regeneratingQuoteId, hasLocalDraft
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Offerten, die nicht hier entstanden sind: die eingescannte Papier-Offerte,
+          eine aus einem Vorgängersystem oder die eines Drittanbieters. Bewusst hier
+          statt im Dokumente-Tab — und bewusst als Datei-Kategorie: solche Dokumente
+          haben keine Offerten-Zeile, an die man sie hängen könnte. */}
+      {onUploadFile && onDeleteFile && onRenameFile && (
+        <div style={{ marginTop: 24 }}>
+          <FileSections
+            files={files ?? []}
+            sections={QUOTE_DOC_SECTIONS}
+            uploading={!!uploading}
+            uploadingCategory={uploadingCategory ?? null}
+            onUpload={onUploadFile}
+            onDelete={onDeleteFile}
+            onRename={onRenameFile}
+          />
         </div>
       )}
     </div>
