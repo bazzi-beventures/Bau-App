@@ -86,6 +86,7 @@ export interface ProjectQuote {
   xlsx_storage_path?: string | null
   customer_email: string | null
   thankyou_sent_at?: string | null
+  rejection_mail_sent_at?: string | null
   variant_group_id?: string | null
   variant_group_kind?: string | null
   variant_rank?: number | null
@@ -553,12 +554,17 @@ interface QuotesTabProps {
   // angenommenen Offerten (Per-Knopfdruck-Modus bzw. Auto-Versand-Fallback).
   dankEnabled: boolean
   sendingThankyouId: number | null
+  // Feature offerte_absage_mail: steuert den „Absage senden"-Knopf bei abgelehnten
+  // Offerten (Per-Knopfdruck-Modus bzw. Auto-Versand-Fallback).
+  absageEnabled: boolean
+  sendingRejectionId: number | null
   onShowCreateForm: () => void
   onResumeDraft: () => void
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
   onSend: (quote: ProjectQuote) => void
   onSendThankyou: (quoteId: number) => void
+  onSendRejection: (quoteId: number) => void
   onEdit: (quoteId: number) => void
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
   addingVariantId?: number | null
@@ -576,8 +582,9 @@ interface QuotesTabProps {
 
 export function QuotesTab({
   quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId,
+  absageEnabled, sendingRejectionId,
   onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou,
-  onEdit, addingVariantId, onAddVariant,
+  onSendRejection, onEdit, addingVariantId, onAddVariant,
   files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
 }: QuotesTabProps) {
   // Workaround-Hinweis: solange die Mitarbeiter-PWA noch nicht ausgerollt ist,
@@ -697,6 +704,11 @@ export function QuotesTab({
                         ✓ Danke-Mail {fmtDate(q.thankyou_sent_at)}
                       </span>
                     )}
+                    {absageEnabled && q.rejection_mail_sent_at && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }} title="Absage-Mail an den Kunden wurde versendet">
+                        ✓ Absage-Mail {fmtDate(q.rejection_mail_sent_at)}
+                      </span>
+                    )}
                     {/* Summe + Aktionen als ein rechtsbündiger Block, der bei knappem
                         Platz (Kommentar-Seitenleiste) als Einheit umbricht – statt die
                         Summe vom Button-Cluster zu trennen. */}
@@ -747,6 +759,16 @@ export function QuotesTab({
                               title="Dankesmail an den Kunden senden"
                             >
                               {sendingThankyouId === q.id ? '…' : 'Dankeschön senden'}
+                            </button>
+                          )}
+                          {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (
+                            <button
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              disabled={sendingRejectionId === q.id}
+                              onClick={() => onSendRejection(q.id)}
+                              title="Absage-Mail an den Kunden senden"
+                            >
+                              {sendingRejectionId === q.id ? '…' : 'Absage senden'}
                             </button>
                           )}
                           <button

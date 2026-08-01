@@ -16,6 +16,7 @@ export interface AdminDashboard {
   projects_overdue: number
   pending_drafts: number
   recently_accepted_quotes: number
+  recently_rejected_quotes: number
 }
 
 export interface OverdueProject {

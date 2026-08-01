@@ -70,6 +70,9 @@ function IconDocument() {
 function IconCheckCircle() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm3.707-9.293a1 1 0 0 0-1.414-1.414L9 10.586 7.707 9.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4z" clipRule="evenodd"/></svg>
 }
+function IconXCircle() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM8.707 7.293a1 1 0 0 0-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 1 0 1.414 1.414L10 11.414l1.293 1.293a1 1 0 0 0 1.414-1.414L11.414 10l1.293-1.293a1 1 0 0 0-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+}
 
 function fmtCHF(amount: number) {
   return amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -687,6 +690,14 @@ export default function DashboardScreen({ dashboard, onNav, onBadgeChange }: Pro
             colorClass="green"
             onClick={() => onNav('quotes', 'akzeptiert')}
             icon={<IconCheckCircle />}
+            badge
+          />
+          <KpiCard
+            label="Abgelehnte Offerten"
+            value={dashboard?.recently_rejected_quotes ?? null}
+            colorClass="red"
+            onClick={() => onNav('quotes', 'abgelehnt')}
+            icon={<IconXCircle />}
             badge
           />
           <KpiCard

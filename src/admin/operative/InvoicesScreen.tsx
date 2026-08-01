@@ -65,6 +65,11 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [genProject, setGenProject] = useState('')
   const [genUseQuote, setGenUseQuote] = useState(false)
   const [generating, setGenerating] = useState(false)
+  // Arbeitsbeschrieb ("Ausgeführte Arbeiten") — Vorschlag aus den Rapporten, vom
+  // Projektleiter editierbar. Rapport-Texte sind Monteur-Sprache ("TB gerissen an
+  // Lam."), auf einer Kundenrechnung oft zu knapp.
+  const [genWorkDesc, setGenWorkDesc] = useState('')
+  const [loadingWorkDesc, setLoadingWorkDesc] = useState(false)
   // Send invoice
   const [sendInvoice, setSendInvoice] = useState<Invoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
@@ -104,17 +109,31 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setGenProject('')
     setGenUseQuote(false)
     setHasAcceptedQuote(false)
+    setGenWorkDesc('')
     setShowGenerate(true)
   }
 
   async function checkQuote(projectName: string) {
     setGenProject(projectName)
-    if (!projectName) { setHasAcceptedQuote(false); return }
+    if (!projectName) { setHasAcceptedQuote(false); setGenWorkDesc(''); return }
     try {
       const quotes = await apiFetch('/pwa/admin/quotes') as { project_name: string; status: string }[]
       setHasAcceptedQuote(quotes.some(q => q.project_name === projectName && q.status === 'akzeptiert'))
     } catch {
       setHasAcceptedQuote(false)
+    }
+    // Vorschlag laden, nicht blockierend: schlaegt er fehl, bleibt das Feld leer und
+    // die Rechnung entsteht ohne den Block.
+    setLoadingWorkDesc(true)
+    try {
+      const res = await apiFetch(
+        `/pwa/admin/invoices/work-description?project_name=${encodeURIComponent(projectName)}`,
+      ) as { work_description: string }
+      setGenWorkDesc(res.work_description || '')
+    } catch {
+      setGenWorkDesc('')
+    } finally {
+      setLoadingWorkDesc(false)
     }
   }
 
@@ -124,7 +143,11 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     try {
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
-        body: JSON.stringify({ project_name: genProject, use_quote: genUseQuote }),
+        body: JSON.stringify({
+          project_name: genProject,
+          use_quote: genUseQuote,
+          work_description: genWorkDesc,
+        }),
       }) as { invoice_number: string; total_amount: number; quote_numbers?: string[] }
       showToast(
         `Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`
@@ -495,6 +518,28 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 </label>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, paddingLeft: 24 }}>
                   Aktivieren, wenn noch kein unterschriebener Arbeitsrapport vorliegt — die Rechnung wird dann aus der Offerte erstellt.
+                </div>
+              </div>
+            )}
+            {genProject && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="admin-form-label" htmlFor="gen-work-desc">
+                  Ausgeführte Arbeiten
+                </label>
+                <textarea
+                  id="gen-work-desc"
+                  className="admin-form-input"
+                  rows={5}
+                  maxLength={4000}
+                  value={genWorkDesc}
+                  placeholder={loadingWorkDesc ? 'Wird geladen…' : 'Erscheint auf der Rechnung über den Positionen. Leer lassen, um den Block wegzulassen.'}
+                  onChange={e => setGenWorkDesc(e.target.value)}
+                  disabled={loadingWorkDesc || generating}
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Vorschlag aus den Rapporten dieses Projekts — vor dem Erstellen anpassen,
+                  der Text steht so auf der Rechnung.
                 </div>
               </div>
             )}

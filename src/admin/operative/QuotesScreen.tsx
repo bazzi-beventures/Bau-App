@@ -50,6 +50,7 @@ interface Quote {
   customer_name?: string | null
   customer_email?: string | null
   thankyou_sent_at?: string | null
+  rejection_mail_sent_at?: string | null
 }
 
 interface ProjektleiterOption {
@@ -1610,6 +1611,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   // „Dankeschön senden"-Knopf bei angenommenen Offerten (Per-Knopfdruck-Modus bzw.
   // Fallback, falls der Auto-Versand ausblieb).
   const [dankEnabled, setDankEnabled] = useState(false)
+  // Absage-Mail bei Offerten-Ablehnung (Feature offerte_absage_mail): steuert den
+  // „Absage senden"-Knopf bei abgelehnten Offerten (Per-Knopfdruck-Modus bzw.
+  // Fallback, falls der Auto-Versand ausblieb).
+  const [absageEnabled, setAbsageEnabled] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -1623,7 +1628,10 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    getMe().then(me => setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))).catch(() => {})
+    getMe().then(me => {
+      setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
+      setAbsageEnabled(isFeatureEnabled(me, 'offerte_absage_mail'))
+    }).catch(() => {})
   }, [])
 
   async function handleSendThankyou(id: number) {
@@ -1634,6 +1642,19 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
       load()
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen', 'error')
+    } finally {
+      setActing(null)
+    }
+  }
+
+  async function handleSendRejection(id: number) {
+    setActing(id)
+    try {
+      const res = await apiFetch(`/pwa/admin/quotes/${id}/send-rejection`, { method: 'POST' }) as { message?: string }
+      showToast(res.message || 'Absage-Mail gesendet', 'success')
+      load()
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Absage-Mail fehlgeschlagen', 'error')
     } finally {
       setActing(null)
     }
@@ -1789,6 +1810,11 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                         Danke-Mail gesendet {fmtDate(q.thankyou_sent_at)}
                       </div>
                     )}
+                    {absageEnabled && q.rejection_mail_sent_at && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                        Absage-Mail gesendet {fmtDate(q.rejection_mail_sent_at)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(q.created_at)}</td>
                   <td>
@@ -1841,6 +1867,16 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                           title="Dankesmail an den Kunden senden"
                         >
                           {acting === q.id ? '…' : 'Dankeschön senden'}
+                        </button>
+                      )}
+                      {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (
+                        <button
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={() => handleSendRejection(q.id)}
+                          disabled={acting === q.id}
+                          title="Absage-Mail an den Kunden senden"
+                        >
+                          {acting === q.id ? '…' : 'Absage senden'}
                         </button>
                       )}
                       {/* Auch bei 'entwurf': eine am Telefon zugesagte oder abgelehnte

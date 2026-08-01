@@ -104,6 +104,12 @@ function OffertenVorlagenPanel() {
   const [thankyouTxtSaved, setThankyouTxtSaved] = useState('')
   const [thankyouIsDefault, setThankyouIsDefault] = useState(true)
   const [savingThankyou, setSavingThankyou] = useState(false)
+  // Absage-Text bei Offerten-Ablehnung (Feature offerte_absage_mail). Gegenstück zum
+  // Danke-Text; ebenfalls immer pflegbar (kein Feature-Flag am Editor).
+  const [rejectionTxt, setRejectionTxt] = useState('')
+  const [rejectionTxtSaved, setRejectionTxtSaved] = useState('')
+  const [rejectionIsDefault, setRejectionIsDefault] = useState(true)
+  const [savingRejection, setSavingRejection] = useState(false)
   // Standard-Anhänge: pflegbar auch bei deaktiviertem Feature (nur der Versand-Dialog
   // hängt am Flag) — analog zu den Sonderpositionen mit Hinweis statt Ausblenden.
   const [attachments, setAttachments] = useState<QuoteAttachmentTpl[]>([])
@@ -116,13 +122,14 @@ function OffertenVorlagenPanel() {
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto, thankyou, att] = await Promise.all([
+      const [data, notes, disc, discR, skonto, thankyou, rejection, att] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-thankyou-text') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-rejection-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-attachment-templates') as Promise<{ attachments: QuoteAttachmentTpl[] }>,
       ])
       setInstallation(data.installation ?? [])
@@ -143,6 +150,9 @@ function OffertenVorlagenPanel() {
       setThankyouTxt(thankyou.text ?? '')
       setThankyouTxtSaved(thankyou.text ?? '')
       setThankyouIsDefault(thankyou.is_default)
+      setRejectionTxt(rejection.text ?? '')
+      setRejectionTxtSaved(rejection.text ?? '')
+      setRejectionIsDefault(rejection.is_default)
     } finally {
       setLoading(false)
     }
@@ -246,6 +256,27 @@ function OffertenVorlagenPanel() {
       setError(err instanceof Error ? err.message : 'Fehler')
     } finally {
       setSavingThankyou(false)
+    }
+  }
+
+  async function saveQuoteRejectionText(reset = false) {
+    setSavingRejection(true)
+    setError('')
+    try {
+      // reset => null (Reset auf System-Default); leerer Editor-Wert wird serverseitig
+      // ebenfalls als Reset behandelt (leerer Absage-Text ergibt keine sinnvolle Mail).
+      const res = await apiFetch('/pwa/admin/quote-rejection-text', {
+        method: 'PATCH',
+        body: JSON.stringify({ text: reset ? null : rejectionTxt }),
+      }) as { text: string; is_default: boolean }
+      setRejectionTxt(res.text ?? '')
+      setRejectionTxtSaved(res.text ?? '')
+      setRejectionIsDefault(res.is_default)
+      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Absage-Text gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingRejection(false)
     }
   }
 
@@ -751,6 +782,50 @@ function OffertenVorlagenPanel() {
                 className="admin-btn admin-btn-secondary"
                 onClick={() => saveQuoteThankyouText(true)}
                 disabled={savingThankyou || thankyouIsDefault}
+              >
+                Auf Standardtext zurücksetzen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück.
+              </span>
+            </div>
+          </div>
+
+          {/* ── Absage-Text bei Offerten-Ablehnung (Feature „Absage-Mail bei Offerten-Ablehnung") ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Absage-Text (Offerten-Ablehnung)</div>
+              <div className="admin-page-subtitle">
+                Inhalt der Mail, die dem Kunden nach der Ablehnung einer Offerte zugeht —
+                sobald das Feature „Absage-Mail bei Offerten-Ablehnung" aktiv ist (unter
+                Konfiguration). Platzhalter <code>{'{kunde}'}</code>, <code>{'{offerte}'}</code>{' '}
+                und <code>{'{projekt}'}</code> werden beim Versand aus der Offerte gefüllt.
+                Anrede und Grussformel gehören in den Text.
+                {rejectionIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <textarea
+              className="admin-form-input"
+              rows={8}
+              value={rejectionTxt}
+              onChange={e => setRejectionTxt(e.target.value)}
+              placeholder="Guten Tag {kunde}&#10;&#10;Besten Dank für Ihre Rückmeldung zu unserer Offerte {offerte}…"
+              style={{ resize: 'vertical', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveQuoteRejectionText(false)}
+                disabled={savingRejection || rejectionTxt === rejectionTxtSaved}
+              >
+                {savingRejection ? 'Speichern…' : 'Absage-Text speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveQuoteRejectionText(true)}
+                disabled={savingRejection || rejectionIsDefault}
               >
                 Auf Standardtext zurücksetzen
               </button>

@@ -29,12 +29,15 @@ function renderTab(quotes: ProjectQuote[], onUpdateStatus = vi.fn()) {
       hasLocalDraft={false}
       dankEnabled={false}
       sendingThankyouId={null}
+      absageEnabled={false}
+      sendingRejectionId={null}
       onShowCreateForm={() => {}}
       onResumeDraft={() => {}}
       onUpdateStatus={onUpdateStatus}
       onRegenerate={() => {}}
       onSend={() => {}}
       onSendThankyou={() => {}}
+      onSendRejection={() => {}}
       onEdit={() => {}}
     />
   )
@@ -89,8 +92,10 @@ describe('QuotesTab — Varianten', () => {
       <QuotesTab
         quotes={quotes} invoices={[]} regeneratingQuoteId={null} hasLocalDraft={false}
         dankEnabled={false} sendingThankyouId={null}
+        absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
-        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}} onEdit={() => {}}
+        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}
+        onSendRejection={() => {}} onEdit={() => {}}
         addingVariantId={null} onAddVariant={onAddVariant}
       />
     )
@@ -164,8 +169,10 @@ describe('QuotesTab — hochgeladene Offerten', () => {
       <QuotesTab
         quotes={[makeQuote()]} invoices={[]} regeneratingQuoteId={null} hasLocalDraft={false}
         dankEnabled={false} sendingThankyouId={null}
+        absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
-        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}} onEdit={() => {}}
+        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}
+        onSendRejection={() => {}} onEdit={() => {}}
         {...props}
       />
     )

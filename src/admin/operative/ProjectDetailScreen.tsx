@@ -163,6 +163,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   // Feature offerte_dank_mail: „Dankeschön senden"-Knopf bei angenommenen Offerten.
   const [dankEnabled, setDankEnabled] = useState(false)
+  // Feature offerte_absage_mail: „Absage senden"-Knopf bei abgelehnten Offerten.
+  const [absageEnabled, setAbsageEnabled] = useState(false)
   // Feature beschaffungsstatus: Arbeitsschritt der Materialbeschaffung. Eigener State
   // statt direkt auf dem project-Prop, weil Dropdown UND Datei-Upload ihn ändern —
   // ein Prop-Reload würde beides erst nach dem Schliessen des Detailscreens zeigen.
@@ -174,6 +176,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
   const [addingVariantId, setAddingVariantId] = useState<number | null>(null)
   const [sendingThankyouId, setSendingThankyouId] = useState<number | null>(null)
+  const [sendingRejectionId, setSendingRejectionId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
 
@@ -225,6 +228,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       setCurrentUserId(me.authorized_user_id)
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
       setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
+      setAbsageEnabled(isFeatureEnabled(me, 'offerte_absage_mail'))
       setBeschaffungSteps(
         isFeatureEnabled(me, 'beschaffungsstatus')
           ? enabledBeschaffungSteps(getFeature(me, 'beschaffungsstatus'))
@@ -505,6 +509,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen')
     } finally {
       setSendingThankyouId(null)
+    }
+  }
+
+  async function handleSendRejection(quoteId: number) {
+    setSendingRejectionId(quoteId)
+    try {
+      const res = await apiFetch(`/pwa/admin/quotes/${quoteId}/send-rejection`, { method: 'POST' }) as { message?: string }
+      showToast(res.message || 'Absage-Mail gesendet')
+      await reloadQuotes()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Absage-Mail fehlgeschlagen')
+    } finally {
+      setSendingRejectionId(null)
     }
   }
 
@@ -1329,12 +1346,15 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           hasLocalDraft={quoteDraftExists}
           dankEnabled={dankEnabled}
           sendingThankyouId={sendingThankyouId}
+          absageEnabled={absageEnabled}
+          sendingRejectionId={sendingRejectionId}
           onShowCreateForm={() => { setResumeQuoteDraft(false); setShowQuoteForm(true) }}
           onResumeDraft={() => { setResumeQuoteDraft(true); setShowQuoteForm(true) }}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={q => setSendQuote(q)}
           onSendThankyou={handleSendThankyou}
+          onSendRejection={handleSendRejection}
           onEdit={handleEditQuote}
           addingVariantId={addingVariantId}
           onAddVariant={handleAddVariant}
