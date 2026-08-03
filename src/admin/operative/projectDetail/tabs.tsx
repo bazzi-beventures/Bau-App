@@ -11,6 +11,7 @@ export type ProjectFileCategory =
   | 'fotos'
   | 'masse'
   | 'sonstiges'
+  | 'angebot_lieferant'
   | 'bestellungen'
   | 'auftragsbestaetigung'
   | 'lieferschein'
@@ -39,6 +40,9 @@ const PROJECT_DOC_SECTIONS: { key: ProjectFileCategory; title: string; legacyFal
 ]
 
 const SUPPLIER_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
+  // Chronologie des Beschaffungsablaufs: erst das Angebot des Lieferanten, dann
+  // Bestellung, AB, Lieferschein.
+  { key: 'angebot_lieferant', title: 'Angebote Lieferant' },
   { key: 'bestellungen', title: 'Bestellungen' },
   { key: 'auftragsbestaetigung', title: 'Auftragsbestätigung' },
   { key: 'lieferschein', title: 'Lieferschein' },
@@ -188,6 +192,7 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   fotos: 'Fotos',
   masse: 'Masse',
   sonstiges: 'Sonstiges',
+  angebot_lieferant: 'Angebote Lieferant',
   bestellungen: 'Bestellungen',
   auftragsbestaetigung: 'Auftragsbestätigung',
   lieferschein: 'Lieferschein',

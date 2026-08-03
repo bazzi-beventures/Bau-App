@@ -70,6 +70,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   // Lam."), auf einer Kundenrechnung oft zu knapp.
   const [genWorkDesc, setGenWorkDesc] = useState('')
   const [loadingWorkDesc, setLoadingWorkDesc] = useState(false)
+  // Bemerkung auf der Rechnung (z.B. Referenz/Projekt-Nr. des Kunden) — reiner
+  // Freitext, leer = kein Block auf dem PDF.
+  const [genRemark, setGenRemark] = useState('')
   // Send invoice
   const [sendInvoice, setSendInvoice] = useState<Invoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
@@ -110,6 +113,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setGenUseQuote(false)
     setHasAcceptedQuote(false)
     setGenWorkDesc('')
+    setGenRemark('')
     setShowGenerate(true)
   }
 
@@ -147,6 +151,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
           project_name: genProject,
           use_quote: genUseQuote,
           work_description: genWorkDesc,
+          remark: genRemark,
         }),
       }) as { invoice_number: string; total_amount: number; quote_numbers?: string[] }
       showToast(
@@ -540,6 +545,27 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                   Vorschlag aus den Rapporten dieses Projekts — vor dem Erstellen anpassen,
                   der Text steht so auf der Rechnung.
+                </div>
+              </div>
+            )}
+            {genProject && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="admin-form-label" htmlFor="gen-remark">
+                  Bemerkung
+                </label>
+                <textarea
+                  id="gen-remark"
+                  className="admin-form-input"
+                  rows={2}
+                  maxLength={1000}
+                  value={genRemark}
+                  placeholder="z.B. Referenz oder Projekt-Nr. des Kunden. Leer lassen, um den Block wegzulassen."
+                  onChange={e => setGenRemark(e.target.value)}
+                  disabled={generating}
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Erscheint als eigener Block «Bemerkung» auf der Rechnung, über den Positionen.
                 </div>
               </div>
             )}
