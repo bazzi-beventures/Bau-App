@@ -1022,7 +1022,9 @@ interface InvoicesTabProps {
   defaultEmail: string
   hasSignedReport: boolean
   onUseAcceptedQuoteChange: (v: boolean) => void
-  onGenerateInvoice: () => void
+  // Erzeugt die Rechnung; `remark` ist die Bemerkung fuers PDF (leer = kein Block).
+  // Liefert true bei Erfolg — der Dialog schliesst nur dann.
+  onGenerateInvoice: (remark: string) => Promise<boolean>
   onMarkPaid: (invoiceId: number) => void
   onUnmarkPaid: (invoiceId: number) => Promise<void>
   onArchive: (invoiceId: number) => Promise<void>
@@ -1033,7 +1035,10 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
   const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
-  const [confirmNoReport, setConfirmNoReport] = useState(false)
+  // Generieren-Dialog: traegt das Bemerkungs-Feld und (ohne unterschriebenen
+  // Rapport) den frueheren Bestaetigungs-Hinweis — ein Dialog statt zwei.
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [genRemark, setGenRemark] = useState('')
   const [confirmArchive, setConfirmArchive] = useState<ProjectInvoice | null>(null)
   const [confirmUnpay, setConfirmUnpay] = useState<ProjectInvoice | null>(null)
   const [acting, setActing] = useState(false)
@@ -1063,16 +1068,13 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
   }
 
   function handleGenerateClick() {
-    if (hasSignedReport) {
-      onGenerateInvoice()
-    } else {
-      setConfirmNoReport(true)
-    }
+    setGenRemark('')
+    setShowGenerate(true)
   }
 
-  function handleConfirmNoReport() {
-    setConfirmNoReport(false)
-    onGenerateInvoice()
+  async function handleGenerateConfirm() {
+    const ok = await onGenerateInvoice(genRemark)
+    if (ok) setShowGenerate(false)
   }
 
   return (
@@ -1203,23 +1205,44 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
         />
       )}
 
-      {/* Dialog: Rechnung ohne unterschriebenen Rapport erstellen */}
-      {confirmNoReport && (
-        <ConfirmDialog
-          title="Rechnung ohne Arbeitsrapport erstellen?"
-          message={
-            <>
-              Es ist kein vom Kunden unterschriebener Rapport vorhanden.
-              Die Rechnung wird stattdessen aus der akzeptierten Offerte generiert.
-            </>
-          }
-          confirmLabel="Ohne Rapport erstellen"
-          busyLabel="Wird erstellt…"
-          busy={generatingInvoice}
-          variant="primary"
-          onCancel={() => setConfirmNoReport(false)}
-          onConfirm={handleConfirmNoReport}
-        />
+      {/* Dialog: Rechnung generieren (Bemerkung + ggf. Hinweis "ohne Rapport") */}
+      {showGenerate && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Rechnung generieren</div>
+            {!hasSignedReport && (
+              <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+                Es ist kein vom Kunden unterschriebener Rapport vorhanden.
+                Die Rechnung wird stattdessen aus der akzeptierten Offerte generiert.
+              </div>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <label className="admin-form-label" htmlFor="proj-gen-remark">
+                Bemerkung
+              </label>
+              <textarea
+                id="proj-gen-remark"
+                className="admin-form-input"
+                rows={2}
+                maxLength={1000}
+                value={genRemark}
+                placeholder="z.B. Referenz oder Projekt-Nr. des Kunden. Leer lassen, um den Block wegzulassen."
+                onChange={e => setGenRemark(e.target.value)}
+                disabled={generatingInvoice}
+                style={{ resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Erscheint als eigener Block «Bemerkung» auf der Rechnung, über den Positionen.
+              </div>
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setShowGenerate(false)} disabled={generatingInvoice}>Abbrechen</button>
+              <button className="admin-btn admin-btn-primary" onClick={handleGenerateConfirm} disabled={generatingInvoice}>
+                {generatingInvoice ? 'Wird erstellt…' : hasSignedReport ? 'Rechnung generieren' : 'Ohne Rapport erstellen'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Dialog: Rechnung senden */}

@@ -465,8 +465,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
-  async function handleGenerateInvoice() {
-    if (!project) return
+  async function handleGenerateInvoice(remark: string): Promise<boolean> {
+    if (!project) return false
     // Fehlt ein verrechenbarer Rapport (unterschrieben ODER manuell erfasst,
     // siehe hasBillableReport), wird zwingend aus der Offerte gerechnet — das
     // Backend setzt dann automatisch created_without_report.
@@ -475,13 +475,15 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     try {
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
-        body: JSON.stringify({ project_name: project.name, use_quote: useQuote }),
+        body: JSON.stringify({ project_name: project.name, use_quote: useQuote, remark }),
       }) as { quote_numbers?: string[] } | null
       showToast('Rechnung erstellt' + sammelrechnungHint(res?.quote_numbers))
       await reloadInvoices()
       await reloadReports()
+      return true
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler beim Erstellen')
+      return false
     } finally {
       setGeneratingInvoice(false)
     }
