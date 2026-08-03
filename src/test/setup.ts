@@ -27,6 +27,34 @@ function installStorage(name: 'localStorage' | 'sessionStorage') {
 installStorage('localStorage')
 installStorage('sessionStorage')
 
+// jsdom implementiert window.matchMedia nicht. useIsMobile() ruft es beim ersten
+// Render auf — ohne Polyfill wirft jede Komponente, die den Hook nutzt. Default
+// `matches: false` = Desktop-Breakpoint; wer Mobile testen will, überschreibt
+// window.matchMedia im jeweiligen Test.
+if (typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}
+
+// jsdom kennt kein Layout und implementiert scrollIntoView nicht. Mehrere
+// Formulare scrollen sich beim Mounten selbst in den Sichtbereich — ohne Stub
+// wirft dieser Effekt und reisst den Test mit.
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {}
+}
+
 // React-Komponenten nach jedem Test aus dem jsdom-Dokument entfernen.
 afterEach(() => {
   cleanup()

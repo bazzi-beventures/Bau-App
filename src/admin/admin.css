@@ -755,6 +755,32 @@ select.admin-input {
   color: var(--danger);
 }
 
+/* Nicht blockierender Hinweis unter einem Feld (z.B. namensgleiche Kunden).
+   Bewusst --warning statt --danger: es ist kein Fehler, das Speichern geht weiter. */
+.admin-form-hint-warn {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-form-hint-warn ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.admin-form-hint-warn .admin-form-hint-lead {
+  font-weight: 500;
+}
+
+.admin-form-hint-warn .admin-form-hint-foot {
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
 /* ─── Responsive Formular-Zeilen (ersetzen Inline-gridTemplateColumns) ── */
 .admin-form-row {
   display: grid;

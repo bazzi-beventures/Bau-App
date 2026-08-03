@@ -235,6 +235,16 @@ export interface Customer {
   created_at: string
 }
 
+// Treffer des Dubletten-Checks (GET /pwa/admin/customers/name-check) — bewusst
+// schlanker als Customer: der Hinweis zeigt nur, wer den Namen schon trägt.
+interface NameMatch {
+  id: string
+  name: string
+  company: string | null
+  address: string | null
+  billing_address: string | null
+}
+
 function CustomerForm({
   initial,
   onSave,
@@ -268,11 +278,38 @@ function CustomerForm({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [nameMatches, setNameMatches] = useState<NameMatch[]>([])
   const rootRef = useRef<HTMLDivElement>(null)
+  const nameCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     getMe().then(me => setShowOwnerContact(isFeatureEnabled(me, 'eigentuemer_kontakt'))).catch(() => {})
   }, [])
+
+  // Dubletten-Hinweis: Gleiche Kundennamen sind erlaubt (der Unique-Constraint auf
+  // dem Namen ist bewusst weggefallen — «Hans Müller» gibt es nun mal mehrfach).
+  // Deshalb wird hier nur informiert, nie blockiert: wer den Namen tippt, sieht
+  // die bereits vorhandenen Träger samt Adresse und entscheidet selbst.
+  useEffect(() => {
+    if (nameCheckRef.current) clearTimeout(nameCheckRef.current)
+    const needle = name.trim()
+    if (!needle) {
+      setNameMatches([])
+      return
+    }
+    nameCheckRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ name: needle })
+        if (initial?.id) params.set('exclude_id', initial.id)
+        const res = await apiFetch(`/pwa/admin/customers/name-check?${params}`) as { matches?: NameMatch[] }
+        setNameMatches(res?.matches ?? [])
+      } catch {
+        // Rein informativ — ein fehlgeschlagener Check darf das Formular nicht stören.
+        setNameMatches([])
+      }
+    }, 400)
+    return () => { if (nameCheckRef.current) clearTimeout(nameCheckRef.current) }
+  }, [name, initial?.id])
 
   // Beim Klick auf eine Zeile weit unten in der Liste öffnet sich das
   // Formular oberhalb des Sichtbereichs — deshalb beim Mounten hinscrollen.
@@ -351,8 +388,34 @@ function CustomerForm({
         </div>
         <div className="admin-form-row">
           <div className="admin-form-group">
-            <label className="admin-form-label">Name *</label>
-            <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
+            <label className="admin-form-label" htmlFor="customer-name">Name *</label>
+            <input
+              id="customer-name"
+              className="admin-form-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+              aria-describedby={nameMatches.length > 0 ? 'customer-name-duplicates' : undefined}
+            />
+            {nameMatches.length > 0 && (
+              <div className="admin-form-hint-warn" role="status" id="customer-name-duplicates">
+                <div className="admin-form-hint-lead">
+                  {nameMatches.length === 1
+                    ? 'Es gibt bereits einen Kunden mit diesem Namen:'
+                    : `Es gibt bereits ${nameMatches.length} Kunden mit diesem Namen:`}
+                </div>
+                <ul>
+                  {nameMatches.map(m => (
+                    <li key={m.id}>
+                      {[m.company, m.billing_address ?? m.address].filter(Boolean).join(' · ') || 'ohne weitere Angaben'}
+                    </li>
+                  ))}
+                </ul>
+                <div className="admin-form-hint-foot">
+                  Gleiche Namen sind erlaubt — speichern legt einen weiteren Kunden an.
+                </div>
+              </div>
+            )}
           </div>
           <div className="admin-form-group">
             <label className="admin-form-label">Firma</label>
