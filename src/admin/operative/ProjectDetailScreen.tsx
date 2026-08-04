@@ -73,6 +73,13 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // Eine nur automatisch (aus dem Kundenstamm) befüllte Adresse wird hingegen neu geseedet,
   // damit ein Kundenwechsel auch die Distanz (Offerten-Fahrspesen) neu berechnen lässt.
   const [objectAddressTouched, setObjectAddressTouched] = useState(!!project?.object_address)
+  // Abweichende Rechnungsadresse NUR für dieses Projekt (analog Kundenstamm-Checkbox,
+  // aber ohne Rückschreiben in den Kunden). Abwählen sendet '' — das Backend filtert
+  // null im PATCH weg, ein leerer String leert den Override wirklich.
+  const initialBillingDiffers = !!(project?.billing_name || project?.billing_address)
+  const [billingDiffers, setBillingDiffers] = useState(initialBillingDiffers)
+  const [projBillingName, setProjBillingName] = useState(project?.billing_name ?? '')
+  const [projBillingAddress, setProjBillingAddress] = useState(project?.billing_address ?? '')
   // Mehrfachauswahl: ein Projekt kann mehrere Leistungsarten tragen (z.B. Neumontage + Reparatur)
   const [artDerArbeit, setArtDerArbeit] = useState<string[]>(project?.art_der_arbeit ?? [])
   const toggleArt = (value: string) =>
@@ -597,12 +604,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   }
 
   const selectedCustomer = customers.find(c => c.id === customerId) ?? null
-  const billingRecipient = selectedCustomer
-    ? (selectedCustomer.billing_name || selectedCustomer.name)
-    : (project ? projectCustomerName(project) : '')
-  const billingAddress = selectedCustomer
-    ? (selectedCustomer.billing_address || selectedCustomer.address || '')
-    : (project ? projectBillingAddress(project) : '')
+  // Projekt-Override zuerst — dieselbe Vorrang-Kette wie das Backend
+  // (resolve_billing_info): projects.billing_* vor customer.billing_* vor Stammdaten.
+  const billingRecipient = (billingDiffers && projBillingName.trim())
+    || (selectedCustomer
+      ? (selectedCustomer.billing_name || selectedCustomer.name)
+      : (project ? projectCustomerName(project) : ''))
+  const billingAddress = (billingDiffers && projBillingAddress)
+    || (selectedCustomer
+      ? (selectedCustomer.billing_address || selectedCustomer.address || '')
+      : (project ? projectBillingAddress(project) : ''))
 
   // ── Kontakte helpers ─────────────────────────────────────────
   function addKontakt() {
@@ -651,6 +662,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           customer_id: customerId || null,
           object_name: objectName.trim() || null,
           object_address: objectAddress || null,
+          // '' statt null, damit ein entfernter Override auch persistiert wird
+          // (das Backend filtert null-Werte weg — kein Clear möglich).
+          billing_name: billingDiffers ? projBillingName.trim() : '',
+          billing_address: billingDiffers ? projBillingAddress : '',
           art_der_arbeit: artDerArbeit,
           bemerkung: bemerkung || null,
           geruestfach: geruestfach.trim() ? parseInt(geruestfach, 10) : null,
@@ -1049,6 +1064,39 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   <div style={{ marginTop: 6, padding: '8px 12px', background: 'var(--bg-subtle, #f5f5f5)', borderRadius: 6, fontSize: 13, color: 'var(--muted)' }}>
                     <strong>Rechnung an:</strong> {billingRecipient || '—'}{billingAddress ? `, ${billingAddress}` : ''}
                   </div>
+                )}
+              </div>
+
+              <div className="admin-form-group">
+                <label className="admin-form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={billingDiffers}
+                    onChange={e => setBillingDiffers(e.target.checked)}
+                  />
+                  Abweichende Rechnungsadresse (nur dieses Projekt)
+                </label>
+                {billingDiffers && (
+                  <>
+                    <div className="admin-form-row" style={{ marginTop: 10 }}>
+                      <div>
+                        <label className="admin-form-label">Empfänger (Rechnung)</label>
+                        <input
+                          className="admin-form-input"
+                          value={projBillingName}
+                          onChange={e => setProjBillingName(e.target.value)}
+                          placeholder={(selectedCustomer?.billing_name || selectedCustomer?.name) ?? 'z.B. Verwaltung AG'}
+                        />
+                      </div>
+                      <div>
+                        <label className="admin-form-label">Rechnungsadresse</label>
+                        <AddressAutocomplete className="admin-form-input" value={projBillingAddress} onChange={setProjBillingAddress} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                      Gilt nur für Offerte/Rechnung dieses Projekts — der Kundenstamm bleibt unverändert.
+                    </div>
+                  </>
                 )}
               </div>
 

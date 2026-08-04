@@ -80,6 +80,10 @@ export interface Project {
   customer: EmbeddedCustomer | null
   object_name: string | null
   object_address: string | null
+  // Abweichende Rechnungsadresse NUR für dieses Projekt — hat auf Offerte/Rechnung
+  // Vorrang vor customer.billing_*/name/address, ändert den Kundenstamm nicht.
+  billing_name?: string | null
+  billing_address?: string | null
   art_der_arbeit: string[] | null
   projektleiter_id: string | null
   monteur_ids: string[]
