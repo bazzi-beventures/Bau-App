@@ -1328,6 +1328,7 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
   const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState<Record<string, Record<string, unknown>>>({})
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set())
 
   async function load() {
     setLoading(true)
@@ -1389,6 +1390,15 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
     setDraft(prev => ({ ...prev, [featureKey]: { ...(data?.effective[featureKey] ?? {}) } }))
   }
 
+  function toggleOpen(featureKey: string) {
+    setOpenKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(featureKey)) next.delete(featureKey)
+      else next.add(featureKey)
+      return next
+    })
+  }
+
   // gruppiere Einträge nach category in der Reihenfolge data.categories
   const byCategory = new Map<string, FeatureRegistryEntry[]>()
   for (const cat of data.categories) byCategory.set(cat, [])
@@ -1402,20 +1412,30 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
       <div style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
         Konfigurierbare Workflow-Bausteine pro Mandant. Module sind binär (an/aus) — Workflows
         haben zusätzlich Parameter (z. B. Pauschalbeträge, Erfassungs-Scope).
-        Jeder Eintrag wird einzeln gespeichert.
+        Zeile anklicken für Beschreibung und Parameter; jeder Eintrag wird einzeln gespeichert.
       </div>
 
       {Array.from(byCategory.entries()).map(([cat, entries]) => {
         if (entries.length === 0) return null
+        // "x von y aktiv" zählt nur Einträge mit Aktiv-Schalter — reine
+        // Parameter-Einträge (z. B. Review-Fenster) sind weder an noch aus.
+        const withToggle = entries.filter(e => e.schema.some(f => f.key === 'enabled'))
+        const activeCount = withToggle.filter(e => !!(draft[e.key] ?? {}).enabled).length
         return (
           <div key={cat} style={{ marginBottom: 24 }}>
             <div style={{
               fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
               textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
+              display: 'flex', alignItems: 'baseline', gap: 8,
             }}>
-              {cat}
+              <span>{cat}</span>
+              {withToggle.length > 0 && (
+                <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                  {activeCount} von {withToggle.length} aktiv
+                </span>
+              )}
             </div>
-            <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'grid', gap: 6 }}>
               {entries.map(entry => {
                 const current = draft[entry.key] ?? {}
                 // Nicht jedes Feature hat einen Aktiv-Schalter (z. B. aftersales_review_days
@@ -1424,59 +1444,94 @@ function WorkflowsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'e
                 const hasEnabledToggle = entry.schema.some(f => f.key === 'enabled')
                 const enabled = !!current.enabled
                 const dirty = isDirty(entry.key)
+                const isOpen = openKeys.has(entry.key)
                 return (
                   <div
                     key={entry.key}
                     style={{
-                      padding: 16, borderRadius: 8,
+                      borderRadius: 8,
                       border: '1px solid rgba(255,255,255,0.08)',
                       background: enabled ? 'rgba(34,197,94,0.06)' : 'transparent',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>
-                          {entry.label}{' '}
-                          <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--muted)' }}>
-                            ({entry.key})
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleOpen(entry.key)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOpen(entry.key) } }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', cursor: 'pointer', userSelect: 'none',
+                      }}
+                    >
+                      {hasEnabledToggle && (
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => {
+                            // Schalter in der Zeile ändert nur den Entwurf — Zeile aufklappen,
+                            // damit der Speichern-Knopf sichtbar ist und nichts "still" wirkt.
+                            setField(entry.key, 'enabled', e.target.checked)
+                            setOpenKeys(prev => new Set(prev).add(entry.key))
+                          }}
+                        />
+                      )}
+                      <span style={{ fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>
+                        {entry.label}{' '}
+                        <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--muted)' }}>
+                          ({entry.key})
+                        </span>
+                      </span>
+                      {dirty && (
+                        <span style={{ fontSize: 11, color: 'var(--warning, #d97706)', flexShrink: 0 }}>
+                          ungespeichert
+                        </span>
+                      )}
+                      <span aria-hidden style={{ color: 'var(--muted)', fontSize: 11, flexShrink: 0 }}>
+                        {isOpen ? '▾' : '▸'}
+                      </span>
+                    </div>
+
+                    {isOpen && (
+                      <div style={{ padding: '12px 12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
                           {entry.description}
                         </div>
+
+                        <div style={{ display: 'grid', gap: 12 }}>
+                          {/* Der Aktiv-Schalter sitzt bereits in der Kopfzeile. */}
+                          {entry.schema.filter(f => f.key !== 'enabled').map(field => (
+                            <FeatureField
+                              key={field.key}
+                              field={field}
+                              value={current[field.key]}
+                              onChange={v => setField(entry.key, field.key, v)}
+                              disabled={hasEnabledToggle && !enabled}
+                            />
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                          <button
+                            className="admin-btn admin-btn-primary"
+                            onClick={() => save(entry)}
+                            disabled={!dirty || savingKey === entry.key}
+                            style={{ fontSize: 12 }}
+                          >
+                            {savingKey === entry.key ? 'Speichern…' : 'Speichern'}
+                          </button>
+                          <button
+                            className="admin-btn admin-btn-secondary"
+                            onClick={() => reset(entry.key)}
+                            disabled={!dirty || savingKey === entry.key}
+                            style={{ fontSize: 12 }}
+                          >
+                            Verwerfen
+                          </button>
+                        </div>
                       </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gap: 12 }}>
-                      {entry.schema.map(field => (
-                        <FeatureField
-                          key={field.key}
-                          field={field}
-                          value={current[field.key]}
-                          onChange={v => setField(entry.key, field.key, v)}
-                          disabled={hasEnabledToggle && field.key !== 'enabled' && !enabled}
-                        />
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <button
-                        className="admin-btn admin-btn-primary"
-                        onClick={() => save(entry)}
-                        disabled={!dirty || savingKey === entry.key}
-                        style={{ fontSize: 12 }}
-                      >
-                        {savingKey === entry.key ? 'Speichern…' : 'Speichern'}
-                      </button>
-                      <button
-                        className="admin-btn admin-btn-secondary"
-                        onClick={() => reset(entry.key)}
-                        disabled={!dirty || savingKey === entry.key}
-                        style={{ fontSize: 12 }}
-                      >
-                        Verwerfen
-                      </button>
-                    </div>
+                    )}
                   </div>
                 )
               })}
