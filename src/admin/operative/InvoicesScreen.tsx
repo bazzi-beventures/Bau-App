@@ -44,6 +44,16 @@ export function sammelrechnungHint(quoteNumbers?: string[]): string {
   return ` — Sammelrechnung über ${quoteNumbers.length} Offerten (${quoteNumbers.join(', ')})`
 }
 
+// Hinweise, die den Erfolg NICHT in Frage stellen (heute: ein verrechneter Rapport
+// ist als Garantiefall erfasst). Sie kommen als `warnings` aus dem Backend und
+// werden an die Erfolgsmeldung gehängt — die Rechnung existiert bereits, der
+// Hinweis sagt «nachschauen», nicht «fehlgeschlagen».
+export function invoiceWarningHint(warnings?: unknown): string {
+  if (!Array.isArray(warnings)) return ''
+  const texts = warnings.filter((w): w is string => typeof w === 'string' && !!w.trim())
+  return texts.length > 0 ? ` — ${texts.join(' ')}` : ''
+}
+
 export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
@@ -153,10 +163,14 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
           work_description: genWorkDesc,
           remark: genRemark,
         }),
-      }) as { invoice_number: string; total_amount: number; quote_numbers?: string[] }
+      }) as {
+        invoice_number: string; total_amount: number
+        quote_numbers?: string[]; warnings?: unknown
+      }
       showToast(
         `Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`
-        + sammelrechnungHint(res.quote_numbers),
+        + sammelrechnungHint(res.quote_numbers)
+        + invoiceWarningHint(res.warnings),
         'success',
       )
       setShowGenerate(false)

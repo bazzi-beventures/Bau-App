@@ -283,9 +283,17 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
   if (selected || showNew) {
     return (
       <ProjectDetailScreen
+        // key erzwingt einen sauberen Neuaufbau beim Wechsel „Neu-Maske → angelegtes
+        // Projekt": die Maske liest ihren Ausgangsstand nur beim Mount aus dem Prop.
+        key={showNew ? 'new' : selected!.id}
         project={showNew ? null : selected}
         onClose={() => { setSelected(null); setShowNew(false) }}
-        onSaved={() => { setSelected(null); setShowNew(false); load() }}
+        onSaved={saved => {
+          setShowNew(false)
+          // Frisch angelegtes Projekt → direkt hineinspringen statt auf die Übersicht.
+          setSelected(saved ?? null)
+          load()
+        }}
       />
     )
   }

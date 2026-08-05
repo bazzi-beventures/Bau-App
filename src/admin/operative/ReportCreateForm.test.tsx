@@ -5,12 +5,20 @@ import { ReportCreateForm } from './ReportCreateForm'
 import type { ReportFormProject, ReportFormStaff } from './ReportCreateForm'
 import type { ProjectQuote } from './projectDetail/tabs'
 import { apiFetch } from '../../api/client'
+import { getMe } from '../../api/auth'
 
 // Nur den Netzwerk-Call mocken — der Rest (Formatierung, useBackButton, InfoHint)
 // bleibt echt.
 vi.mock('../../api/client', () => ({
   apiFetch: vi.fn(),
   ApiError: class ApiError extends Error {},
+}))
+
+// Feature-Flags: das Formular fragt beim Mounten `/pwa/me` ab (Einbauort-Spalte).
+// Ohne Mock landet der GET im apiFetch-Zähler und verfälscht die Nutzlast-Prüfungen.
+// Die Tests, die den Flag-Pfad brauchen, überschreiben den Rückgabewert lokal.
+vi.mock('../../api/auth', () => ({
+  getMe: vi.fn(async () => ({ feature_flags: {} })),
 }))
 
 // MaterialCombobox durch ein schlichtes <select> ersetzen — die echte Combobox
@@ -63,10 +71,15 @@ function makeQuote(over: Partial<ProjectQuote> = {}): ProjectQuote {
   }
 }
 
-function renderForm(quotes: ProjectQuote[] = [], onDone = vi.fn(), onCancel = vi.fn()) {
+function renderForm(
+  quotes: ProjectQuote[] = [],
+  onDone = vi.fn(),
+  onCancel = vi.fn(),
+  project: ReportFormProject = PROJECT,
+) {
   render(
     <ReportCreateForm
-      project={PROJECT}
+      project={project}
       staff={STAFF}
       quotes={quotes}
       onDone={onDone}
@@ -79,6 +92,7 @@ function renderForm(quotes: ProjectQuote[] = [], onDone = vi.fn(), onCancel = vi
 beforeEach(() => {
   mockFetch.mockReset()
   mockFetch.mockResolvedValue({ report_id: 42 })
+  vi.mocked(getMe).mockResolvedValue({ feature_flags: {} } as never)
 })
 
 describe('ReportCreateForm', () => {
@@ -135,7 +149,10 @@ describe('ReportCreateForm', () => {
     expect(JSON.parse(opts.body as string)).toEqual({
       report_date: '2026-07-21',
       description: 'Arbeiten gemäss Offerte OFF-2026-014',
-      staff: [{ staff_id: 's1', hours: 6.5 }],
+      staff: [{ staff_id: 's1', hours: 6.5, hour_type: 'standard' }],
+      massaufnahme: false,
+      beratung: false,
+      is_warranty: false,
     })
     await waitFor(() => expect(onDone).toHaveBeenCalled())
   })
@@ -288,11 +305,16 @@ describe('ReportCreateForm', () => {
     const body = lastPostBody()
     expect(body).not.toHaveProperty('kleinmaterial')
     expect(body).not.toHaveProperty('materials')
-    // Exakt die Phase-1-Form.
+    // Exakt die Grundform: Material-/Kleinmaterial-Keys entfallen, die
+    // Einsatzart-Flags sind immer dabei (das Backend erbt die Garantie sonst
+    // stillschweigend vom Projekt).
     expect(body).toEqual({
       report_date: expect.any(String),
       description: 'Arbeiten gemäss Offerte OFF-2026-014',
-      staff: [{ staff_id: 's1', hours: 6 }],
+      staff: [{ staff_id: 's1', hours: 6, hour_type: 'standard' }],
+      massaufnahme: false,
+      beratung: false,
+      is_warranty: false,
     })
   })
 
@@ -686,5 +708,95 @@ describe('ReportCreateForm', () => {
     expect(
       screen.queryByRole('button', { name: 'Material aller angenommenen Offerten übernehmen' }),
     ).not.toBeInTheDocument()
+  })
+
+  // ── Einsatzart, Stundenart, Einbauort (Spec rapport-papier-erfassungsluecken) ──
+
+  it('sendet Werkstattstunden als hour_type', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.selectOptions(screen.getByLabelText('Stundenart 1'), 'werkstatt')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().staff).toEqual([
+      { staff_id: 's1', hours: 4, hour_type: 'werkstatt' },
+    ])
+  })
+
+  it('sendet Massaufnahme und Beratung', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByLabelText('Massaufnahme'))
+    await user.click(screen.getByLabelText('Beratung'))
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().massaufnahme).toBe(true)
+    expect(lastPostBody().beratung).toBe(true)
+  })
+
+  it('belegt das Garantie-Häkchen aus dem Projekt vor', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(), { ...PROJECT, is_warranty: true })
+
+    expect(screen.getByLabelText('Garantiefall')).toBeChecked()
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().is_warranty).toBe(true)
+  })
+
+  it('sendet ein abgewähltes Garantie-Häkchen als false', async () => {
+    // Sonst liesse sich in einem Garantie-Projekt nie ein verrechenbarer Einsatz
+    // erfassen — genau der gemischte Fall, für den das Rapport-Flag existiert.
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(), { ...PROJECT, is_warranty: true })
+
+    await user.click(screen.getByLabelText('Garantiefall'))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().is_warranty).toBe(false)
+  })
+
+  it('zeigt das Einbauort-Feld nur mit Feature-Flag', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.click(screen.getByRole('button', { name: '+ Materialposition' }))
+    expect(screen.queryByLabelText('Einbauort 1')).not.toBeInTheDocument()
+  })
+
+  it('sendet den Einbauort mit, wenn das Flag aktiv ist', async () => {
+    vi.mocked(getMe).mockResolvedValue(
+      { feature_flags: { material_standort: { enabled: true } } } as never,
+    )
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: '+ Materialposition' }))
+    await user.selectOptions(await screen.findByLabelText('Material'), 'STG123')
+    await user.type(screen.getByLabelText('Materialmenge 1'), '2')
+    await user.type(await screen.findByLabelText('Einbauort 1'), 'Wohnzimmer Süd')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().materials).toEqual([
+      { art_nr: 'STG123', amount: 2, location: 'Wohnzimmer Süd' },
+    ])
   })
 })

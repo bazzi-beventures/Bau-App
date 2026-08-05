@@ -18,16 +18,30 @@ describe('parseNum', () => {
 })
 
 describe('vkFromEk', () => {
-  it('rechnet VK = EK × (1 + Aufschlag), aufgerundet auf 0.50', () => {
-    // Griesser-Beispiel aus dem Review: 513.18 × 1.75 = 898.065 → 898.50
-    expect(vkFromEk(513.18, 75)).toBe(898.5)
+  it('rechnet VK = EK × (1 + Aufschlag), aufgerundet auf 0.05', () => {
+    // Griesser-Beispiel aus dem Review: 513.18 × 1.75 = 898.065 → 898.10
+    expect(vkFromEk(513.18, 75)).toBe(898.1)
   })
 
   it('rundet immer auf, nie ab', () => {
-    expect(vkFromEk(100, 0)).toBe(100)      // 100.00 bleibt
-    expect(vkFromEk(100.01, 0)).toBe(100.5) // 100.01 → 100.50
-    expect(vkFromEk(100.5, 0)).toBe(100.5)  // exakt auf Schritt
-    expect(vkFromEk(100.51, 0)).toBe(101)   // → 101.00
+    expect(vkFromEk(100, 0)).toBe(100)        // 100.00 bleibt
+    expect(vkFromEk(100.01, 0)).toBe(100.05)  // 100.01 → 100.05
+    expect(vkFromEk(100.05, 0)).toBe(100.05)  // exakt auf Schritt
+    expect(vkFromEk(100.06, 0)).toBe(100.1)   // → 100.10
+  })
+
+  it('liefert dieselben Preise wie compute_material_vk im Backend', () => {
+    // Positionen aus Offerte OFF-2026-284 (EK × 1.5). Backend und Frontend haben
+    // vorher unterschiedlich gerundet (0.01 vs 0.50) — jetzt identisch.
+    expect(vkFromEk(299.29, 50)).toBe(448.95)
+    expect(vkFromEk(349.64, 50)).toBe(524.5)
+  })
+
+  it('lässt einen bereits glatten Preis stehen (kein Float-Sprung)', () => {
+    // 448.95 × 20 ist in Float 8979.000000000001 — naives Math.ceil ergäbe 449.00.
+    for (const ek of [448.95, 100.1, 12.35, 0.05]) {
+      expect(vkFromEk(ek, 0)).toBe(ek)
+    }
   })
 
   it('behandelt Aufschlag 0 als reine Weitergabe des EK', () => {

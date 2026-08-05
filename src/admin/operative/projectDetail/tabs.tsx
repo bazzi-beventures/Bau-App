@@ -123,6 +123,10 @@ export interface ProjectReport {
   // Herkunft des Rapports: 'chat' (Standard, Monteur-App) oder 'admin_manual'
   // (Projektleiter hat ihn im Projekt-Detail nacherfasst). Steuert das Badge.
   source?: string
+  // Dieser Einsatz ist als Garantiefall erfasst (reports.is_warranty). Eigenes
+  // Badge NEBEN dem Status: es ersetzt «Abgerechnet»/«Manuell» nicht, sondern
+  // ergänzt sie — beim Verrechnen ist genau diese Kombination die interessante.
+  is_warranty?: boolean | null
 }
 
 export interface ProjectTask {
@@ -938,6 +942,14 @@ export function ReportsTab({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(r.report_date)}</span>
                     <span className={`admin-badge ${status.cls}`}>{status.label}</span>
+                    {r.is_warranty && (
+                      <span
+                        className="admin-badge admin-badge-warning"
+                        title="Als Garantiefall erfasst — beim Verrechnen die Positionen prüfen."
+                      >
+                        Garantie
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                     {r.created_by ?? '—'}

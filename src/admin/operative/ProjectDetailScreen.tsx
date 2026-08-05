@@ -9,7 +9,7 @@ import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, 
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
-import { sammelrechnungHint } from './InvoicesScreen'
+import { invoiceWarningHint, sammelrechnungHint } from './InvoicesScreen'
 import { ReportCreateForm } from './ReportCreateForm'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { WORK_TYPES } from '../../api/workTypes'
@@ -17,6 +17,8 @@ import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../c
 import { fmtDate } from '../utils/format'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { UnsavedChangesDialog } from '../components/UnsavedChangesDialog'
+import { useUnsavedChangesGuard } from '../unsavedChanges'
 import {
   DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
   ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval, ProjectTask,
@@ -39,6 +41,103 @@ export function hasBillableReport(
   return reports.some(r => !!r.signature_timestamp || r.source === 'admin_manual')
 }
 
+const EMPTY_EIGENTUEMER: Eigentuemer = { name: '', adresse: '', telefon: '', email: '' }
+const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
+
+/**
+ * Alle Felder der Projektmaske, die `handleSave` persistiert — und nur die.
+ * Referenz für die „ungespeicherte Änderungen"-Abfrage beim Verlassen der Maske:
+ * Der Ausgangsstand kommt aus `initialProjectForm(project)`, derselben Quelle wie
+ * die useState-Initialwerte, damit beide nie auseinanderlaufen.
+ */
+export interface ProjectFormValues {
+  name: string
+  customerId: string
+  objectName: string
+  objectAddress: string
+  billingDiffers: boolean
+  billingName: string
+  billingAddress: string
+  artDerArbeit: string[]
+  bemerkung: string
+  geruestfach: string
+  projektleiterId: string
+  monteurIds: string[]
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime: string
+  kontakte: Kontakt[]
+  eigentuemer: Eigentuemer
+  disposal: DisposalDetails
+  wartungInterval: string
+  wartungLastAt: string
+  wartungNextDueAt: string
+}
+
+export function initialProjectForm(project: Project | null): ProjectFormValues {
+  return {
+    name: project?.name ?? '',
+    customerId: project?.customer_id ?? '',
+    objectName: project?.object_name ?? '',
+    objectAddress: project?.object_address ?? '',
+    billingDiffers: !!(project?.billing_name || project?.billing_address),
+    billingName: project?.billing_name ?? '',
+    billingAddress: project?.billing_address ?? '',
+    artDerArbeit: project?.art_der_arbeit ?? [],
+    bemerkung: project?.bemerkung ?? '',
+    geruestfach: project?.geruestfach?.toString() ?? '',
+    projektleiterId: project?.projektleiter_id ?? '',
+    monteurIds: project?.monteur_ids ?? [],
+    startDate: project?.start_date?.slice(0, 10) ?? '',
+    endDate: project?.end_date?.slice(0, 10) ?? '',
+    startTime: project?.start_time?.slice(0, 5) ?? '',
+    endTime: project?.end_time?.slice(0, 5) ?? '',
+    kontakte: project?.kontakte ?? [],
+    eigentuemer: project?.eigentuemer ?? EMPTY_EIGENTUEMER,
+    disposal: project?.disposal_details ?? EMPTY_DISPOSAL,
+    wartungInterval: project?.wartung_interval_months?.toString() ?? '',
+    wartungLastAt: project?.wartung_last_at ?? '',
+    wartungNextDueAt: project?.wartung_next_due_at ?? '',
+  }
+}
+
+// Kanonische Form für den Vergleich: feste Feldreihenfolge, sortierte
+// Mehrfachauswahlen und aufgefüllte Optionalfelder. Ohne das gälte die Maske
+// schon als geändert, wenn ein Monteur ab- und wieder angewählt wird oder eine
+// vom Server ohne `is_site_contact` gelieferte Zeile einmal angefasst wurde.
+function normalizeForm(v: ProjectFormValues): ProjectFormValues {
+  return {
+    ...v,
+    artDerArbeit: [...v.artDerArbeit].sort(),
+    monteurIds: [...v.monteurIds].sort(),
+    kontakte: v.kontakte.map(k => ({
+      name: k.name ?? '',
+      kommentar: k.kommentar ?? '',
+      telefon: k.telefon ?? '',
+      email: k.email ?? '',
+      is_site_contact: !!k.is_site_contact,
+    })),
+    eigentuemer: {
+      name: v.eigentuemer?.name ?? '',
+      adresse: v.eigentuemer?.adresse ?? '',
+      telefon: v.eigentuemer?.telefon ?? '',
+      email: v.eigentuemer?.email ?? '',
+    },
+    disposal: {
+      material: v.disposal?.material ?? '',
+      menge: v.disposal?.menge ?? '',
+      entsorger: v.disposal?.entsorger ?? '',
+      nachweis_url: v.disposal?.nachweis_url ?? '',
+      bemerkung: v.disposal?.bemerkung ?? '',
+    },
+  }
+}
+
+export function isProjectFormDirty(baseline: ProjectFormValues, current: ProjectFormValues): boolean {
+  return JSON.stringify(normalizeForm(baseline)) !== JSON.stringify(normalizeForm(current))
+}
+
 interface StaffMember {
   id: string
   name: string
@@ -57,18 +156,27 @@ interface ProjectComment {
 interface Props {
   project: Project | null
   onClose: () => void
-  onSaved: () => void
+  /**
+   * Nach dem Speichern. `saved` gesetzt = frisch angelegtes Projekt, in das der
+   * Aufrufer direkt springen soll; null/undefined = zurück in die Übersicht.
+   */
+  onSaved: (saved?: Project | null) => void
 }
 
 export default function ProjectDetailScreen({ project, onClose, onSaved }: Props) {
   const isNew = !project
 
-  const [name, setName] = useState(project?.name ?? '')
-  const [customerId, setCustomerId] = useState(project?.customer_id ?? '')
+  // Ausgangsstand der Maske. Speist die useState-Initialwerte UND dient als
+  // Referenz für die „ungespeicherte Änderungen"-Abfrage; nach jedem Speichern
+  // wird er auf den neuen Stand nachgezogen.
+  const [baseline, setBaseline] = useState<ProjectFormValues>(() => initialProjectForm(project))
+
+  const [name, setName] = useState(baseline.name)
+  const [customerId, setCustomerId] = useState(baseline.customerId)
   // Objekt-Name (z.B. "MFH Sonnhalde") getrennt von der reinen Objektadresse — Letztere
   // speist die Google-Maps-Distanz (Fahrspesen), darum darf der Name nicht mit rein.
-  const [objectName, setObjectName] = useState(project?.object_name ?? '')
-  const [objectAddress, setObjectAddress] = useState(project?.object_address ?? '')
+  const [objectName, setObjectName] = useState(baseline.objectName)
+  const [objectAddress, setObjectAddress] = useState(baseline.objectAddress)
   // Wurde die Objektadresse manuell bearbeitet? Dann beim Kundenwechsel NICHT überschreiben.
   // Eine nur automatisch (aus dem Kundenstamm) befüllte Adresse wird hingegen neu geseedet,
   // damit ein Kundenwechsel auch die Distanz (Offerten-Fahrspesen) neu berechnen lässt.
@@ -76,38 +184,35 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // Abweichende Rechnungsadresse NUR für dieses Projekt (analog Kundenstamm-Checkbox,
   // aber ohne Rückschreiben in den Kunden). Abwählen sendet '' — das Backend filtert
   // null im PATCH weg, ein leerer String leert den Override wirklich.
-  const initialBillingDiffers = !!(project?.billing_name || project?.billing_address)
-  const [billingDiffers, setBillingDiffers] = useState(initialBillingDiffers)
-  const [projBillingName, setProjBillingName] = useState(project?.billing_name ?? '')
-  const [projBillingAddress, setProjBillingAddress] = useState(project?.billing_address ?? '')
+  const [billingDiffers, setBillingDiffers] = useState(baseline.billingDiffers)
+  const [projBillingName, setProjBillingName] = useState(baseline.billingName)
+  const [projBillingAddress, setProjBillingAddress] = useState(baseline.billingAddress)
   // Mehrfachauswahl: ein Projekt kann mehrere Leistungsarten tragen (z.B. Neumontage + Reparatur)
-  const [artDerArbeit, setArtDerArbeit] = useState<string[]>(project?.art_der_arbeit ?? [])
+  const [artDerArbeit, setArtDerArbeit] = useState<string[]>(baseline.artDerArbeit)
   const toggleArt = (value: string) =>
     setArtDerArbeit(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
   const hasEntsorgungsart = artDerArbeit.includes('Demontage') || artDerArbeit.includes('Wiedermontage')
-  const [bemerkung, setBemerkung] = useState(project?.bemerkung ?? '')
-  const [geruestfach, setGeruestfach] = useState(project?.geruestfach?.toString() ?? '')
+  const [bemerkung, setBemerkung] = useState(baseline.bemerkung)
+  const [geruestfach, setGeruestfach] = useState(baseline.geruestfach)
   const [showGeruestfach, setShowGeruestfach] = useState(false)
-  const [projektleiterId, setProjektleiterId] = useState(project?.projektleiter_id ?? '')
-  const [monteurIds, setMonteurIds] = useState<string[]>(project?.monteur_ids ?? [])
+  const [projektleiterId, setProjektleiterId] = useState(baseline.projektleiterId)
+  const [monteurIds, setMonteurIds] = useState<string[]>(baseline.monteurIds)
   // Einsatzplanung (Termin) – dieselben Felder wie im Kalender (ProjectScheduleScreen)
-  const [startDate, setStartDate] = useState(project?.start_date?.slice(0, 10) ?? '')
-  const [endDate, setEndDate] = useState(project?.end_date?.slice(0, 10) ?? '')
-  const [startTime, setStartTime] = useState(project?.start_time?.slice(0, 5) ?? '')
-  const [endTime, setEndTime] = useState(project?.end_time?.slice(0, 5) ?? '')
-  const [kontakte, setKontakte] = useState<Kontakt[]>(project?.kontakte ?? [])
+  const [startDate, setStartDate] = useState(baseline.startDate)
+  const [endDate, setEndDate] = useState(baseline.endDate)
+  const [startTime, setStartTime] = useState(baseline.startTime)
+  const [endTime, setEndTime] = useState(baseline.endTime)
+  const [kontakte, setKontakte] = useState<Kontakt[]>(baseline.kontakte)
   // Eigentümer des Objekts — eigene Rolle, kein Kontakt. Kann pro Projekt ein Dritter sein.
-  const EMPTY_EIGENTUEMER: Eigentuemer = { name: '', adresse: '', telefon: '', email: '' }
-  const [eigentuemer, setEigentuemer] = useState<Eigentuemer>(project?.eigentuemer ?? EMPTY_EIGENTUEMER)
+  const [eigentuemer, setEigentuemer] = useState<Eigentuemer>(baseline.eigentuemer)
   const updateEigentuemer = (field: keyof Eigentuemer, value: string) =>
     setEigentuemer(prev => ({ ...prev, [field]: value }))
-  const EMPTY_DISPOSAL: DisposalDetails = { material: '', menge: '', entsorger: '', nachweis_url: '', bemerkung: '' }
-  const [disposal, setDisposal] = useState<DisposalDetails>(project?.disposal_details ?? EMPTY_DISPOSAL)
+  const [disposal, setDisposal] = useState<DisposalDetails>(baseline.disposal)
   const updateDisposal = (field: keyof DisposalDetails, value: string) => setDisposal(prev => ({ ...prev, [field]: value }))
   const disposalEmpty = (d: DisposalDetails) => !d.material && !d.menge && !d.entsorger && !d.nachweis_url && !d.bemerkung
-  const [wartungInterval, setWartungInterval] = useState<string>(project?.wartung_interval_months?.toString() ?? '')
-  const [wartungLastAt, setWartungLastAt] = useState<string>(project?.wartung_last_at ?? '')
-  const [wartungNextDueAt, setWartungNextDueAt] = useState<string>(project?.wartung_next_due_at ?? '')
+  const [wartungInterval, setWartungInterval] = useState<string>(baseline.wartungInterval)
+  const [wartungLastAt, setWartungLastAt] = useState<string>(baseline.wartungLastAt)
+  const [wartungNextDueAt, setWartungNextDueAt] = useState<string>(baseline.wartungNextDueAt)
   function recomputeNextDue(lastAt: string, intervalMonths: string) {
     const n = parseInt(intervalMonths, 10)
     if (!lastAt || !Number.isFinite(n) || n <= 0) return ''
@@ -208,6 +313,35 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const effectiveStatus: ProjectStatus = project?.status ?? (project?.is_closed ? 'abgeschlossen' : 'offen')
   const isClosed = effectiveStatus === 'abgeschlossen'
   const isArchived = effectiveStatus === 'archiviert'
+
+  // ── Ungespeicherte Änderungen ────────────────────────────────
+  const currentForm: ProjectFormValues = {
+    name,
+    customerId,
+    objectName,
+    objectAddress,
+    billingDiffers,
+    billingName: projBillingName,
+    billingAddress: projBillingAddress,
+    artDerArbeit,
+    bemerkung,
+    geruestfach,
+    projektleiterId,
+    monteurIds,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    kontakte,
+    eigentuemer,
+    disposal,
+    wartungInterval,
+    wartungLastAt,
+    wartungNextDueAt,
+  }
+  const isDirty = isProjectFormDirty(baseline, currentForm)
+  // Abfrage offen, weil „Zurück"/„Abbrechen" bei ungespeicherten Änderungen gedrückt wurde.
+  const [pendingLeave, setPendingLeave] = useState(false)
 
   useEffect(() => {
     document.querySelector('.admin-content')?.scrollTo({ top: 0 })
@@ -483,8 +617,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
         body: JSON.stringify({ project_name: project.name, use_quote: useQuote, remark }),
-      }) as { quote_numbers?: string[] } | null
-      showToast('Rechnung erstellt' + sammelrechnungHint(res?.quote_numbers))
+      }) as { quote_numbers?: string[]; warnings?: unknown } | null
+      showToast(
+        'Rechnung erstellt'
+        + sammelrechnungHint(res?.quote_numbers)
+        + invoiceWarningHint(res?.warnings),
+      )
       await reloadInvoices()
       await reloadReports()
       return true
@@ -641,21 +779,30 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     setMonteurIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return
-    if (startDate && endDate && endDate < startDate) {
-      setError('Enddatum muss nach Startdatum liegen.'); return
-    }
+  /**
+   * Speichert die Maske und liefert bei einem NEU angelegten Projekt die frisch
+   * erzeugte Zeile zurück (sonst null). `false` = fehlgeschlagen; der Aufrufer
+   * lässt die Maske dann offen, damit die Fehlermeldung sichtbar bleibt.
+   *
+   * Bewusst ohne Navigation: submit, die „ungespeicherte Änderungen"-Abfrage und
+   * der Navigations-Guard brauchen jeweils ein anderes Verhalten danach.
+   */
+  async function persist(): Promise<Project | null | false> {
+    // Die Fehlermeldung steht im Detail-Formular — wer aus einem anderen Tab
+    // heraus speichert (Abfrage beim Verlassen), würde sie sonst nie sehen.
+    const fail = (message: string) => { setError(message); setActiveTab('details'); return false as const }
+
+    if (!name.trim()) return fail('Projektname ist erforderlich.')
+    if (startDate && endDate && endDate < startDate) return fail('Enddatum muss nach Startdatum liegen.')
     if (startTime && endTime && startDate === endDate && endTime < startTime) {
-      setError('Endzeit muss nach Startzeit liegen.'); return
+      return fail('Endzeit muss nach Startzeit liegen.')
     }
     setError('')
     setSaving(true)
     try {
       const method = isNew ? 'POST' : 'PATCH'
       const url = isNew ? '/pwa/admin/projects' : `/pwa/admin/projects/${project!.id}`
-      await apiFetch(url, {
+      const res = await apiFetch(url, {
         method,
         body: JSON.stringify({
           name: name.trim(),
@@ -684,14 +831,48 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           wartung_last_at: wartungLastAt || null,
           wartung_next_due_at: wartungNextDueAt || null,
         }),
-      })
-      onSaved()
+      }) as { project?: Project | null } | null   // POST liefert die neu angelegte Zeile mit
+      // Ab hier gilt der aktuelle Stand als gespeichert — sonst würde die
+      // „ungespeicherte Änderungen"-Abfrage direkt nochmal zuschlagen.
+      setBaseline(currentForm)
+      return isNew ? (res?.project ?? null) : null
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+      return false
     } finally {
       setSaving(false)
     }
   }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    const saved = await persist()
+    if (saved === false) return
+    // Neues Projekt → der Aufrufer springt direkt hinein statt in die Übersicht.
+    onSaved(saved)
+  }
+
+  // Verlassen der Maske (Zurück/Abbrechen) — bei ungespeicherten Änderungen erst fragen.
+  function requestClose() {
+    if (isDirty) setPendingLeave(true)
+    else onClose()
+  }
+
+  async function saveAndLeave() {
+    const saved = await persist()
+    if (saved === false) { setPendingLeave(false); return }
+    setPendingLeave(false)
+    // Gespeichert und trotzdem raus: zurück in die Übersicht (dort neu laden),
+    // auch beim frisch angelegten Projekt — der Anwender wollte ja weg.
+    onSaved(null)
+  }
+
+  // Navigation über Sidebar/MobileNav: die Maske speichert nur, das Wegnavigieren
+  // übernimmt der Aufrufer (AdminApp).
+  useUnsavedChangesGuard(
+    () => isDirty,
+    async () => (await persist()) !== false,
+  )
 
   async function handleClose() {
     if (!project) return
@@ -966,7 +1147,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             )}
           </div>
         </div>
-        <button className="admin-btn admin-btn-secondary" onClick={onClose}>← Zurück</button>
+        <button className="admin-btn admin-btn-secondary" onClick={requestClose}>← Zurück</button>
       </div>
 
       {/* ── Tab-Leiste ──────────────────────────────────────── */}
@@ -999,8 +1180,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <div className="admin-section-title">Projektdaten</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="admin-form-group">
-                <label className="admin-form-label">Projektname *</label>
-                <input className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
+                <label className="admin-form-label" htmlFor="project-name">Projektname *</label>
+                <input id="project-name" className="admin-form-input" value={name} onChange={e => setName(e.target.value)} required />
               </div>
               <div className="admin-form-group">
                 <label className="admin-form-label">Art der Arbeit <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(Mehrfachauswahl)</span></label>
@@ -1350,7 +1531,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose}>Abbrechen</button>
+            <button type="button" className="admin-btn admin-btn-secondary" onClick={requestClose}>Abbrechen</button>
             <button type="submit" className="admin-btn admin-btn-primary" disabled={saving || !name.trim()}>
               {saving ? 'Speichern…' : 'Speichern'}
             </button>
@@ -1876,6 +2057,20 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               setFiles(await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[])
             } catch { /* Datei-Liste ist nicht kritisch */ }
           }}
+        />
+      )}
+
+      {pendingLeave && (
+        <UnsavedChangesDialog
+          saving={saving}
+          message={
+            isNew
+              ? 'Das neue Projekt ist noch nicht angelegt. Jetzt speichern oder verwerfen?'
+              : `Die Änderungen an «${project?.name}» sind noch nicht gespeichert.`
+          }
+          onSave={saveAndLeave}
+          onDiscard={() => { setPendingLeave(false); onClose() }}
+          onCancel={() => setPendingLeave(false)}
         />
       )}
 

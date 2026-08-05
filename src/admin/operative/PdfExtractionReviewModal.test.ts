@@ -20,13 +20,13 @@ function pos(patch: Partial<PositionState> = {}): PositionState {
 }
 
 describe('buildConfirmedRow — Preisbildung', () => {
-  it('rechnet VK = EK × (1 + Aufschlag), aufgerundet auf 0.50', () => {
-    // Werte aus dem echten Griesser-Review: 513.18 × 1.75 = 898.065 → 898.50
+  it('rechnet VK = EK × (1 + Aufschlag), aufgerundet auf 0.05', () => {
+    // Werte aus dem echten Griesser-Review: 513.18 × 1.75 = 898.065 → 898.10
     const out = buildConfirmedRow(row({ ek_price: '513.18', margin_pct: '75' }), null)
 
     expect(out).toHaveLength(1)
     expect(out[0].ek_price).toBe(513.18)
-    expect(out[0].unit_price).toBe('898.5')
+    expect(out[0].unit_price).toBe('898.1')
     expect(out[0].margin_factor).toBe(1.75)
   })
 

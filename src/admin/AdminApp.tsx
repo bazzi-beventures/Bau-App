@@ -6,6 +6,8 @@ import MobileNav from './MobileNav'
 import RequireModule from './RequireModule'
 import { useAdminNav, AdminScreen } from './useAdminNav'
 import { useIsMobile } from './useIsMobile'
+import { dirtyGuard } from './unsavedChanges'
+import { UnsavedChangesDialog } from './components/UnsavedChangesDialog'
 import DashboardScreen from './dashboard/DashboardScreen'
 import StaffScreen from './personal/StaffScreen'
 import BulkClockInScreen from './personal/BulkClockInScreen'
@@ -100,12 +102,46 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
+  // Screen-Wechsel, der noch an der „ungespeicherte Änderungen"-Abfrage hängt.
+  const [pendingNav, setPendingNav] = useState<{ screen: AdminScreen; detailId?: string } | null>(null)
+  const [savingPendingNav, setSavingPendingNav] = useState(false)
 
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
 
   const toggleTheme = () => setTheme(flipTheme)
+
+  // Jede Navigation läuft hierüber: hat die offene Detailmaske ungespeicherte
+  // Änderungen, wird erst gefragt (Speichern / Verwerfen / Abbrechen).
+  function guardedNav(nextScreen: AdminScreen, nextDetailId?: string) {
+    if (dirtyGuard()) {
+      setPendingNav({ screen: nextScreen, detailId: nextDetailId })
+      return
+    }
+    nav(nextScreen, nextDetailId)
+  }
+
+  function commitPendingNav() {
+    const target = pendingNav
+    setPendingNav(null)
+    if (target) nav(target.screen, target.detailId)
+  }
+
+  async function savePendingNav() {
+    const guard = dirtyGuard()
+    if (!guard) { commitPendingNav(); return }
+    setSavingPendingNav(true)
+    try {
+      const ok = await guard.save()
+      // Fehlgeschlagen: Abfrage schliessen, damit die Fehlermeldung der Maske
+      // sichtbar wird — der Anwender bleibt auf dem Screen.
+      if (!ok) { setPendingNav(null); return }
+      commitPendingNav()
+    } finally {
+      setSavingPendingNav(false)
+    }
+  }
 
   async function loadDashboard() {
     try { setDashboard(await getAdminDashboard()) } catch { /* ignore */ }
@@ -141,7 +177,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       return <ComingSoon title="Kein Zugriff" />
     }
     switch (screen) {
-      case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={nav} onBadgeChange={loadDashboard} />
+      case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={guardedNav} onBadgeChange={loadDashboard} />
       case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} />)
       case 'staff':        return <StaffScreen />
       case 'bulk-clockin': return guard('timekeeping', <BulkClockInScreen />)
@@ -151,7 +187,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'vacation':     return guard('hr', <VacationOverviewScreen />)
       case 'projects':     return <ProjectsScreen openNew={detailId === 'new'} onConsumedNew={clearDetail} />
       case 'project-drafts': return <ProjectDraftsScreen onBadgeChange={loadDashboard} />
-      case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={nav} />)
+      case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={guardedNav} />)
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return guard('quotes', <QuotesScreen initialStatus={detailId} onConsumed={clearDetail} />)
       case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
@@ -200,7 +236,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       {!isMobile && (
         <AdminSidebar
           screen={screen}
-          onNav={nav}
+          onNav={guardedNav}
           onLoggedOut={onLoggedOut}
           onSwitchToUser={onSwitchToUser}
           displayName={user.display_name}
@@ -230,7 +266,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       {isMobile && (
         <MobileNav
           screen={screen}
-          onNav={nav}
+          onNav={guardedNav}
           onLoggedOut={onLoggedOut}
           onSwitchToUser={onSwitchToUser}
           displayName={user.display_name}
@@ -240,6 +276,15 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
         />
       )}
       {showHelpBubble && <HelpBubble />}
+      {pendingNav && (
+        <UnsavedChangesDialog
+          saving={savingPendingNav}
+          message="Auf dieser Seite gibt es Änderungen, die noch nicht gespeichert sind."
+          onSave={savePendingNav}
+          onDiscard={commitPendingNav}
+          onCancel={() => setPendingNav(null)}
+        />
+      )}
     </div>
   )
 }

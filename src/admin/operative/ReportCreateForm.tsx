@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { apiFetch } from '../../api/client'
+import { getMe } from '../../api/auth'
+import { isFeatureEnabled } from '../../api/modules'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { parseNum } from '../utils/quotePricing'
 import { QUOTE_STATUS_LABELS } from '../constants/statuses'
@@ -26,6 +28,10 @@ export interface ReportFormProject {
   // Nur eine uuid-Spalte ohne FK — der Name wird gegen die staff-Prop aufgelöst,
   // die das Formular ohnehin schon bekommt (kein zusätzlicher Fetch).
   projektleiter_id?: string | null
+  // Garantie-Vermutung des Projekts: belegt das Rapport-Häkchen vor. Der Rapport
+  // trägt seinen eigenen Wert (reports.is_warranty) — bei einem Serviceeinsatz kann
+  // ein Teil Garantie sein und der Rest nicht.
+  is_warranty?: boolean | null
 }
 
 export interface ReportFormStaff {
@@ -36,6 +42,10 @@ export interface ReportFormStaff {
 interface StaffRow {
   staffId: string
   hours: string
+  // 'standard' = Baustelle, 'werkstatt' = Vorbereitung/Reparatur in der Werkstatt
+  // (labor_hours.hour_type). Der Chat-Pfad kennt die Unterscheidung seit 20260411,
+  // das Formular bis 2026-08-05 nicht.
+  hourType: 'standard' | 'werkstatt'
 }
 
 // Materialzeile: gewählter Katalogartikel (art_nr aus der MaterialCombobox) + Menge.
@@ -43,6 +53,8 @@ interface StaffRow {
 interface MaterialRow {
   artNr: string
   amount: string
+  // Einbauort (Freitext), nur bei Mandanten mit Feature-Flag `material_standort`.
+  location: string
 }
 
 // Klein-/Schmiermaterial-Pauschale: eine optionale Zeile. Wird nur mitgeschickt,
@@ -115,7 +127,15 @@ export function ReportCreateForm({
   // Sobald der Beschrieb von Hand geändert wurde, überschreibt ein Offertenwechsel
   // ihn nicht mehr (sonst verliert man die Eingabe beim Umschalten der Offerte).
   const [descTouched, setDescTouched] = useState(false)
-  const [rows, setRows] = useState<StaffRow[]>([{ staffId: '', hours: '' }])
+  const [rows, setRows] = useState<StaffRow[]>([{ staffId: '', hours: '', hourType: 'standard' }])
+  // Einsatzart-Flags (reports.massaufnahme/beratung) — bis 2026-08-05 konnte sie nur
+  // der Chat-Pfad setzen, ein manuell erfasster Rapport war systematisch ärmer.
+  const [massaufnahme, setMassaufnahme] = useState(false)
+  const [beratung, setBeratung] = useState(false)
+  // Garantie je Einsatz. Vorbelegt aus dem Projekt, aber eigenständig korrigierbar.
+  const [isWarranty, setIsWarranty] = useState(!!project.is_warranty)
+  // Einbauort je Materialzeile ist tenant-spezifisch (Flag `material_standort`).
+  const [locationEnabled, setLocationEnabled] = useState(false)
   // Material ist optional: standardmässig keine Zeile. Der Katalog wird erst geladen,
   // wenn der Nutzer die erste Materialposition hinzufügt (lazy) — ein Rapport ohne
   // Material verursacht so keinen Katalog-Fetch (~4'500 Artikel bei Stobag).
@@ -150,6 +170,14 @@ export function ReportCreateForm({
     [quotes],
   )
 
+  useEffect(() => {
+    getMe()
+      .then(me => setLocationEnabled(isFeatureEnabled(me, 'material_standort')))
+      // Fehler ist unkritisch: ohne Flag fehlt nur die Zusatzspalte, der Rest des
+      // Formulars funktioniert unverändert.
+      .catch(() => {})
+  }, [])
+
   // Esc schliesst das Fenster.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -174,7 +202,7 @@ export function ReportCreateForm({
     setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   }
   function addRow() {
-    setRows(rs => [...rs, { staffId: '', hours: '' }])
+    setRows(rs => [...rs, { staffId: '', hours: '', hourType: 'standard' }])
   }
   function removeRow(i: number) {
     setRows(rs => rs.filter((_, j) => j !== i))
@@ -197,7 +225,7 @@ export function ReportCreateForm({
   }
   function addMaterialRow() {
     ensureMaterialsLoaded()
-    setMaterialRows(rs => [...rs, { artNr: '', amount: '' }])
+    setMaterialRows(rs => [...rs, { artNr: '', amount: '', location: '' }])
   }
   function removeMaterialRow(i: number) {
     setMaterialRows(rs => rs.filter((_, j) => j !== i))
@@ -312,7 +340,15 @@ export function ReportCreateForm({
     }
     const materialItems = materialRows
       .filter(r => r.artNr && parseNum(r.amount) > 0)
-      .map(r => ({ art_nr: r.artNr, amount: parseNum(r.amount) }))
+      .map(r => {
+        const item: { art_nr: string; amount: number; location?: string } = {
+          art_nr: r.artNr, amount: parseNum(r.amount),
+        }
+        // Nur senden, wenn gefüllt — ein leerer Ort ist kein Ort.
+        const location = r.location.trim()
+        if (location) item.location = location
+        return item
+      })
 
     // Klein-/Schmiermaterial: der Betrag ist der Auslöser (die Menge hat einen
     // Default und aktiviert die Pauschale nicht allein). Ist ein Betrag erfasst,
@@ -370,14 +406,25 @@ export function ReportCreateForm({
       const payload: {
         report_date: string
         description: string
-        staff: { staff_id: string; hours: number }[]
-        materials?: { art_nr: string; amount: number }[]
+        staff: { staff_id: string; hours: number; hour_type: string }[]
+        massaufnahme: boolean
+        beratung: boolean
+        is_warranty: boolean
+        materials?: { art_nr: string; amount: number; location?: string }[]
         kleinmaterial?: { item_name: string; count: number; amount_chf: number }
         fixed_materials?: { item_name: string; amount: number; unit: string; unit_price: number }[]
       } = {
         report_date: reportDate,
         description: description.trim(),
-        staff: filled.map(r => ({ staff_id: r.staffId, hours: parseNum(r.hours) })),
+        staff: filled.map(r => ({
+          staff_id: r.staffId, hours: parseNum(r.hours), hour_type: r.hourType,
+        })),
+        massaufnahme,
+        beratung,
+        // Immer mitschicken: das Backend erbt nur bei fehlendem Feld vom Projekt.
+        // Wer das Häkchen bewusst entfernt, meint «dieser Einsatz ist verrechenbar»
+        // — auch in einem Garantie-Projekt.
+        is_warranty: isWarranty,
       }
       if (materialItems.length > 0) payload.materials = materialItems
       if (fixedMaterials.length > 0) payload.fixed_materials = fixedMaterials
@@ -445,6 +492,41 @@ export function ReportCreateForm({
           onChange={e => setReportDate(e.target.value)}
         />
       </div>
+
+      {/* Einsatzart + Verrechnung. Die drei Angaben konnte bis 2026-08-05 nur der
+          Chat-Pfad setzen; das Papierformular hält sie fest, hier werden sie erfasst. */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>
+          Einsatzart
+          <InfoHint text="Was bei diesem Einsatz zusätzlich passiert ist. «Garantiefall» ist aus dem Projekt vorbelegt und gilt hier nur für diesen Rapport — die Rechnung wird dadurch nicht automatisch angepasst, sie weist beim Erstellen nur darauf hin." />
+        </legend>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={massaufnahme}
+              onChange={e => setMassaufnahme(e.target.checked)}
+            />
+            Massaufnahme
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={beratung}
+              onChange={e => setBeratung(e.target.checked)}
+            />
+            Beratung
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={isWarranty}
+              onChange={e => setIsWarranty(e.target.checked)}
+            />
+            Garantiefall
+          </label>
+        </div>
+      </fieldset>
 
       {/* Offerten-Hinweis (rein informativ; ändert nur den Beschrieb-Vorschlag) */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
@@ -519,6 +601,16 @@ export function ReportCreateForm({
               value={row.hours}
               onChange={e => updateRow(i, { hours: e.target.value })}
             />
+            <select
+              className="admin-form-select"
+              style={{ flex: 1 }}
+              aria-label={`Stundenart ${i + 1}`}
+              value={row.hourType}
+              onChange={e => updateRow(i, { hourType: e.target.value as StaffRow['hourType'] })}
+            >
+              <option value="standard">Baustelle</option>
+              <option value="werkstatt">Werkstatt</option>
+            </select>
             {rows.length > 1 && (
               <button
                 type="button"
@@ -565,6 +657,17 @@ export function ReportCreateForm({
               value={row.amount}
               onChange={e => updateMaterialRow(i, { amount: e.target.value })}
             />
+            {locationEnabled && (
+              <input
+                className="admin-form-input"
+                style={{ flex: 1 }}
+                placeholder="Einbauort"
+                maxLength={60}
+                aria-label={`Einbauort ${i + 1}`}
+                value={row.location}
+                onChange={e => updateMaterialRow(i, { location: e.target.value })}
+              />
+            )}
             <button
               type="button"
               className="admin-btn admin-btn-danger admin-btn-sm"

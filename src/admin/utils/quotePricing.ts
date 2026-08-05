@@ -12,10 +12,20 @@ export function parseNum(v: string): number {
 
 /**
  * Verkaufspreis aus Einkaufspreis + Aufschlag:
- * `VK = EK × (1 + Aufschlag%)`, aufgerundet auf 0.50 (Schweizer 50-Rappen-Schritt).
+ * `VK = EK × (1 + Aufschlag%)`, aufgerundet auf 0.05 (Schweizer Rappenrundung).
+ *
+ * Pendant zu `db.pricing.compute_material_vk` im Backend (dort via
+ * `db.money.round_to_5_rappen`). Vorher rundete diese Funktion auf 0.50 auf,
+ * das Backend dagegen auf den Rappen genau — derselbe Artikel kostete als freie
+ * Position 449.00 und als Katalog-Artikel 448.94. Beide Wege liefern jetzt 448.95.
+ *
+ * Gerechnet wird über ganzzahlige Rappen: `Math.ceil(448.95 * 20) / 20` ergibt in
+ * Float 449.00, weil 448.95 * 20 als 8979.000000000001 dasteht. Ganze Zahlen sind
+ * exakt, also erst auf Rappen runden und dann in 5er-Schritten aufrunden.
  */
 export function vkFromEk(ekPrice: number, marginPct: number): number {
-  return Math.ceil(ekPrice * (1 + marginPct / 100) * 2) / 2
+  const rappen = Math.round(ekPrice * (1 + marginPct / 100) * 100)
+  return (Math.ceil(rappen / 5) * 5) / 100
 }
 
 /** Aufschlag-Faktor (z. B. 1.75) → Prozent (75). */
