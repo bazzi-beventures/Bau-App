@@ -5,7 +5,7 @@ import {
   getTenantFeatures, updateTenantFeature,
   TenantFeaturesResponse, FeatureRegistryEntry, FeatureFieldSchema,
   getTenantTravelCost, updateTenantTravelCost, TravelCostRow,
-  getSchedulingConfig, updateSchedulingConfig, SchedulingConfig,
+  getSchedulingConfig, updateSchedulingConfig, SchedulingConfig, SCHEDULING_VIEWS,
   SCHEDULING_KINDS, SCHEDULING_FIELDS,
 } from '../../api/admin'
 import {
@@ -1106,6 +1106,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
     return {
       fields: { ...def.fields, ...(cfg.fields || {}) },
       colors: { ...def.colors, ...(cfg.colors || {}) },
+      views: { ...(def.views || {}), ...(cfg.views || {}) },
       grey_after: cfg.grey_after ?? def.grey_after ?? '',
       grey_until: cfg.grey_until ?? def.grey_until ?? '',
     }
@@ -1135,9 +1136,15 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
   const dirty = JSON.stringify(config) !== original
   // 'bis' muss nach 'von' liegen (HH:MM-Strings sind lexikografisch vergleichbar).
   const rangeInvalid = !!config.grey_after && !!config.grey_until && config.grey_until <= config.grey_after
+  // Fehlender Key = Ansicht an (Default) — deshalb explizit auf false prüfen.
+  const allViewsOff = SCHEDULING_VIEWS.every(v => config.views?.[v.key] === false)
 
   function setField(key: string, value: boolean) {
     setConfig(prev => prev && { ...prev, fields: { ...prev.fields, [key]: value } })
+  }
+
+  function setView(key: string, value: boolean) {
+    setConfig(prev => prev && { ...prev, views: { ...prev.views, [key]: value } })
   }
 
   function setColor(key: string, value: string) {
@@ -1179,6 +1186,29 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
         Steuert, was auf den Einsatz-Kacheln im Planungs-Kalender erscheint und welche
         Farbe jede Einsatz-Art bekommt. Uhrzeit und Titel werden immer angezeigt.
       </div>
+
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Verfügbare Ansichten</div>
+      <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+        Welche Kalender-Ansichten in der Einsatzplanung zur Auswahl stehen.
+        Die Plantafel zeigt jeden Monteur als eigene Zeile über die Woche.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: allViewsOff ? 6 : 24 }}>
+        {SCHEDULING_VIEWS.map(v => (
+          <label key={v.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={config.views?.[v.key] !== false}
+              onChange={e => setView(v.key, e.target.checked)}
+            />
+            {v.label}
+          </label>
+        ))}
+      </div>
+      {allViewsOff && (
+        <div style={{ fontSize: 13, color: 'var(--danger, #c0392b)', marginBottom: 24 }}>
+          Mindestens eine Ansicht muss aktiviert sein.
+        </div>
+      )}
 
       <div style={{ fontWeight: 600, marginBottom: 10 }}>Zusätzliche Felder auf der Kachel</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
@@ -1257,7 +1287,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
         <button
           className="admin-btn admin-btn-primary"
           onClick={save}
-          disabled={!dirty || saving || rangeInvalid}
+          disabled={!dirty || saving || rangeInvalid || allViewsOff}
         >
           {saving ? 'Speichern…' : 'Speichern'}
         </button>

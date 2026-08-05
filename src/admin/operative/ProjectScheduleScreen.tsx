@@ -189,6 +189,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         setSchedulingConfig({
           fields: { ...sched.defaults.fields, ...(sched.config.fields || {}) },
           colors: { ...sched.defaults.colors, ...(sched.config.colors || {}) },
+          views: { ...(sched.defaults.views || {}), ...(sched.config.views || {}) },
           grey_after: sched.config.grey_after ?? sched.defaults.grey_after ?? '',
           grey_until: sched.config.grey_until ?? sched.defaults.grey_until ?? '',
         })
@@ -283,9 +284,14 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   // Drag-Verschiebung aus dem Kalender: id = TERMIN-ID. deltaDays = Tagesversatz;
   // startTime steuert die Uhrzeit: undefined = beibehalten (Monat), 'HH:MM' = neue
   // Startzeit (Dauer wird mitgezogen), null = Uhrzeit löschen (→ ganztägig).
-  async function handleReschedule(id: string, deltaDays: number, startTime?: string | null) {
+  // monteurIds (Plantafel: Chip in andere Monteur-Zeile gezogen) = neues Team,
+  // gespeichert als termin-eigenes Team; undefined = Team unverändert.
+  async function handleReschedule(id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) {
     const appt = appointments.find(a => a.id === id)
     if (!appt) return
+
+    const teamChanged = monteurIds !== undefined &&
+      JSON.stringify([...monteurIds].sort()) !== JSON.stringify([...(appt.monteur_ids ?? [])].sort())
 
     const newStartDate = shiftISO(appt.start_date, deltaDays)
     const newEndDate = appt.end_date ? shiftISO(appt.end_date, deltaDays) : null
@@ -306,13 +312,15 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       newStartDate === appt.start_date.slice(0, 10) &&
       (newEndDate ?? null) === (appt.end_date?.slice(0, 10) ?? null) &&
       newStartTime === (appt.start_time?.slice(0, 5) ?? null) &&
-      newEndTime === (appt.end_time?.slice(0, 5) ?? null)
+      newEndTime === (appt.end_time?.slice(0, 5) ?? null) &&
+      !teamChanged
     ) return
 
     const optimistic: ProjectAppointment = {
       ...appt,
       start_date: newStartDate, end_date: newEndDate,
       start_time: newStartTime, end_time: newEndTime,
+      monteur_ids: teamChanged ? monteurIds! : appt.monteur_ids,
     }
     setAppointments(prev => prev.map(a => a.id === id ? optimistic : a))
     try {
@@ -323,6 +331,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         payload.start_time = newStartTime ?? ''
         payload.end_time = newEndTime ?? ''
       }
+      if (teamChanged) payload.monteur_ids = monteurIds
       await updateAppointment(id, payload)
     } catch {
       setAppointments(prev => prev.map(a => a.id === id ? appt : a))

@@ -25,6 +25,7 @@ const DEFAULTS = {
     project: '#3081ab', teamsitzung: '#7c3aed', lagerarbeit: '#d97706',
     werkstatt: '#0d9488', sonstiges: '#475569',
   },
+  views: { month: true, week: true, staff: true, plantafel: true },
   grey_after: '',
   grey_until: '',
 }
@@ -120,6 +121,34 @@ describe('SchedulingTab', () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
     expect(mockUpdate.mock.calls[0][0].grey_after).toBe('12:00')
     expect(mockUpdate.mock.calls[0][0].grey_until).toBe('13:00')
+  })
+
+  it('Ansicht abschalten wird mitgespeichert', async () => {
+    mockGet.mockResolvedValue({ config: {}, defaults: DEFAULTS })
+    mockUpdate.mockResolvedValue({ config: { ...DEFAULTS, views: { ...DEFAULTS.views, plantafel: false } } })
+    const user = await openTab()
+
+    const plantafel = await screen.findByLabelText('Plantafel')
+    expect(plantafel).toBeChecked()  // Default: alle Ansichten an
+
+    await user.click(plantafel)
+    await user.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    const sent = mockUpdate.mock.calls[0][0]
+    expect(sent.views?.plantafel).toBe(false)
+    expect(sent.views?.month).toBe(true)
+  })
+
+  it('Speichern ist gesperrt, wenn alle Ansichten aus sind', async () => {
+    mockGet.mockResolvedValue({ config: {}, defaults: DEFAULTS })
+    const user = await openTab()
+
+    await screen.findByLabelText('Plantafel')
+    for (const label of ['Monat', 'Woche', 'Mitarbeiter', 'Plantafel']) {
+      await user.click(screen.getByLabelText(label))
+    }
+    expect(screen.getByText('Mindestens eine Ansicht muss aktiviert sein.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
   })
 
   it('Speichern ist gesperrt, wenn "bis" nicht nach "von" liegt', async () => {

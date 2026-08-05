@@ -587,9 +587,22 @@ export const SCHEDULING_FIELDS = [
   { key: 'bemerkung', label: 'Bemerkung' },
 ] as const
 
+// Kalender-Ansichten der Einsatzplanung, pro Mandant an-/abschaltbar.
+// Gespiegelt in db/tenants.py (SCHEDULING_VIEWS).
+export const SCHEDULING_VIEWS = [
+  { key: 'month', label: 'Monat' },
+  { key: 'week', label: 'Woche' },
+  { key: 'staff', label: 'Mitarbeiter' },
+  { key: 'plantafel', label: 'Plantafel' },
+] as const
+
+export type SchedulingViewKey = (typeof SCHEDULING_VIEWS)[number]['key']
+
 export interface SchedulingConfig {
   fields: Record<string, boolean>
   colors: Record<string, string>
+  // Sichtbare Kalender-Ansichten; fehlender Key = Ansicht an (Default).
+  views?: Record<string, boolean>
   // Nicht-Arbeitszeit-Fenster im Wochen-Zeitraster (Werktage Mo–Fr, rein visuell).
   // grey_after = Fenster-Start 'HH:MM' ('' = aus), grey_until = Fenster-Ende 'HH:MM'
   // ('' = bis Rasterende/Feierabend). Blockiert das Planen nicht.

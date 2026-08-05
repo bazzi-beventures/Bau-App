@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Project, projectCustomerName } from './ProjectsScreen'
-import type { SchedulingConfig } from '../../api/admin'
+import { SCHEDULING_VIEWS, type SchedulingConfig, type SchedulingViewKey } from '../../api/admin'
 import { useIsMobile } from '../useIsMobile'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
   parseDateStr, diffDays, hhmmToMin, minToHHMM,
 } from '../utils/calendarHelpers'
 
-// Drag-Transfer payload format: "<projectId>|<grabDayISO>|<grabOffsetY>"
+// Drag-Transfer payload format: "<projectId>|<grabDayISO>|<grabOffsetY>|<sourceRowId>"
 // grabOffsetY = Y-Position des Mauszeigers innerhalb der gegriffenen Pille (px),
 // damit beim Drop in das Zeitraster der Block-Anfang dort landet, wo der Block
-// (nicht der Cursor) hingehört.
+// (nicht der Cursor) hingehört. sourceRowId = Monteur-Zeile, aus der der Chip in
+// der Plantafel gegriffen wurde ('' ausserhalb der Plantafel bzw. Zeile «Ohne Monteur»).
 const DRAG_MIME = 'application/x-bau-project'
 
 interface StaffLite {
@@ -33,7 +34,9 @@ interface Props {
   // Verschiebt einen Einsatz im Kalender. deltaDays = Tagesversatz; startTime
   // steuert die Uhrzeit: undefined = Zeit beibehalten (Monat / Ganztägig-Strip),
   // 'HH:MM' = neue Startzeit (Drop ins Zeitraster), null = Zeit löschen (ganztägig).
-  onReschedule: (id: string, deltaDays: number, startTime?: string | null) => Promise<void> | void
+  // monteurIds = neues Termin-Team (Plantafel: Drop in andere Monteur-Zeile),
+  // undefined = Team unverändert.
+  onReschedule: (id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) => Promise<void> | void
   // Neuer Termin per Aufziehen im Wochen-Zeitraster. monteurId ist in der
   // Mitarbeiteransicht der fokussierte Mitarbeiter (vorausgewählt), sonst null.
   onCreateSlot?: (dateISO: string, startTime: string, endTime: string, monteurId: string | null) => void
@@ -118,19 +121,19 @@ function projectMonteurNames(p: Project, staff: StaffLite[]): string {
 
 // ─── Drag-Handlers ────────────────────────────────────────────────────────────
 
-function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string) {
+function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string, sourceRowId = '') {
   const grabOffsetY = Math.round(e.nativeEvent.offsetY) || 0
-  const raw = `${projectId}|${grabDayISO}|${grabOffsetY}`
+  const raw = `${projectId}|${grabDayISO}|${grabOffsetY}|${sourceRowId}`
   e.dataTransfer.setData(DRAG_MIME, raw)
   e.dataTransfer.setData('text/plain', raw)
   e.dataTransfer.effectAllowed = 'move'
 }
 
-function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string; grabOffsetY: number } | null {
+function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string; grabOffsetY: number; sourceRowId: string } | null {
   const raw = e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')
   if (!raw || !raw.includes('|')) return null
-  const [projectId, grabDayISO, grabOffsetY] = raw.split('|')
-  return { projectId, grabDayISO, grabOffsetY: Number(grabOffsetY) || 0 }
+  const [projectId, grabDayISO, grabOffsetY, sourceRowId] = raw.split('|')
+  return { projectId, grabDayISO, grabOffsetY: Number(grabOffsetY) || 0, sourceRowId: sourceRowId || '' }
 }
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
@@ -617,6 +620,142 @@ function WeekView({
   )
 }
 
+// ─── Plantafel (Monteure als Zeilen × Wochentage) ───────────────────────────
+// Dispositions-Sicht: eine Zeile pro Monteur, Spalten Mo–So. Ein Termin mit
+// mehreren Monteuren erscheint in jeder betroffenen Zeile; Termine ohne
+// (bekannten) Monteur sammeln sich in der Zeile «Ohne Monteur». Drag&Drop
+// verschiebt den Tag; ein Drop in einer anderen Monteur-Zeile weist zusätzlich
+// den Quell-Monteur auf den Ziel-Monteur um (restliches Team bleibt erhalten).
+
+function PlantafelView({
+  projects, staff, rowStaff, fields, currentDate, onSelect, onReschedule, holidays,
+}: {
+  projects: CalendarEntry[]
+  staff: StaffLite[]
+  // Zeilen der Tafel = Monteure nach aktivem Filter (staff bleibt die volle
+  // Liste für Namensauflösung in Tooltips/Zusatzfeldern).
+  rowStaff: StaffLite[]
+  fields?: Record<string, boolean>
+  currentDate: Date
+  onSelect: (p: Project) => void
+  onReschedule: (id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) => void
+  holidays: Map<string, string>
+}) {
+  const days = getWeekDays(currentDate)
+  // Hover-Zelle beim Drag: `${dayISO}|${rowId}` (rowId '' = «Ohne Monteur»).
+  const [hoverCell, setHoverCell] = useState<string | null>(null)
+  const projById = new Map(projects.map(p => [p.id, p]))
+  const staffIds = new Set(staff.map(s => s.id))
+
+  // Einträge einer Zelle: rowId = Monteur-Zeile, null = «Ohne Monteur».
+  // Ganztägige zuerst, danach chronologisch.
+  function cellEntries(rowId: string | null, day: Date): CalendarEntry[] {
+    return projects
+      .filter(p => projectCoversDay(p, day) && (
+        rowId === null
+          ? !(p.monteur_ids || []).some(id => staffIds.has(id))
+          : (p.monteur_ids || []).includes(rowId)
+      ))
+      .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+  }
+
+  const hasUnassigned = days.some(d => cellEntries(null, d).length > 0)
+
+  function handleDrop(e: React.DragEvent, day: Date, rowId: string | null) {
+    e.preventDefault()
+    setHoverCell(null)
+    const payload = readDragPayload(e)
+    if (!payload) return
+    const proj = projById.get(payload.projectId)
+    if (!proj) return
+    const delta = diffDays(payload.grabDayISO, toDateStr(day))
+    const srcRow = payload.sourceRowId || null
+    // Zeilenwechsel = Umzuweisung: Quell-Monteur raus, Ziel-Monteur rein.
+    // Drop in «Ohne Monteur» ändert das Team nicht (nur Tagesversatz).
+    let newTeam: string[] | undefined
+    if (rowId && rowId !== srcRow) {
+      const team = (proj.monteur_ids || []).filter(id => id !== srcRow)
+      if (!team.includes(rowId)) team.push(rowId)
+      newTeam = team
+    }
+    if (delta !== 0 || newTeam) onReschedule(proj.id, delta, undefined, newTeam)
+  }
+
+  function renderChip(p: CalendarEntry, dayISO: string, rowId: string | null) {
+    const timeLabel = fmtTimeRange(p)
+    const extra = pillExtraLines(p, staff, fields)
+    const monteurs = projectMonteurNames(p, staff)
+    return (
+      <div
+        key={p.id}
+        className="project-cal-board-chip"
+        draggable
+        onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '')}
+        onClick={() => onSelect(p)}
+        style={{ background: pillBg(p) }}
+        title={[p.name, timeLabel, monteurs, ...extra].filter(Boolean).join(' · ')}
+      >
+        <span className="project-cal-board-chip-time">{timeLabel || 'ganztägig'}</span>
+        <span className="project-cal-board-chip-name">
+          {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+          {p.name}
+        </span>
+      </div>
+    )
+  }
+
+  function renderRow(rowId: string | null, label: string) {
+    return (
+      <div key={rowId ?? '∅'} className="project-cal-board-row">
+        <div className={`project-cal-board-staff${rowId === null ? ' unassigned' : ''}`}>{label}</div>
+        {days.map(d => {
+          const dayISO = toDateStr(d)
+          const cellKey = `${dayISO}|${rowId ?? ''}`
+          const entries = cellEntries(rowId, d)
+          return (
+            <div
+              key={dayISO}
+              className={
+                `project-cal-board-cell${isToday(d) ? ' today' : ''}` +
+                `${holidays.has(dayISO) ? ' holiday' : ''}` +
+                `${hoverCell === cellKey ? ' project-cal-drop-hover' : ''}`
+              }
+              onDragOver={e => { e.preventDefault(); setHoverCell(cellKey) }}
+              onDragLeave={() => setHoverCell(prev => prev === cellKey ? null : prev)}
+              onDrop={e => handleDrop(e, d, rowId)}
+            >
+              {entries.map(p => renderChip(p, dayISO, rowId))}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="project-cal-board">
+      <div className="project-cal-board-row project-cal-board-header">
+        <div className="project-cal-board-staff">Monteur</div>
+        {days.map(d => {
+          const holidayName = holidays.get(toDateStr(d))
+          return (
+            <div key={toDateStr(d)} className={`project-cal-board-day-head${isToday(d) ? ' today' : ''}`}>
+              <span className="project-cal-week-day-wd">{d.toLocaleDateString('de-CH', { weekday: 'short' })}</span>{' '}
+              <span className="project-cal-week-day-num">{d.getDate()}.{d.getMonth() + 1}.</span>
+              {holidayName && <div className="project-cal-week-day-holiday">{holidayName}</div>}
+            </div>
+          )
+        })}
+      </div>
+      {rowStaff.map(s => renderRow(s.id, s.name))}
+      {hasUnassigned && renderRow(null, 'Ohne Monteur')}
+      {rowStaff.length === 0 && !hasUnassigned && (
+        <div className="admin-empty">Keine Monteure sichtbar.</div>
+      )}
+    </div>
+  )
+}
+
 // ─── Agenda-Ansicht (Mobile) ────────────────────────────────────────────────
 // Vertikale Wochen-Agenda: Tage untereinander, Einsätze als Karten. Ersetzt auf
 // dem Handy das Zeitraster (dessen Drag&Drop/Aufziehen auf Touch nicht geht).
@@ -687,11 +826,17 @@ export default function ProjectScheduleCalendar({
   projects, staff, loading, canton = 'ZH', onSelect, onReschedule, onCreateSlot,
   onVisibleWeekChange, onVisibleStaffChange, schedulingConfig,
 }: Props) {
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'staff'>('month')
+  const [viewMode, setViewMode] = useState<SchedulingViewKey>('month')
   const isMobile = useIsMobile()
   const fields = schedulingConfig?.fields
   const greyAfter = schedulingConfig?.grey_after
   const greyUntil = schedulingConfig?.grey_until
+  // Tenant-schaltbare Ansichten: fehlender Key = an (Default). Liegt die aktuell
+  // gewählte Ansicht ausserhalb der erlaubten, greift die erste erlaubte —
+  // abgeleitet statt per Effect, damit auch die async nachladende Config sofort wirkt.
+  const viewEnabled = (k: SchedulingViewKey) => schedulingConfig?.views?.[k] !== false
+  const availableViews = SCHEDULING_VIEWS.filter(v => viewEnabled(v.key))
+  const view: SchedulingViewKey = viewEnabled(viewMode) ? viewMode : (availableViews[0]?.key ?? 'month')
   // Einsatz-Art-Farben als scoped CSS-Variablen (--kind-*) auf dem Kalender-Root.
   const kindColorVars: React.CSSProperties = {}
   for (const [k, v] of Object.entries(schedulingConfig?.colors || {})) {
@@ -722,13 +867,13 @@ export default function ProjectScheduleCalendar({
   // Woche landet auch im Wochenplan-PDF.
   useEffect(() => {
     if (!onVisibleStaffChange) return
-    if (viewMode === 'staff') {
+    if (view === 'staff') {
       onVisibleStaffChange(focusedStaff ? [focusedStaff.id] : [])
       return
     }
     if (hiddenStaff.size === 0) onVisibleStaffChange(null)
     else onVisibleStaffChange(staff.filter(s => !hiddenStaff.has(s.id)).map(s => s.id))
-  }, [hiddenStaff, staff, onVisibleStaffChange, viewMode, focusedStaff])
+  }, [hiddenStaff, staff, onVisibleStaffChange, view, focusedStaff])
 
   function toggleStaff(id: string) {
     setHiddenStaff(prev => {
@@ -747,7 +892,7 @@ export default function ProjectScheduleCalendar({
   const visibleProjects = projects.filter(p => {
     // Mitarbeiteransicht: nur Einsätze des fokussierten Mitarbeiters — als
     // Monteur zugewiesen oder als Projektleiter verantwortlich.
-    if (viewMode === 'staff') {
+    if (view === 'staff') {
       if (!focusedStaff) return false
       return (p.monteur_ids?.includes(focusedStaff.id) ?? false) || p.projektleiter_id === focusedStaff.id
     }
@@ -765,7 +910,7 @@ export default function ProjectScheduleCalendar({
 
   // Auf Mobile ist die Ansicht immer die Wochen-Agenda → Navigation wochenweise,
   // unabhängig vom (dort ausgeblendeten) Monatsmodus.
-  const monthNav = viewMode === 'month' && !isMobile
+  const monthNav = view === 'month' && !isMobile
 
   function handlePrev() {
     if (monthNav) {
@@ -786,7 +931,7 @@ export default function ProjectScheduleCalendar({
   // Neuer Termin aus dem Zeitraster: in der Mitarbeiteransicht ist der aktuell
   // fokussierte Mitarbeiter automatisch vorausgewählt, sonst kein Monteur.
   function handleCreateSlot(dayISO: string, startTime: string, endTime: string) {
-    const monteurId = viewMode === 'staff' ? focusedStaff?.id ?? null : null
+    const monteurId = view === 'staff' ? focusedStaff?.id ?? null : null
     onCreateSlot?.(dayISO, startTime, endTime, monteurId)
   }
 
@@ -806,29 +951,24 @@ export default function ProjectScheduleCalendar({
           {isMobile ? (
             <>
               <button
-                className={`admin-btn admin-btn-sm ${viewMode !== 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                className={`admin-btn admin-btn-sm ${view !== 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
                 onClick={() => setViewMode('week')}
               >Alle</button>
-              <button
-                className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                onClick={() => setViewMode('staff')}
-              >Mitarbeiter</button>
+              {viewEnabled('staff') && (
+                <button
+                  className={`admin-btn admin-btn-sm ${view === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                  onClick={() => setViewMode('staff')}
+                >Mitarbeiter</button>
+              )}
             </>
           ) : (
-            <>
+            availableViews.map(v => (
               <button
-                className={`admin-btn admin-btn-sm ${viewMode === 'month' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                onClick={() => setViewMode('month')}
-              >Monat</button>
-              <button
-                className={`admin-btn admin-btn-sm ${viewMode === 'week' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                onClick={() => setViewMode('week')}
-              >Woche</button>
-              <button
-                className={`admin-btn admin-btn-sm ${viewMode === 'staff' ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                onClick={() => setViewMode('staff')}
-              >Mitarbeiter</button>
-            </>
+                key={v.key}
+                className={`admin-btn admin-btn-sm ${view === v.key ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                onClick={() => setViewMode(v.key)}
+              >{v.label}</button>
+            ))
           )}
         </div>
 
@@ -844,7 +984,7 @@ export default function ProjectScheduleCalendar({
         </div>
       </div>
 
-      {!loading && viewMode === 'staff' && staff.length > 0 && (
+      {!loading && view === 'staff' && staff.length > 0 && (
         <div className="project-cal-staff-switcher">
           <span className="project-cal-filter-label">Mitarbeiter</span>
           <div className="project-cal-staff-switcher-nav">
@@ -877,7 +1017,7 @@ export default function ProjectScheduleCalendar({
         </div>
       )}
 
-      {!loading && viewMode !== 'staff' && staff.length > 0 && (
+      {!loading && view !== 'staff' && staff.length > 0 && (
         <div className="project-cal-filter">
           <div className="project-cal-filter-head">
             <span>
@@ -913,7 +1053,7 @@ export default function ProjectScheduleCalendar({
 
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
-      ) : viewMode === 'staff' && !focusedStaff ? (
+      ) : view === 'staff' && !focusedStaff ? (
         <div className="admin-empty">Keine Mitarbeiter verfügbar.</div>
       ) : isMobile ? (
         <AgendaView
@@ -925,7 +1065,18 @@ export default function ProjectScheduleCalendar({
           onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
           holidays={holidays}
         />
-      ) : viewMode === 'month' ? (
+      ) : view === 'plantafel' ? (
+        <PlantafelView
+          projects={visibleProjects}
+          staff={staff}
+          rowStaff={hiddenStaff.size > 0 ? staff.filter(s => !hiddenStaff.has(s.id)) : staff}
+          fields={fields}
+          currentDate={currentDate}
+          onSelect={onSelect}
+          onReschedule={(id, d, t, m) => { void onReschedule(id, d, t, m) }}
+          holidays={holidays}
+        />
+      ) : view === 'month' ? (
         <MonthView
           projects={visibleProjects}
           staff={staff}
