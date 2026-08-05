@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { Fragment, useEffect, useRef, useState } from 'react'
 import { Project, projectCustomerName } from './ProjectsScreen'
-import { SCHEDULING_VIEWS, type SchedulingConfig, type SchedulingViewKey } from '../../api/admin'
+import {
+  SCHEDULING_VIEWS, resolveScheduleDistances,
+  type SchedulingConfig, type SchedulingViewKey,
+} from '../../api/admin'
 import { useIsMobile } from '../useIsMobile'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
@@ -23,7 +26,9 @@ interface StaffLite {
 // Projekt und überlagert die Terminfelder; `id` ist die TERMIN-ID — dadurch sind
 // Keys/Lanes/Drag&Drop je Termin eindeutig, auch bei mehreren Terminen desselben
 // Projekts. termin_badge: Typ-Label (z.B. "Aufmass"), leer beim Standardfall.
-export type CalendarEntry = Project & { termin_badge?: string }
+// termin_kind: roher Termin-Typ (aufmass/montage/service/sonstiges) für das
+// Typ-Symbol — nur bei Kundenprojekten gesetzt, interne Einsätze nutzen p.kind.
+export type CalendarEntry = Project & { termin_badge?: string; termin_kind?: string }
 
 interface Props {
   projects: CalendarEntry[]
@@ -99,6 +104,26 @@ function pillBg(p: Project): string {
   return KIND_COLORS[p.kind || 'project'] ?? KIND_COLORS.project
 }
 
+// Kleines Typ-Symbol je Aufgaben-Art: Kundenprojekte nach Termin-Typ
+// (termin_kind), interne Einsätze nach Einsatz-Art (kind).
+const TERMIN_SYMBOLS: Record<string, string> = {
+  aufmass: '📐',
+  montage: '🔧',
+  service: '🛠️',
+  sonstiges: '📋',
+}
+const KIND_SYMBOLS: Record<string, string> = {
+  teamsitzung: '👥',
+  lagerarbeit: '📦',
+  werkstatt: '⚙️',
+  sonstiges: '📌',
+}
+
+function kindSymbol(p: CalendarEntry): string {
+  if (p.kind && p.kind !== 'project') return KIND_SYMBOLS[p.kind] ?? ''
+  return TERMIN_SYMBOLS[p.termin_kind ?? 'montage'] ?? ''
+}
+
 // Optionale Zusatz-Zeilen auf der Kachel, gesteuert per Tenant-Config (scheduling_config.fields).
 function pillExtraLines(p: Project, staff: StaffLite[], fields?: Record<string, boolean>): string[] {
   if (!fields) return []
@@ -144,6 +169,9 @@ function CalendarLegend({ canton }: { canton: string }) {
       <div className="absence-cal-legend-item">
         <span className="absence-cal-legend-dot absence-cal-legend-dot--holiday" />
         Feiertag {canton.toUpperCase()}
+      </div>
+      <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
+        📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
         Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen.
@@ -228,6 +256,7 @@ function MonthView({
                     style={{ background: pillBg(p) }}
                     onClick={() => onSelect(p)}
                   >
+                    {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
                     {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
                     {pillLabel(p)}
                     {extra.map((line, k) => (
@@ -499,6 +528,7 @@ function WeekView({
           <div className="project-cal-week-event-time">{timeLabel}</div>
         )}
         <div className="project-cal-week-event-name">
+          {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
           {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
           {p.name}
         </div>
@@ -620,6 +650,20 @@ function WeekView({
   )
 }
 
+// ─── Distanz-Paare (Plantafel) ──────────────────────────────────────────────
+
+// Kanonischer Cache-Key für ein Adresspaar — gleiche Normalisierung wie das
+// Backend (getrimmt, lexikografisch sortiert), Trenner ist ein Steuerzeichen,
+// das in Adressen nicht vorkommt. null = leer/identisch → keine Distanz nötig.
+const PAIR_SEP = '\u0001'
+
+function pairKey(a: string | null | undefined, b: string | null | undefined): string | null {
+  const x = (a ?? '').trim()
+  const y = (b ?? '').trim()
+  if (!x || !y || x === y) return null
+  return x <= y ? `${x}${PAIR_SEP}${y}` : `${y}${PAIR_SEP}${x}`
+}
+
 // ─── Plantafel (Monteure als Zeilen × Wochentage) ───────────────────────────
 // Dispositions-Sicht: eine Zeile pro Monteur, Spalten Mo–So. Ein Termin mit
 // mehreren Monteuren erscheint in jeder betroffenen Zeile; Termine ohne
@@ -628,7 +672,7 @@ function WeekView({
 // den Quell-Monteur auf den Ziel-Monteur um (restliches Team bleibt erhalten).
 
 function PlantafelView({
-  projects, staff, rowStaff, fields, currentDate, onSelect, onReschedule, holidays,
+  projects, staff, rowStaff, fields, currentDate, onSelect, onReschedule, onCreateCell, holidays, showDistances,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
@@ -639,11 +683,21 @@ function PlantafelView({
   currentDate: Date
   onSelect: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) => void
+  // Klick auf leere Zelle → neuer Termin an diesem Tag mit dem Zeilen-Monteur
+  // vorbelegt (null = Zeile «Ohne Monteur»).
+  onCreateCell?: (dayISO: string, monteurId: string | null) => void
   holidays: Map<string, string>
+  // Fahrdistanzen zwischen aufeinanderfolgenden Einsätzen anzeigen (Tenant-Config).
+  showDistances?: boolean
 }) {
   const days = getWeekDays(currentDate)
   // Hover-Zelle beim Drag: `${dayISO}|${rowId}` (rowId '' = «Ohne Monteur»).
   const [hoverCell, setHoverCell] = useState<string | null>(null)
+  // Aufgelöste Distanzen (pairKey → km); wächst über Wochenwechsel mit.
+  const [distances, setDistances] = useState<Record<string, number>>({})
+  // Bereits angefragte Paare — verhindert Wiederholungs-Requests für Paare,
+  // die der Server (noch) nicht auflösen konnte.
+  const requestedPairsRef = useRef<Set<string>>(new Set())
   const projById = new Map(projects.map(p => [p.id, p]))
   const staffIds = new Set(staff.map(s => s.id))
 
@@ -660,6 +714,76 @@ function PlantafelView({
   }
 
   const hasUnassigned = days.some(d => cellEntries(null, d).length > 0)
+
+  // Aufeinanderfolgende GETAKTETE Einsätze einer Zelle mit verschiedenen
+  // Objektadressen — nur zwischen denen ergibt eine Fahrdistanz Sinn
+  // (Ganztägige haben keine Reihenfolge, «Ohne Monteur» keine Route).
+  const neededPairs = new Set<string>()
+  if (showDistances) {
+    for (const s of rowStaff) {
+      for (const d of days) {
+        const timed = cellEntries(s.id, d).filter(p => p.start_time)
+        for (let i = 0; i + 1 < timed.length; i++) {
+          const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
+          if (k) neededPairs.add(k)
+        }
+      }
+    }
+  }
+  const neededSig = [...neededPairs].sort().join('\n')
+
+  // Fehlende Paare gebündelt beim Server anfragen (cache-first, dort gedeckelt).
+  // Deps bewusst nur die Paar-Signatur: erneut versucht wird erst, wenn sich
+  // die sichtbare Tafel ändert — nicht bei jedem Distanz-Merge.
+  useEffect(() => {
+    if (!neededSig) return
+    const missing = neededSig.split('\n').filter(k => !requestedPairsRef.current.has(k))
+    if (missing.length === 0) return
+    missing.forEach(k => requestedPairsRef.current.add(k))
+    let cancelled = false
+    resolveScheduleDistances(missing.map(k => k.split(PAIR_SEP) as [string, string]))
+      .then(res => {
+        if (cancelled || res.distances.length === 0) return
+        setDistances(prev => {
+          const next = { ...prev }
+          for (const d of res.distances) {
+            const k = pairKey(d.a, d.b)
+            if (k) next[k] = d.km
+          }
+          return next
+        })
+      })
+      // Distanz ist reine Zusatzinfo — Fehler still schlucken, nichts anzeigen.
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [neededSig])
+
+  // km zwischen zwei Einsätzen (beide getaktet, Adressen vorhanden/verschieden).
+  function distBetween(a: CalendarEntry, b: CalendarEntry): number | null {
+    if (!a.start_time || !b.start_time) return null
+    const k = pairKey(a.object_address, b.object_address)
+    if (!k) return null
+    return distances[k] ?? null
+  }
+
+  // Doppelbuchung: getaktete Einsätze desselben Monteurs am selben Tag, die sich
+  // zeitlich überschneiden (ohne Endzeit zählt 1 h). Nur echte Ressourcen-
+  // Konflikte — die Sammelzeile «Ohne Monteur» bleibt aussen vor.
+  function conflictIds(entries: CalendarEntry[]): Set<string> {
+    const timed = entries.filter(p => p.start_time)
+    const out = new Set<string>()
+    for (let i = 0; i < timed.length; i++) {
+      for (let j = i + 1; j < timed.length; j++) {
+        const a = timed[i], b = timed[j]
+        const aS = hhmmToMin(a.start_time!)
+        const aE = a.end_time ? hhmmToMin(a.end_time) : aS + 60
+        const bS = hhmmToMin(b.start_time!)
+        const bE = b.end_time ? hhmmToMin(b.end_time) : bS + 60
+        if (aS < bE && bS < aE) { out.add(a.id); out.add(b.id) }
+      }
+    }
+    return out
+  }
 
   function handleDrop(e: React.DragEvent, day: Date, rowId: string | null) {
     e.preventDefault()
@@ -681,21 +805,29 @@ function PlantafelView({
     if (delta !== 0 || newTeam) onReschedule(proj.id, delta, undefined, newTeam)
   }
 
-  function renderChip(p: CalendarEntry, dayISO: string, rowId: string | null) {
+  function renderChip(p: CalendarEntry, dayISO: string, rowId: string | null, conflict: boolean) {
     const timeLabel = fmtTimeRange(p)
     const extra = pillExtraLines(p, staff, fields)
     const monteurs = projectMonteurNames(p, staff)
+    const symbol = kindSymbol(p)
     return (
       <div
         key={p.id}
-        className="project-cal-board-chip"
+        className={`project-cal-board-chip${conflict ? ' conflict' : ''}`}
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '')}
         onClick={() => onSelect(p)}
         style={{ background: pillBg(p) }}
-        title={[p.name, timeLabel, monteurs, ...extra].filter(Boolean).join(' · ')}
+        title={[
+          p.name, timeLabel, monteurs, ...extra,
+          conflict ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Monteurs' : '',
+        ].filter(Boolean).join(' · ')}
       >
-        <span className="project-cal-board-chip-time">{timeLabel || 'ganztägig'}</span>
+        <span className="project-cal-board-chip-time">
+          {symbol && <span className="project-cal-kind-symbol">{symbol}</span>}
+          {timeLabel || 'ganztägig'}
+          {conflict && <span className="project-cal-board-chip-warn">⚠</span>}
+        </span>
         <span className="project-cal-board-chip-name">
           {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
           {p.name}
@@ -712,19 +844,42 @@ function PlantafelView({
           const dayISO = toDateStr(d)
           const cellKey = `${dayISO}|${rowId ?? ''}`
           const entries = cellEntries(rowId, d)
+          const conflicts = rowId !== null ? conflictIds(entries) : new Set<string>()
           return (
             <div
               key={dayISO}
               className={
                 `project-cal-board-cell${isToday(d) ? ' today' : ''}` +
                 `${holidays.has(dayISO) ? ' holiday' : ''}` +
-                `${hoverCell === cellKey ? ' project-cal-drop-hover' : ''}`
+                `${hoverCell === cellKey ? ' project-cal-drop-hover' : ''}` +
+                `${onCreateCell ? ' creatable' : ''}`
               }
               onDragOver={e => { e.preventDefault(); setHoverCell(cellKey) }}
               onDragLeave={() => setHoverCell(prev => prev === cellKey ? null : prev)}
               onDrop={e => handleDrop(e, d, rowId)}
+              onClick={e => {
+                // Nur Klicks auf die freie Zellfläche — Chips öffnen ihr Panel selbst.
+                if (onCreateCell && e.target === e.currentTarget) onCreateCell(dayISO, rowId)
+              }}
+              title={onCreateCell ? 'Klicken, um hier einen Einsatz zu planen' : undefined}
             >
-              {entries.map(p => renderChip(p, dayISO, rowId))}
+              {entries.map((p, i) => {
+                const next = entries[i + 1]
+                const km = showDistances && rowId !== null && next ? distBetween(p, next) : null
+                return (
+                  <Fragment key={p.id}>
+                    {renderChip(p, dayISO, rowId, conflicts.has(p.id))}
+                    {km !== null && (
+                      <div
+                        className="project-cal-board-dist"
+                        title={`Fahrstrecke ${p.object_address} → ${next.object_address}`}
+                      >
+                        ↓ {km.toLocaleString('de-CH', { maximumFractionDigits: 1 })} km
+                      </div>
+                    )}
+                  </Fragment>
+                )
+              })}
             </div>
           )
         })}
@@ -807,7 +962,7 @@ function AgendaView({
                   onClick={() => onSelect(p)}
                 >
                   <span className="project-cal-agenda-event-time">{fmtTimeRange(p) || 'Ganztägig'}</span>
-                  <strong>{p.termin_badge ? `${p.termin_badge} · ` : ''}{p.name}</strong>
+                  <strong>{kindSymbol(p) ? `${kindSymbol(p)} ` : ''}{p.termin_badge ? `${p.termin_badge} · ` : ''}{p.name}</strong>
                   {monteurs && <span className="project-cal-agenda-event-sub">{monteurs}</span>}
                   {extra.map((line, j) => <span key={j} className="project-cal-agenda-event-sub">{line}</span>)}
                 </div>
@@ -1074,7 +1229,11 @@ export default function ProjectScheduleCalendar({
           currentDate={currentDate}
           onSelect={onSelect}
           onReschedule={(id, d, t, m) => { void onReschedule(id, d, t, m) }}
+          onCreateCell={onCreateSlot
+            ? (dayISO, monteurId) => onCreateSlot(dayISO, '08:00', '09:00', monteurId)
+            : undefined}
           holidays={holidays}
+          showDistances={schedulingConfig?.show_distances !== false}
         />
       ) : view === 'month' ? (
         <MonthView

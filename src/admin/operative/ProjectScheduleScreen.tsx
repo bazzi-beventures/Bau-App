@@ -190,6 +190,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           fields: { ...sched.defaults.fields, ...(sched.config.fields || {}) },
           colors: { ...sched.defaults.colors, ...(sched.config.colors || {}) },
           views: { ...(sched.defaults.views || {}), ...(sched.config.views || {}) },
+          show_distances: sched.config.show_distances ?? sched.defaults.show_distances ?? true,
           grey_after: sched.config.grey_after ?? sched.defaults.grey_after ?? '',
           grey_until: sched.config.grey_until ?? sched.defaults.grey_until ?? '',
         })
@@ -493,6 +494,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         termin_badge: p.kind === 'project' && a.kind !== 'montage'
           ? (a.kind === 'sonstiges' && a.label ? a.label : APPOINTMENT_KIND_LABELS[a.kind])
           : undefined,
+        termin_kind: p.kind === 'project' ? a.kind : undefined,
       })
     }
     return entries

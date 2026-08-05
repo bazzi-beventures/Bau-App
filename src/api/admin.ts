@@ -603,6 +603,8 @@ export interface SchedulingConfig {
   colors: Record<string, string>
   // Sichtbare Kalender-Ansichten; fehlender Key = Ansicht an (Default).
   views?: Record<string, boolean>
+  // Fahrdistanzen zwischen Einsätzen in der Plantafel anzeigen (Default an).
+  show_distances?: boolean
   // Nicht-Arbeitszeit-Fenster im Wochen-Zeitraster (Werktage Mo–Fr, rein visuell).
   // grey_after = Fenster-Start 'HH:MM' ('' = aus), grey_until = Fenster-Ende 'HH:MM'
   // ('' = bis Rasterende/Feierabend). Blockiert das Planen nicht.
@@ -626,6 +628,24 @@ export async function updateSchedulingConfig(
     method: 'PATCH',
     body: JSON.stringify({ config }),
   }) as Promise<{ config: SchedulingConfig }>
+}
+
+// Fahrdistanzen (km) zwischen Objektadressen für die Plantafel — cache-first,
+// fehlende Paare via Google (serverseitig gedeckelt); nicht auflösbare Paare
+// fehlen in der Antwort. Antwort-Paare sind normalisiert (getrimmt, a <= b).
+export interface ScheduleDistance {
+  a: string
+  b: string
+  km: number
+}
+
+export async function resolveScheduleDistances(
+  pairs: [string, string][],
+): Promise<{ distances: ScheduleDistance[] }> {
+  return apiFetch('/pwa/admin/schedule/distances', {
+    method: 'POST',
+    body: JSON.stringify({ pairs }),
+  }) as Promise<{ distances: ScheduleDistance[] }>
 }
 
 // ─── Tenant Feature-Flags (Workflows) ───────────────────────

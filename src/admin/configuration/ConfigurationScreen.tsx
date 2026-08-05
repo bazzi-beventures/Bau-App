@@ -1107,6 +1107,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
       fields: { ...def.fields, ...(cfg.fields || {}) },
       colors: { ...def.colors, ...(cfg.colors || {}) },
       views: { ...(def.views || {}), ...(cfg.views || {}) },
+      show_distances: cfg.show_distances ?? def.show_distances ?? true,
       grey_after: cfg.grey_after ?? def.grey_after ?? '',
       grey_until: cfg.grey_until ?? def.grey_until ?? '',
     }
@@ -1209,6 +1210,15 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
           Mindestens eine Ansicht muss aktiviert sein.
         </div>
       )}
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginBottom: 24 }}>
+        <input
+          type="checkbox"
+          checked={config.show_distances !== false}
+          onChange={e => setConfig(prev => prev && { ...prev, show_distances: e.target.checked })}
+        />
+        Fahrdistanzen zwischen Einsätzen in der Plantafel anzeigen
+      </label>
 
       <div style={{ fontWeight: 600, marginBottom: 10 }}>Zusätzliche Felder auf der Kachel</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
