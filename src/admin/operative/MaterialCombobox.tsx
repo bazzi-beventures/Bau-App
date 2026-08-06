@@ -32,6 +32,12 @@ interface Props {
 
 const MAX_VISIBLE = 80
 
+// Mindestbreite des Dropdowns (Desktop). Die Beschriftung ist «Art.-Nr. — Name
+// (Preis/Einheit)» und damit deutlich breiter als das Eingabefeld in einer engen
+// Formularspalte — ohne diese Untergrenze bricht die Liste schon nach wenigen
+// Zeichen ab («65 — Getriebehalter (C…»).
+const MIN_MENU_WIDTH = 420
+
 function labelOf(m: MaterialOption): string {
   return `${m.art_nr} — ${m.name} (${fmtCHF(m.calc_vk ?? m.unit_price)}/${m.unit})`
 }
@@ -79,7 +85,13 @@ export function MaterialCombobox({ materials, supplierMap, supplierFilter, categ
   function reposition() {
     if (inputRef.current) {
       const r = inputRef.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 4, left: r.left, width: r.width })
+      // Breite: so breit wie das Feld, mindestens MIN_MENU_WIDTH, höchstens das
+      // Fenster. Ragt das breitere Menü rechts hinaus, rückt es nach links —
+      // sonst landen die Preise ausserhalb des sichtbaren Bereichs.
+      const limit = Math.max(window.innerWidth - 16, 160)
+      const width = Math.min(Math.max(r.width, MIN_MENU_WIDTH), limit)
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8))
+      setPos({ top: r.bottom + 4, left, width })
     }
   }
 

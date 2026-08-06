@@ -81,6 +81,39 @@ interface FixedMaterialRow {
   fromQuoteId?: number
 }
 
+// ── Preisanzeige (reine Funktionen, unit-getestet) ──────────────────────────
+// VK je Einheit wie in der Combobox-Beschriftung: der kalkulierte VK (Stammpreis +
+// Aufschlag der Artikelgruppe), sonst der Stammpreis. Nur eine ANZEIGE — verrechnet
+// wird beim Rechnungslauf mit dem dann gültigen Katalogpreis (material_usage_vk).
+export function materialUnitPrice(m: MaterialOption): number {
+  return m.calc_vk ?? m.unit_price
+}
+
+// Zeilensumme einer Katalog-Materialzeile. Null, solange kein Artikel gewählt ist
+// oder die Menge nicht als Zahl > 0 lesbar ist (dann zeigt die Zeile nur den VK).
+export function materialLineTotal(m: MaterialOption | null, amount: string): number | null {
+  if (!m) return null
+  const qty = parseNum(amount)
+  if (!(qty > 0)) return null
+  return qty * materialUnitPrice(m)
+}
+
+// Zwischensumme über alle vollständigen Zeilen (Artikel + Menge > 0).
+export function materialRowsTotal(
+  rows: { artNr: string; amount: string }[],
+  byArtNr: Map<string, MaterialOption>,
+): number {
+  return rows.reduce((sum, r) => sum + (materialLineTotal(byArtNr.get(r.artNr) ?? null, r.amount) ?? 0), 0)
+}
+
+// Zwischensumme der Fixpreis-Positionen (Menge × Preis/Einheit).
+export function fixedRowsTotal(rows: { amount: string; unitPrice: string }[]): number {
+  return rows.reduce((sum, r) => {
+    const qty = parseNum(r.amount)
+    return qty > 0 ? sum + qty * parseNum(r.unitPrice) : sum
+  }, 0)
+}
+
 // Standard-Offerte für den Hinweis: die akzeptierte (bei mehreren die neueste),
 // sonst die insgesamt neueste. Reihenfolge nach created_at.
 function pickDefaultQuote(quotes: ProjectQuote[]): ProjectQuote | null {
@@ -154,6 +187,18 @@ export function ReportCreateForm({
     () => quotes.find(q => q.id === selectedQuoteId) ?? null,
     [quotes, selectedQuoteId],
   )
+
+  // Artikel-Lookup für die Preisanzeige je Materialzeile (der Katalog kann ~4'500
+  // Zeilen haben — pro Zeile ein find() wäre O(n·m) bei jedem Tastendruck).
+  const materialByArtNr = useMemo(
+    () => new Map(materials.map(m => [m.art_nr, m])),
+    [materials],
+  )
+  const materialSubtotal = useMemo(
+    () => materialRowsTotal(materialRows, materialByArtNr),
+    [materialRows, materialByArtNr],
+  )
+  const fixedSubtotal = useMemo(() => fixedRowsTotal(fixedRows), [fixedRows])
 
   // Angenommene Offerten in Vereinigungs-Reihenfolge (variant_rank, dann id) — wie
   // merge_accepted_quotes im Backend, damit Sammel-Import und Monteur-Chat-Rapport
@@ -594,10 +639,12 @@ export function ReportCreateForm({
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Mitarbeiter &amp; Stunden</legend>
         <InfoHint text="Baustelle und Werkstatt werden mit dem Stundensatz der jeweiligen Stundenart verrechnet (Personal → Stundensätze). Hat jemand am selben Tag beides gemacht, erfasse zwei Zeilen für ihn — eine je Stundenart." />
         {rows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          // `quote-row`: umbricht am Desktop statt die Felder zu stauchen und wird
+          // auf dem Handy zum 2-Spalten-Raster (siehe admin.css/mobile.css).
+          <div key={i} className="quote-row">
             <select
               className="admin-form-select"
-              style={{ flex: 2 }}
+              style={{ flex: '2 1 200px', minWidth: 0 }}
               value={row.staffId}
               aria-label={`Mitarbeiter ${i + 1}`}
               onChange={e => updateRow(i, { staffId: e.target.value })}
@@ -609,7 +656,7 @@ export function ReportCreateForm({
             </select>
             <input
               className="admin-form-input"
-              style={{ flex: 1 }}
+              style={{ flex: '1 1 90px', minWidth: 0 }}
               inputMode="decimal"
               placeholder="Stunden"
               aria-label={`Stunden ${i + 1}`}
@@ -618,7 +665,7 @@ export function ReportCreateForm({
             />
             <select
               className="admin-form-select"
-              style={{ flex: 1 }}
+              style={{ flex: '1 1 130px', minWidth: 0 }}
               aria-label={`Stundenart ${i + 1}`}
               value={row.hourType}
               onChange={e => updateRow(i, { hourType: e.target.value as StaffRow['hourType'] })}
@@ -648,55 +695,83 @@ export function ReportCreateForm({
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>
           Material
-          <InfoHint text="Optional. Katalogartikel + Menge — der Verkaufspreis wird bei der Verrechnung aus den Stammdaten bestimmt. Zeilen ohne Artikel oder ohne Menge werden ignoriert." />
+          <InfoHint text="Optional. Katalogartikel + Menge — der angezeigte Preis ist der aktuelle Verkaufspreis aus den Stammdaten (Richtwert). Verrechnet wird beim Erstellen der Rechnung mit dem dann gültigen Katalogpreis. Zeilen ohne Artikel oder ohne Menge werden ignoriert." />
         </legend>
         {materialRows.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Kein Material erfasst.</div>
         )}
-        {materialRows.map((row, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <MaterialCombobox
-              materials={materials}
-              supplierMap={{}}
-              supplierFilter=""
-              categoryFilter=""
-              value={row.artNr}
-              onChange={artNr => updateMaterialRow(i, { artNr })}
-            />
-            <input
-              className="admin-form-input"
-              style={{ flex: 1 }}
-              inputMode="decimal"
-              placeholder="Menge"
-              aria-label={`Materialmenge ${i + 1}`}
-              value={row.amount}
-              onChange={e => updateMaterialRow(i, { amount: e.target.value })}
-            />
-            {locationEnabled && (
+        {materialRows.map((row, i) => {
+          const mat = materialByArtNr.get(row.artNr) ?? null
+          const lineTotal = materialLineTotal(mat, row.amount)
+          return (
+            <div key={i} className="quote-row">
+              <MaterialCombobox
+                materials={materials}
+                supplierMap={{}}
+                supplierFilter=""
+                categoryFilter=""
+                value={row.artNr}
+                onChange={artNr => updateMaterialRow(i, { artNr })}
+                className="quote-main"
+              />
               <input
                 className="admin-form-input"
-                style={{ flex: 1 }}
-                placeholder="Einbauort"
-                maxLength={60}
-                aria-label={`Einbauort ${i + 1}`}
-                value={row.location}
-                onChange={e => updateMaterialRow(i, { location: e.target.value })}
+                style={{ flex: '1 1 90px', minWidth: 0 }}
+                inputMode="decimal"
+                placeholder="Menge"
+                aria-label={`Materialmenge ${i + 1}`}
+                value={row.amount}
+                onChange={e => updateMaterialRow(i, { amount: e.target.value })}
               />
-            )}
-            <button
-              type="button"
-              className="admin-btn admin-btn-danger admin-btn-sm"
-              onClick={() => removeMaterialRow(i)}
-              title="Entfernen"
-              aria-label="Materialzeile entfernen"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addMaterialRow}>
-          + Materialposition
-        </button>
+              {locationEnabled && (
+                <input
+                  className="admin-form-input"
+                  style={{ flex: '1 1 140px', minWidth: 0 }}
+                  placeholder="Einbauort"
+                  maxLength={60}
+                  aria-label={`Einbauort ${i + 1}`}
+                  value={row.location}
+                  onChange={e => updateMaterialRow(i, { location: e.target.value })}
+                />
+              )}
+              {/* Preis erst ab gewähltem Artikel: VK je Einheit, und sobald eine
+                  Menge dasteht zusätzlich die Zeilensumme. */}
+              {mat && (
+                <span
+                  style={{ flex: '1 1 150px', minWidth: 0, fontSize: 13, textAlign: 'right', color: 'var(--muted)' }}
+                  aria-label={`Preis Materialzeile ${i + 1}`}
+                >
+                  {fmtCHF(materialUnitPrice(mat))}/{mat.unit}
+                  {lineTotal !== null && (
+                    <>
+                      {' '}
+                      <strong style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>= {fmtCHF(lineTotal)}</strong>
+                    </>
+                  )}
+                </span>
+              )}
+              <button
+                type="button"
+                className="admin-btn admin-btn-danger admin-btn-sm"
+                onClick={() => removeMaterialRow(i)}
+                title="Entfernen"
+                aria-label="Materialzeile entfernen"
+              >
+                ✕
+              </button>
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={addMaterialRow}>
+            + Materialposition
+          </button>
+          {materialSubtotal > 0 && (
+            <span style={{ fontSize: 13 }}>
+              Zwischensumme Material: <strong>{fmtCHF(materialSubtotal)}</strong>
+            </span>
+          )}
+        </div>
       </fieldset>
 
       {/* Material aus Offerte / freie Fixpreis-Positionen (optional) */}
@@ -749,7 +824,7 @@ export function ReportCreateForm({
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>Keine Fixpreis-Position erfasst.</div>
         ) : (
           fixedRows.map((row, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div key={i} className="quote-row">
               {row.fromQuoteId != null && (
                 <span
                   className="admin-badge admin-badge-open"
@@ -760,8 +835,8 @@ export function ReportCreateForm({
                 </span>
               )}
               <input
-                className="admin-form-input"
-                style={{ flex: 3, minWidth: 160 }}
+                className="admin-form-input quote-main"
+                style={{ flex: '3 1 200px', minWidth: 0 }}
                 placeholder="Bezeichnung"
                 aria-label={`Fixposition Bezeichnung ${i + 1}`}
                 value={row.itemName}
@@ -769,7 +844,7 @@ export function ReportCreateForm({
               />
               <input
                 className="admin-form-input"
-                style={{ flex: 1, minWidth: 70 }}
+                style={{ flex: '1 1 90px', minWidth: 0 }}
                 inputMode="decimal"
                 placeholder="Menge"
                 aria-label={`Fixposition Menge ${i + 1}`}
@@ -778,7 +853,7 @@ export function ReportCreateForm({
               />
               <input
                 className="admin-form-input"
-                style={{ flex: 1, minWidth: 60 }}
+                style={{ flex: '1 1 80px', minWidth: 0 }}
                 placeholder="Einheit"
                 aria-label={`Fixposition Einheit ${i + 1}`}
                 value={row.unit}
@@ -786,13 +861,22 @@ export function ReportCreateForm({
               />
               <input
                 className="admin-form-input"
-                style={{ flex: 1, minWidth: 110 }}
+                style={{ flex: '1 1 120px', minWidth: 0 }}
                 inputMode="decimal"
                 placeholder="Preis/Einheit"
                 aria-label={`Fixposition Preis ${i + 1}`}
                 value={row.unitPrice}
                 onChange={e => updateFixedRow(i, { unitPrice: e.target.value })}
               />
+              {/* Zeilensumme (Menge × Preis) — erst sobald eine Menge erfasst ist. */}
+              {parseNum(row.amount) > 0 && (
+                <span
+                  style={{ flex: '1 1 110px', minWidth: 0, fontSize: 13, textAlign: 'right', whiteSpace: 'nowrap' }}
+                  aria-label={`Fixposition Summe ${i + 1}`}
+                >
+                  = <strong>{fmtCHF(parseNum(row.amount) * parseNum(row.unitPrice))}</strong>
+                </span>
+              )}
               <button
                 type="button"
                 className="admin-btn admin-btn-danger admin-btn-sm"
@@ -805,6 +889,11 @@ export function ReportCreateForm({
             </div>
           ))
         )}
+        {fixedSubtotal > 0 && (
+          <div style={{ fontSize: 13, textAlign: 'right', marginTop: 8 }}>
+            Zwischensumme Fixpositionen: <strong>{fmtCHF(fixedSubtotal)}</strong>
+          </div>
+        )}
       </fieldset>
 
       {/* Klein-/Schmiermaterial-Pauschale (optional, eine Zeile) */}
@@ -813,10 +902,10 @@ export function ReportCreateForm({
           Klein-/Schmiermaterial (Pauschale)
           <InfoHint text="Optional. Eine Pauschalzeile für nicht einzeln erfasstes Klein- und Schmiermaterial. Wird nur verrechnet, wenn ein Betrag erfasst ist." />
         </legend>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="quote-row" style={{ marginBottom: 0 }}>
           <input
-            className="admin-form-input"
-            style={{ flex: 2, minWidth: 160 }}
+            className="admin-form-input quote-main"
+            style={{ flex: '2 1 200px', minWidth: 0 }}
             placeholder="Bezeichnung"
             aria-label="Kleinmaterial Bezeichnung"
             value={klein.itemName}
@@ -824,7 +913,7 @@ export function ReportCreateForm({
           />
           <input
             className="admin-form-input"
-            style={{ flex: 1, minWidth: 70 }}
+            style={{ flex: '1 1 90px', minWidth: 0 }}
             inputMode="numeric"
             placeholder="Menge"
             aria-label="Kleinmaterial Menge"
@@ -833,13 +922,22 @@ export function ReportCreateForm({
           />
           <input
             className="admin-form-input"
-            style={{ flex: 1, minWidth: 110 }}
+            style={{ flex: '1 1 130px', minWidth: 0 }}
             inputMode="decimal"
             placeholder="Betrag CHF/Einheit"
             aria-label="Kleinmaterial Betrag"
             value={klein.amount}
             onChange={e => setKlein(k => ({ ...k, amount: e.target.value }))}
           />
+          {/* Verrechnet wird Menge × Betrag — bei Menge > 1 sonst leicht zu übersehen. */}
+          {parseNum(klein.count) > 0 && parseNum(klein.amount) > 0 && (
+            <span
+              style={{ flex: '1 1 110px', minWidth: 0, fontSize: 13, textAlign: 'right', whiteSpace: 'nowrap' }}
+              aria-label="Kleinmaterial Summe"
+            >
+              = <strong>{fmtCHF(parseNum(klein.count) * parseNum(klein.amount))}</strong>
+            </span>
+          )}
         </div>
       </fieldset>
 

@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ReportCreateForm } from './ReportCreateForm'
+import {
+  ReportCreateForm, materialUnitPrice, materialLineTotal, materialRowsTotal, fixedRowsTotal,
+} from './ReportCreateForm'
 import type { ReportFormProject, ReportFormStaff } from './ReportCreateForm'
 import type { ProjectQuote } from './projectDetail/tabs'
 import { apiFetch } from '../../api/client'
@@ -95,7 +97,105 @@ beforeEach(() => {
   vi.mocked(getMe).mockResolvedValue({ feature_flags: {} } as never)
 })
 
+// Katalog für die Preisanzeige. `calc_vk` (kalkulierter VK) schlägt `unit_price`
+// (Stammpreis) — genau wie in der Beschriftung der echten Combobox.
+const CATALOG = [
+  { art_nr: 'STG123', name: 'Getriebehalter', unit_price: 8, calc_vk: 12.5, unit: 'Stk' },
+  { art_nr: 'STG999', name: 'Getriebelager', unit_price: 40, calc_vk: null, unit: 'Stk' },
+]
+
+// GET /pwa/admin/materials liefert den Katalog, alles andere die Standard-Antwort.
+function withCatalog() {
+  mockFetch.mockImplementation(async (path: string) =>
+    path.startsWith('/pwa/admin/materials') ? CATALOG : { report_id: 42 },
+  )
+}
+
+describe('Preis-Helfer (reine Funktionen)', () => {
+  it('nimmt den kalkulierten VK, sonst den Stammpreis', () => {
+    expect(materialUnitPrice(CATALOG[0])).toBe(12.5)
+    expect(materialUnitPrice(CATALOG[1])).toBe(40)
+  })
+
+  it('rechnet die Zeilensumme erst mit Artikel UND Menge > 0', () => {
+    expect(materialLineTotal(CATALOG[0], '4')).toBe(50)
+    expect(materialLineTotal(CATALOG[0], '2,5')).toBe(31.25) // Schweizer Komma
+    expect(materialLineTotal(CATALOG[0], '')).toBeNull()
+    expect(materialLineTotal(CATALOG[0], '0')).toBeNull()
+    expect(materialLineTotal(null, '4')).toBeNull()
+  })
+
+  it('summiert nur vollständige Materialzeilen', () => {
+    const byArtNr = new Map(CATALOG.map(m => [m.art_nr, m]))
+    const total = materialRowsTotal(
+      [
+        { artNr: 'STG123', amount: '2' },   // 25.00
+        { artNr: 'STG999', amount: '1' },   // 40.00
+        { artNr: 'STG123', amount: '' },    // unvollständig → 0
+        { artNr: '', amount: '5' },         // kein Artikel → 0
+        { artNr: 'UNBEKANNT', amount: '3' }, // nicht im Katalog → 0
+      ],
+      byArtNr,
+    )
+    expect(total).toBe(65)
+  })
+
+  it('summiert Fixpositionen als Menge × Preis', () => {
+    expect(fixedRowsTotal([
+      { amount: '2', unitPrice: '10.50' },
+      { amount: '3', unitPrice: '5' },
+      { amount: '', unitPrice: '99' },  // ohne Menge zählt die Zeile nicht
+      { amount: '4', unitPrice: '' },   // ohne Preis → 0, aber kein NaN
+    ])).toBe(36)
+  })
+})
+
 describe('ReportCreateForm', () => {
+  it('zeigt VK, Zeilensumme und Zwischensumme der Materialzeilen', async () => {
+    const user = userEvent.setup()
+    withCatalog()
+    renderForm([makeQuote()])
+
+    await user.click(screen.getByRole('button', { name: '+ Materialposition' }))
+    // Ohne Artikel gibt es nichts anzuzeigen.
+    expect(screen.queryByLabelText('Preis Materialzeile 1')).not.toBeInTheDocument()
+
+    await user.selectOptions(await screen.findByLabelText('Material'), 'STG123')
+    // Artikel gewählt, Menge noch leer → nur der VK je Einheit.
+    const price = await screen.findByLabelText('Preis Materialzeile 1')
+    expect(price).toHaveTextContent('CHF 12.50/Stk')
+    expect(price).not.toHaveTextContent('=')
+
+    await user.type(screen.getByLabelText('Materialmenge 1'), '4')
+    expect(screen.getByLabelText('Preis Materialzeile 1')).toHaveTextContent('= CHF 50.00')
+    expect(screen.getByText(/Zwischensumme Material:/)).toHaveTextContent('CHF 50.00')
+  })
+
+  it('zeigt die Zeilensumme einer Fixposition und deren Zwischensumme', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.click(screen.getByRole('button', { name: '+ Position' }))
+    await user.type(screen.getByLabelText('Fixposition Menge 1'), '3')
+    await user.type(screen.getByLabelText('Fixposition Preis 1'), '12.50')
+
+    expect(screen.getByLabelText('Fixposition Summe 1')).toHaveTextContent('= CHF 37.50')
+    expect(screen.getByText(/Zwischensumme Fixpositionen:/)).toHaveTextContent('CHF 37.50')
+  })
+
+  it('zeigt die Summe der Kleinmaterial-Pauschale (Menge × Betrag)', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    expect(screen.queryByLabelText('Kleinmaterial Summe')).not.toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText('Kleinmaterial Menge'))
+    await user.type(screen.getByLabelText('Kleinmaterial Menge'), '2')
+    await user.type(screen.getByLabelText('Kleinmaterial Betrag'), '35')
+
+    expect(screen.getByLabelText('Kleinmaterial Summe')).toHaveTextContent('= CHF 70.00')
+  })
+
   it('fügt Mitarbeiter-Zeilen hinzu und entfernt sie wieder', async () => {
     const user = userEvent.setup()
     renderForm()

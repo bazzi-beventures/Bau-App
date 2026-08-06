@@ -1731,7 +1731,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       {/* ── Dialog: Rapport manuell erfassen ─────────────────── */}
       {showReportForm && project && (
         <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 640, maxHeight: '90vh', overflow: 'auto' }}>
+          {/* Gleiche Breite wie die Offerten-Maske: die Material-/Fixpreis-Zeilen
+              haben bis zu fünf Felder pro Zeile — bei 640 px blieb je Feld so wenig
+              Platz, dass Artikelnamen und Preise abgeschnitten wurden. */}
+          <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <ReportCreateForm
               project={project}
               staff={staff}
