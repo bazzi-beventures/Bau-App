@@ -167,7 +167,7 @@ describe('ReportCreateForm', () => {
     expect(screen.getByLabelText('Arbeitsbeschrieb *')).toHaveValue('')
   })
 
-  it('lehnt doppelte Mitarbeiter ab', async () => {
+  it('lehnt denselben Mitarbeiter mit derselben Stundenart ab', async () => {
     const user = userEvent.setup()
     renderForm([makeQuote()])
 
@@ -179,7 +179,44 @@ describe('ReportCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
 
     expect(mockFetch).not.toHaveBeenCalled()
-    expect(screen.getByText('Ein Mitarbeiter ist doppelt erfasst.')).toBeInTheDocument()
+    expect(screen.getByText('Ein Mitarbeiter ist mit derselben Stundenart doppelt erfasst.')).toBeInTheDocument()
+  })
+
+  it('erlaubt denselben Mitarbeiter mit Baustelle UND Werkstatt', async () => {
+    // Der Werkstatt-Tarif ist ein anderer (staff_roles.hourly_rate_werkstatt) —
+    // die Aufteilung auf zwei Zeilen ist der Sinn der Sache, keine Dublette.
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '1.25')
+    await user.click(screen.getByRole('button', { name: '+ Zeile' }))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 2'), 's1')
+    await user.type(screen.getByLabelText('Stunden 2'), '1.25')
+    await user.selectOptions(screen.getByLabelText('Stundenart 2'), 'werkstatt')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().staff).toEqual([
+      { staff_id: 's1', hours: 1.25, hour_type: 'standard' },
+      { staff_id: 's1', hours: 1.25, hour_type: 'werkstatt' },
+    ])
+  })
+
+  it('deckelt die Tagesstunden pro Mitarbeiter über beide Stundenarten', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '20')
+    await user.click(screen.getByRole('button', { name: '+ Zeile' }))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 2'), 's1')
+    await user.type(screen.getByLabelText('Stunden 2'), '20')
+    await user.selectOptions(screen.getByLabelText('Stundenart 2'), 'werkstatt')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(screen.getByText('Ein Mitarbeiter hat insgesamt mehr als 24 Stunden an diesem Tag.')).toBeInTheDocument()
   })
 
   // ── Phase 2: Material ─────────────────────────────────────

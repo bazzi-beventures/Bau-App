@@ -314,9 +314,23 @@ export function ReportCreateForm({
         return
       }
     }
-    const ids = filled.map(r => r.staffId)
-    if (new Set(ids).size !== ids.length) {
-      setError('Ein Mitarbeiter ist doppelt erfasst.')
+    // Doppelt ist nur die Kombination Mitarbeiter + Stundenart: derselbe Mann mit
+    // 2 h Baustelle und 3 h Werkstatt ist gewollt (die beiden Tarife unterscheiden
+    // sich), zweimal dieselbe Stundenart dagegen ein Erfassungsfehler. Gleiche
+    // Regel serverseitig in validate_manual_report_payload.
+    const keys = filled.map(r => `${r.staffId}|${r.hourType}`)
+    if (new Set(keys).size !== keys.length) {
+      setError('Ein Mitarbeiter ist mit derselben Stundenart doppelt erfasst.')
+      return
+    }
+    // Tages-Deckel pro Mitarbeiter über alle Stundenarten hinweg — sonst liesse
+    // sich die 24-h-Grenze durch Aufteilen auf zwei Zeilen umgehen.
+    const totalByStaff = new Map<string, number>()
+    for (const r of filled) {
+      totalByStaff.set(r.staffId, (totalByStaff.get(r.staffId) ?? 0) + parseNum(r.hours))
+    }
+    if ([...totalByStaff.values()].some(h => h > 24)) {
+      setError('Ein Mitarbeiter hat insgesamt mehr als 24 Stunden an diesem Tag.')
       return
     }
     if (!description.trim()) {
@@ -578,6 +592,7 @@ export function ReportCreateForm({
       {/* Mitarbeiter + Stunden */}
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Mitarbeiter &amp; Stunden</legend>
+        <InfoHint text="Baustelle und Werkstatt werden mit dem Stundensatz der jeweiligen Stundenart verrechnet (Personal → Stundensätze). Hat jemand am selben Tag beides gemacht, erfasse zwei Zeilen für ihn — eine je Stundenart." />
         {rows.map((row, i) => (
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <select

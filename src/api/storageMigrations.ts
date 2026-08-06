@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 15
+export const APP_DATA_VERSION = 16
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -28,6 +28,7 @@ function isKnownKey(k: string): boolean {
   if (k.startsWith('rapport-draft:')) return true  // lokaler Rapport-Zwischenstand (pro Mitarbeiter)
   if (k === 'admin-theme') return true
   if (k === 'helpbubble-pos') return true  // gemerkte Drag-Position der Hilfe-Blase
+  if (k === 'schedule-week-zoom') return true  // Zoom-Stufe des Wochen-Zeitrasters
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true
   if (k === 'app_build_id') return true
@@ -226,7 +227,20 @@ const migration_14_to_15: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15]
+// v15 → v16: Neuer localStorage-Key `schedule-week-zoom` für die gewählte
+// Zeilenhöhe (Zoom-Stufe) des Wochen-Zeitrasters in der Einsatzplanung. Rein
+// additiv — der Key existiert nur, wenn der Zoom verstellt wurde, und wird beim
+// Lesen defensiv geparst (Default-Stufe bei fehlend/korrupt). Kein Wipe nötig.
+// No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_15_to_16: Migration = {
+  from: 15,
+  to: 16,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

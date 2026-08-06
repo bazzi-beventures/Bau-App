@@ -2540,7 +2540,41 @@ button.admin-list-item {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  /* --lane-z setzt das Lane-Layout (gestaffelte Parallel-Einsätze). */
+  z-index: var(--lane-z, 1);
+}
+
+/* Zu flach für zwei Zeilen: Uhrzeit und Name teilen sich eine Zeile. */
+.project-cal-week-event.tight {
+  padding: 2px 6px;
+  justify-content: center;
+}
+
+.project-cal-week-event-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-cal-week-event-inline .project-cal-week-event-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+/* Parallele Einsätze überlappen sich leicht (mehr Textbreite als bei exakt
+   geteilten Spalten). Die helle Kante links macht die Staffelung sichtbar,
+   beim Überfahren kommt die Kachel nach vorn. */
+.project-cal-week-event.stacked {
+  box-shadow: -1px 0 0 rgba(255, 255, 255, 0.45), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.project-cal-week-event:hover {
+  z-index: 10;
 }
 
 .project-cal-week-event.allday {
@@ -2576,6 +2610,79 @@ button.admin-list-item {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* Zoom-Regler für die Zeilenhöhe des Wochen-Zeitrasters. */
+.project-cal-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.project-cal-zoom-value {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 88px;
+  text-align: center;
+}
+
+/* Hover-Karte über einer Kalenderkachel. Liegt per Portal am <body>, damit sie
+   nicht am overflow:hidden des Kalenders abgeschnitten wird. */
+.project-cal-hovercard {
+  position: fixed;
+  z-index: 3000;
+  pointer-events: none;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  max-height: 60vh;
+  overflow: hidden;
+}
+
+.project-cal-hovercard-head {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.project-cal-hovercard-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+}
+
+/* Badge erbt auf der Karte keinen farbigen Hintergrund — dort ist es hell. */
+.project-cal-hovercard .project-cal-termin-badge {
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.project-cal-hovercard-time {
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.project-cal-hovercard-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.project-cal-hovercard-label {
+  flex: none;
+  width: 78px;
+  color: var(--text-muted);
 }
 
 /* Termin-Typ-Badge auf Kalenderblöcken (z.B. "Aufmass") — nur bei

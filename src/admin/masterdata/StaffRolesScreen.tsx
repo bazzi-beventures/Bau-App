@@ -31,6 +31,9 @@ function StaffRatesPanel() {
   const [loading, setLoading] = useState(true)
   // Pro Funktion der aktuell im Eingabefeld stehende Satz (als String, damit man frei tippen kann)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // Dasselbe für den optionalen Werkstatt-Satz. Leer = kein eigener Tarif → es gilt
+  // der Baustellensatz (der Server speichert dann NULL).
+  const [werkstattDrafts, setWerkstattDrafts] = useState<Record<string, string>>({})
   const [savingName, setSavingName] = useState<string | null>(null)
   const [deletingName, setDeletingName] = useState<string | null>(null)
   const [savingOrder, setSavingOrder] = useState(false)
@@ -39,6 +42,7 @@ function StaffRatesPanel() {
 
   const [newName, setNewName] = useState('')
   const [newRate, setNewRate] = useState('')
+  const [newWerkstattRate, setNewWerkstattRate] = useState('')
 
   async function load() {
     setLoading(true)
@@ -46,6 +50,9 @@ function StaffRatesPanel() {
       const data = await getStaffRoles()
       setRoles(data)
       setDrafts(Object.fromEntries(data.map(r => [r.name, String(r.hourly_rate ?? '')])))
+      setWerkstattDrafts(Object.fromEntries(
+        data.map(r => [r.name, r.hourly_rate_werkstatt == null ? '' : String(r.hourly_rate_werkstatt)]),
+      ))
     } finally {
       setLoading(false)
     }
@@ -63,16 +70,29 @@ function StaffRatesPanel() {
     return Number.isFinite(n) && n >= 0 ? n : null
   }
 
+  // Leeres Feld = bewusst kein eigener Werkstatt-Satz (null). Alles andere muss
+  // eine Zahl ≥ 0 sein; `undefined` signalisiert hier «ungültig».
+  function parseOptionalRate(v: string): number | null | undefined {
+    if (v.trim() === '') return null
+    const n = parseRate(v)
+    return n === null ? undefined : n
+  }
+
   async function saveRole(name: string) {
     const rate = parseRate(drafts[name] ?? '')
     if (rate === null) {
       setError(`Ungültiger Satz für "${name}" — bitte eine Zahl ≥ 0 eingeben.`)
       return
     }
+    const werkstattRate = parseOptionalRate(werkstattDrafts[name] ?? '')
+    if (werkstattRate === undefined) {
+      setError(`Ungültiger Werkstatt-Satz für "${name}" — Zahl ≥ 0 oder leer lassen.`)
+      return
+    }
     setError('')
     setSavingName(name)
     try {
-      await upsertStaffRole(name, rate)
+      await upsertStaffRole(name, rate, werkstattRate)
       showToast(`Stundensatz für "${name}" gespeichert`)
       await load()
     } catch (err) {
@@ -86,18 +106,23 @@ function StaffRatesPanel() {
     e.preventDefault()
     const name = newName.trim()
     const rate = parseRate(newRate)
+    const werkstattRate = parseOptionalRate(newWerkstattRate)
     if (!name) { setError('Bitte einen Funktionsnamen eingeben.'); return }
     if (rate === null) { setError('Bitte einen gültigen Stundensatz eingeben.'); return }
+    if (werkstattRate === undefined) {
+      setError('Ungültiger Werkstatt-Satz — Zahl ≥ 0 oder leer lassen.'); return
+    }
     if (roles.some(r => r.name.toLowerCase() === name.toLowerCase())) {
       setError(`Funktion "${name}" existiert bereits.`); return
     }
     setError('')
     setSavingName('__new__')
     try {
-      await upsertStaffRole(name, rate)
+      await upsertStaffRole(name, rate, werkstattRate)
       showToast(`Funktion "${name}" angelegt`)
       setNewName('')
       setNewRate('')
+      setNewWerkstattRate('')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Anlegen')
@@ -152,7 +177,11 @@ function StaffRatesPanel() {
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Personal</div>
-          <div className="admin-page-subtitle">Stundensätze pro Funktion — werden in Offerten als Lohnpositionen verwendet</div>
+          <div className="admin-page-subtitle">
+            Stundensätze pro Funktion — werden in Offerten als Lohnpositionen und bei der
+            Verrechnung der Rapportstunden verwendet. Der Werkstatt-Satz gilt für Stunden,
+            die im Rapport als «Werkstatt» erfasst sind; bleibt er leer, zählt der Baustellensatz.
+          </div>
         </div>
       </div>
 
@@ -167,15 +196,18 @@ function StaffRatesPanel() {
               <tr>
                 <th style={{ width: 64 }}>Rang</th>
                 <th>Funktion</th>
-                <th style={{ width: 200 }}>Stundensatz (CHF/h)</th>
+                <th style={{ width: 180 }}>Baustelle (CHF/h)</th>
+                <th style={{ width: 180 }}>Werkstatt (CHF/h)</th>
                 <th style={{ width: 160 }}></th>
               </tr>
             </thead>
             <tbody>
               {roles.length === 0 ? (
-                <tr><td colSpan={4} className="admin-table-empty">Noch keine Funktionen vorhanden.</td></tr>
+                <tr><td colSpan={5} className="admin-table-empty">Noch keine Funktionen vorhanden.</td></tr>
               ) : roles.map((r, i) => {
+                const savedWerkstatt = r.hourly_rate_werkstatt == null ? '' : String(r.hourly_rate_werkstatt)
                 const changed = (drafts[r.name] ?? '') !== String(r.hourly_rate ?? '')
+                  || (werkstattDrafts[r.name] ?? '') !== savedWerkstatt
                 return (
                   <tr key={r.name}>
                     <td>
@@ -205,6 +237,18 @@ function StaffRatesPanel() {
                         onChange={e => setDrafts(prev => ({ ...prev, [r.name]: e.target.value }))}
                         placeholder="z.B. 121.00"
                         inputMode="decimal"
+                        aria-label={`Baustellen-Stundensatz ${r.name}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="admin-form-input"
+                        style={{ maxWidth: 160 }}
+                        value={werkstattDrafts[r.name] ?? ''}
+                        onChange={e => setWerkstattDrafts(prev => ({ ...prev, [r.name]: e.target.value }))}
+                        placeholder="wie Baustelle"
+                        inputMode="decimal"
+                        aria-label={`Werkstatt-Stundensatz ${r.name}`}
                       />
                     </td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -244,13 +288,24 @@ function StaffRatesPanel() {
           />
         </div>
         <div className="admin-form-group" style={{ margin: 0 }}>
-          <label className="admin-form-label">Stundensatz (CHF/h)</label>
+          <label className="admin-form-label">Baustelle (CHF/h)</label>
           <input
             className="admin-form-input"
             style={{ maxWidth: 160 }}
             value={newRate}
             onChange={e => setNewRate(e.target.value)}
             placeholder="z.B. 110.00"
+            inputMode="decimal"
+          />
+        </div>
+        <div className="admin-form-group" style={{ margin: 0 }}>
+          <label className="admin-form-label">Werkstatt (CHF/h)</label>
+          <input
+            className="admin-form-input"
+            style={{ maxWidth: 160 }}
+            value={newWerkstattRate}
+            onChange={e => setNewWerkstattRate(e.target.value)}
+            placeholder="wie Baustelle"
             inputMode="decimal"
           />
         </div>

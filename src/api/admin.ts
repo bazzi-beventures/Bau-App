@@ -136,6 +136,8 @@ export interface StaffMember {
 export interface StaffRole {
   name: string
   hourly_rate: number
+  // Eigener Satz für Werkstattstunden. null = kein eigener Tarif, es gilt hourly_rate.
+  hourly_rate_werkstatt?: number | null
   sort_order?: number | null
 }
 
@@ -147,10 +149,14 @@ export async function getStaffRoles(): Promise<StaffRole[]> {
   return apiFetch('/pwa/admin/staff-roles') as Promise<StaffRole[]>
 }
 
-export async function upsertStaffRole(name: string, hourly_rate: number): Promise<{ status: string; message: string }> {
+// hourly_rate_werkstatt: null löscht einen bestehenden Werkstatt-Tarif (dann gilt
+// wieder der Baustellensatz) — das Feld wird beim Upsert immer geschrieben.
+export async function upsertStaffRole(
+  name: string, hourly_rate: number, hourly_rate_werkstatt: number | null = null,
+): Promise<{ status: string; message: string }> {
   return apiFetch('/pwa/admin/staff-roles', {
     method: 'PUT',
-    body: JSON.stringify({ name, hourly_rate }),
+    body: JSON.stringify({ name, hourly_rate, hourly_rate_werkstatt }),
   }) as Promise<{ status: string; message: string }>
 }
 

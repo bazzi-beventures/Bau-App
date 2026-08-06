@@ -1,4 +1,5 @@
 ﻿import { Fragment, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Project, projectCustomerName } from './ProjectsScreen'
 import {
   SCHEDULING_VIEWS, resolveScheduleDistances,
@@ -9,6 +10,11 @@ import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
   parseDateStr, diffDays, hhmmToMin, minToHHMM,
 } from '../utils/calendarHelpers'
+import {
+  computeWeekHours, computeLanes, laneStyle, tileLayout, timeOffsetPx, timedBlockHeightPx,
+  yToSnappedTime, WEEK_SNAP_MIN, WEEK_ZOOM_LEVELS, WEEK_ZOOM_LABELS, WEEK_ZOOM_DEFAULT,
+  type TileLayout,
+} from '../utils/weekGrid'
 
 // Drag-Transfer payload format: "<projectId>|<grabDayISO>|<grabOffsetY>|<sourceRowId>"
 // grabOffsetY = Y-Position des Mauszeigers innerhalb der gegriffenen Pille (px),
@@ -144,6 +150,95 @@ function projectMonteurNames(p: Project, staff: StaffLite[]): string {
   return p.monteur_ids.map(id => byId.get(id) || '').filter(Boolean).join(', ')
 }
 
+// ─── Hover-Karte ──────────────────────────────────────────────────────────────
+// Eine Kalenderkachel ist zwangsläufig klein — ein 30-Minuten-Termin hat nicht
+// genug Höhe für Adresse, Kunde und Bemerkung. Statt den Text abzuschneiden
+// zeigt eine Karte beim Überfahren die vollen Angaben. Ersetzt den nativen
+// title-Tooltip, der erst nach ~1 s erscheint und keine Zeilen kennt.
+
+const HOVER_DELAY_MS = 220
+const HOVER_CARD_W = 260
+// Grobe Annahme für die Kartenhöhe, damit sie am unteren Rand nicht aus dem
+// Bild rutscht. Die exakte Höhe steht erst nach dem Rendern fest; CSS deckelt
+// zusätzlich per max-height.
+const HOVER_CARD_MAX_H = 230
+
+interface HoverState {
+  entry: CalendarEntry
+  rect: DOMRect
+}
+
+// Hover-Zustand + fertige Event-Handler für eine Kachel. Die Verzögerung
+// verhindert, dass beim Überstreichen mehrerer Kacheln Karten aufblitzen.
+function useHoverCard() {
+  const [hover, setHover] = useState<HoverState | null>(null)
+  const timerRef = useRef<number | null>(null)
+
+  function cancelTimer() {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }
+
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+  }, [])
+
+  function bind(entry: CalendarEntry) {
+    return {
+      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        cancelTimer()
+        timerRef.current = window.setTimeout(() => setHover({ entry, rect }), HOVER_DELAY_MS)
+      },
+      onMouseLeave: () => { cancelTimer(); setHover(null) },
+      // Beim Ziehen oder Klicken stört die Karte nur.
+      onMouseDown: () => { cancelTimer(); setHover(null) },
+    }
+  }
+
+  return { hover, bind }
+}
+
+function EventHoverCard({ hover, staff }: { hover: HoverState; staff: StaffLite[] }) {
+  const { entry: p, rect } = hover
+  const rows: [string, string][] = []
+  const kunde = projectCustomerName(p)
+  const pl = p.projektleiter_id ? staff.find(s => s.id === p.projektleiter_id)?.name : ''
+  const monteurs = projectMonteurNames(p, staff)
+  if (p.object_address) rows.push(['Adresse', p.object_address])
+  if (kunde) rows.push(['Kunde', kunde])
+  if (pl) rows.push(['Projektleiter', pl])
+  if (monteurs) rows.push(['Monteure', monteurs])
+  if (p.bemerkung) rows.push(['Bemerkung', p.bemerkung])
+
+  // Rechts neben der Kachel; bei zu wenig Platz nach links kippen. Vertikal an
+  // der Kachel ausgerichtet, aber im sichtbaren Bereich gehalten.
+  const flip = rect.right + 12 + HOVER_CARD_W > window.innerWidth
+  const left = flip ? Math.max(8, rect.left - 12 - HOVER_CARD_W) : rect.right + 12
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - HOVER_CARD_MAX_H))
+
+  return createPortal(
+    <div className="project-cal-hovercard" style={{ left, top, width: HOVER_CARD_W }} role="tooltip">
+      <div className="project-cal-hovercard-head">
+        <span className="project-cal-hovercard-dot" style={{ background: pillBg(p) }} />
+        {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
+        {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+        <strong>{p.name}</strong>
+      </div>
+      <div className="project-cal-hovercard-time">{fmtRange(p) || 'Ganztägig'}</div>
+      {rows.map(([label, value]) => (
+        <div key={label} className="project-cal-hovercard-row">
+          <span className="project-cal-hovercard-label">{label}</span>
+          <span>{value}</span>
+        </div>
+      ))}
+    </div>,
+    document.body,
+  )
+}
+
 // ─── Drag-Handlers ────────────────────────────────────────────────────────────
 
 function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string, sourceRowId = '') {
@@ -174,7 +269,7 @@ function CalendarLegend({ canton }: { canton: string }) {
         📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
-        Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen.
+        Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen. Mit der Maus auf einem Einsatz stehen bleiben zeigt alle Angaben.
       </div>
     </div>
   )
@@ -196,6 +291,7 @@ function MonthView({
   const days = getMonthDays(currentDate)
   const DOW = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
   const [hoverDay, setHoverDay] = useState<string | null>(null)
+  const { hover, bind } = useHoverCard()
   const projById = new Map(projects.map(p => [p.id, p]))
 
   function handleDrop(e: React.DragEvent, dropDay: Date) {
@@ -252,9 +348,9 @@ function MonthView({
                     className={`absence-cal-pill project-cal-pill${extra.length ? ' has-extra' : ''}`}
                     draggable
                     onDragStart={e => setDragPayload(e, p.id, dayISO)}
-                    title={`${p.name}${p.termin_badge ? ` (${p.termin_badge})` : ''} · ${fmtRange(p)}`}
                     style={{ background: pillBg(p) }}
                     onClick={() => onSelect(p)}
+                    {...bind(p)}
                   >
                     {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
                     {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
@@ -269,102 +365,18 @@ function MonthView({
           )
         })}
       </div>
+      {hover && <EventHoverCard hover={hover} staff={staff} />}
     </div>
   )
 }
 
 // ─── Week View (Zeitraster: Stunden links, Tage als Spalten) ─────────────────
-
-const WEEK_HOURS_START = 6
-const WEEK_HOURS_END = 20
-const WEEK_HOUR_HEIGHT = 38
-
-function timeOffsetPx(t: string): number {
-  const [h, m] = t.slice(0, 5).split(':').map(Number)
-  const mins = (h - WEEK_HOURS_START) * 60 + m
-  return Math.max(0, (mins / 60) * WEEK_HOUR_HEIGHT)
-}
-
-function blockHeightPx(start: string, end: string): number {
-  return Math.max(22, timeOffsetPx(end) - timeOffsetPx(start))
-}
-
-// Raster für Drop-Uhrzeiten: auf 15-Minuten runden.
-const WEEK_SNAP_MIN = 15
-
-// Wandelt eine spaltenrelative Y-Position (px ab Rasteroberkante = WEEK_HOURS_START)
-// in eine gerundete, auf das sichtbare Raster begrenzte Startzeit 'HH:MM'.
-function yToSnappedTime(topPx: number): string {
-  const minsFromTop = (topPx / WEEK_HOUR_HEIGHT) * 60
-  const abs = WEEK_HOURS_START * 60 + minsFromTop
-  const snapped = Math.round(abs / WEEK_SNAP_MIN) * WEEK_SNAP_MIN
-  const clamped = Math.max(WEEK_HOURS_START * 60, Math.min(WEEK_HOURS_END * 60, snapped))
-  return minToHHMM(clamped)
-}
-
-// Effektive Block-Unterkante in Minuten für die Overlap-Erkennung. Blöcke werden
-// mindestens so hoch gerendert wie in renderBlock (22px-Floor, 44px ohne Endzeit, plus
-// Zusatzfelder); diese Mindesthöhe rechnen wir in Minuten zurück, damit zeitlich knappe,
-// aber visuell überlappende Blöcke getrennte Spalten bekommen statt sich zu überlagern.
-function effectiveEndMin(ev: Project, staff: StaffLite[], fields?: Record<string, boolean>): number {
-  const s = hhmmToMin(ev.start_time!)
-  const actualEnd = ev.end_time ? hhmmToMin(ev.end_time) : s + 60
-  const extra = pillExtraLines(ev, staff, fields)
-  const extraMinHeight = extra.length ? 30 + extra.length * 14 : 0
-  const heightPx = ev.end_time
-    ? Math.max(blockHeightPx(ev.start_time!, ev.end_time), extraMinHeight)
-    : Math.max(WEEK_HOUR_HEIGHT, 44, extraMinHeight)
-  return Math.max(actualEnd, s + (heightPx / WEEK_HOUR_HEIGHT) * 60)
-}
-
-// Spalten-Layout für überlappende Events (Cluster-basiert, wie Google Calendar):
-// Events, die sich zeitlich ODER visuell (Mindesthöhe) überlappen, kommen auf parallele
-// Lanes. Overlap-Ende = effectiveEndMin (nicht die reine Endzeit).
-function computeLanes(events: Project[], staff: StaffLite[], fields?: Record<string, boolean>): Map<string, { col: number; total: number }> {
-  const result = new Map<string, { col: number; total: number }>()
-  const sorted = [...events].sort((a, b) => hhmmToMin(a.start_time!) - hhmmToMin(b.start_time!))
-
-  let cluster: Project[] = []
-  let clusterEnd = -1
-
-  function flush() {
-    if (cluster.length === 0) return
-    const colEnds: number[] = []
-    const assigns: number[] = []
-    for (const ev of cluster) {
-      const s = hhmmToMin(ev.start_time!)
-      const e = effectiveEndMin(ev, staff, fields)
-      let placed = -1
-      for (let i = 0; i < colEnds.length; i++) {
-        if (colEnds[i] <= s) { colEnds[i] = e; placed = i; break }
-      }
-      if (placed === -1) { colEnds.push(e); placed = colEnds.length - 1 }
-      assigns.push(placed)
-    }
-    const total = colEnds.length
-    cluster.forEach((ev, i) => result.set(ev.id, { col: assigns[i], total }))
-    cluster = []
-    clusterEnd = -1
-  }
-
-  for (const ev of sorted) {
-    const s = hhmmToMin(ev.start_time!)
-    const e = effectiveEndMin(ev, staff, fields)
-    if (cluster.length === 0 || s >= clusterEnd) {
-      flush()
-      cluster.push(ev)
-      clusterEnd = e
-    } else {
-      cluster.push(ev)
-      clusterEnd = Math.max(clusterEnd, e)
-    }
-  }
-  flush()
-  return result
-}
+// Rasterlogik (Zeitbereich, Zoom, Kachelhöhen, Lanes, Zeilen-Budget) liegt in
+// utils/weekGrid.ts — hier bleibt nur das Rendern.
 
 function WeekView({
   projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil,
+  hourHeight,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
@@ -378,9 +390,12 @@ function WeekView({
   // ('' = bis Rasterende). Nur Werktage, rein visuell.
   greyAfter?: string
   greyUntil?: string
+  // Zeilenhöhe pro Stunde in px (Zoom-Stufe).
+  hourHeight: number
 }) {
   const days = getWeekDays(currentDate)
   const [hoverDayISO, setHoverDayISO] = useState<string | null>(null)
+  const { hover, bind } = useHoverCard()
   // Live-Vorschau beim Ziehen ins Zeitraster: an welchem Tag/Höhe der Block landet.
   const [dropPreview, setDropPreview] = useState<{ dayISO: string; topPx: number; time: string } | null>(null)
   // Greif-Offset (px ab Block-Oberkante) des laufenden Drags. dataTransfer ist
@@ -392,28 +407,36 @@ function WeekView({
   const [createBox, setCreateBox] = useState<{ dayISO: string; topPx: number; heightPx: number; startTime: string; endTime: string } | null>(null)
   const projById = new Map(projects.map(p => [p.id, p]))
 
+  const projectsByDay: CalendarEntry[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
+
+  // Rastergrenzen aus der sichtbaren Woche — leere Randstunden fallen weg.
+  const { startHour, endHour } = computeWeekHours(projectsByDay.flat())
   const hours: number[] = []
-  for (let h = WEEK_HOURS_START; h <= WEEK_HOURS_END; h++) hours.push(h)
-  const gridHeight = (WEEK_HOURS_END - WEEK_HOURS_START) * WEEK_HOUR_HEIGHT
+  for (let h = startHour; h <= endHour; h++) hours.push(h)
+  const gridHeight = (endHour - startHour) * hourHeight
 
   // Ausgrau-Fenster (Nicht-Arbeitszeit): Y-Positionen des grauen Bereichs an
   // Werktagen (Mo–Fr). greyTopPx = Fenster-Start (null = aus). greyBottomPx =
   // Fenster-Ende; greyUntil leer/ungültig => bis Rasterende (Feierabend).
   // Beide auf das sichtbare Raster begrenzt.
   const greyTopPx = greyAfter && /^\d{2}:\d{2}$/.test(greyAfter)
-    ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyAfter)))
+    ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyAfter, startHour, hourHeight)))
     : null
   const greyBottomPx = greyUntil && /^\d{2}:\d{2}$/.test(greyUntil)
-    ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyUntil)))
+    ? Math.max(0, Math.min(gridHeight, timeOffsetPx(greyUntil, startHour, hourHeight)))
     : gridHeight
-
-  const projectsByDay: CalendarEntry[][] = days.map(d => projects.filter(p => projectCoversDay(p, d)))
 
   // Vorschaubox aus dem laufenden Zug berechnen (auf das Raster begrenzt).
   function createBoxFrom(c: { dayISO: string; startPx: number; endPx: number }) {
     const a = Math.max(0, Math.min(gridHeight, Math.min(c.startPx, c.endPx)))
     const b = Math.max(0, Math.min(gridHeight, Math.max(c.startPx, c.endPx)))
-    return { dayISO: c.dayISO, topPx: a, heightPx: b - a, startTime: yToSnappedTime(a), endTime: yToSnappedTime(b) }
+    return {
+      dayISO: c.dayISO,
+      topPx: a,
+      heightPx: b - a,
+      startTime: yToSnappedTime(a, startHour, endHour, hourHeight),
+      endTime: yToSnappedTime(b, startHour, endHour, hourHeight),
+    }
   }
 
   // Aufziehen starten — nur auf leerer Rasterfläche, nicht auf einem Block
@@ -445,11 +468,11 @@ function WeekView({
     if (!c || !onCreateSlot) return
     const a = Math.max(0, Math.min(gridHeight, Math.min(c.startPx, c.endPx)))
     const b = Math.max(0, Math.min(gridHeight, Math.max(c.startPx, c.endPx)))
-    const startTime = yToSnappedTime(a)
-    let endTime = yToSnappedTime(b)
+    const startTime = yToSnappedTime(a, startHour, endHour, hourHeight)
+    let endTime = yToSnappedTime(b, startHour, endHour, hourHeight)
     // Klick oder winziger Zug → 1-Stunden-Default ab Startzeit.
     if (hhmmToMin(endTime) - hhmmToMin(startTime) < WEEK_SNAP_MIN) {
-      endTime = minToHHMM(Math.min(WEEK_HOURS_END * 60, hhmmToMin(startTime) + 60))
+      endTime = minToHHMM(Math.min(endHour * 60, hhmmToMin(startTime) + 60))
     }
     onCreateSlot(c.dayISO, startTime, endTime)
   }
@@ -476,8 +499,40 @@ function WeekView({
     const proj = projById.get(payload.projectId)
     if (!proj) return
     const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
-    const time = yToSnappedTime(e.clientY - rect.top - payload.grabOffsetY)
+    const time = yToSnappedTime(e.clientY - rect.top - payload.grabOffsetY, startHour, endHour, hourHeight)
     onReschedule(proj.id, delta, time)
+  }
+
+  // Kachel-Innenleben. Symbol und Badge stehen immer beim Namen, damit die
+  // Einsatz-Art auch auf der flachsten Kachel erkennbar bleibt.
+  function tileBody(p: CalendarEntry, timeLabel: string, extra: string[], layout: TileLayout) {
+    const head = (
+      <>
+        {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
+        {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+        {p.name}
+      </>
+    )
+    if (layout.inline) {
+      return (
+        <div className="project-cal-week-event-inline">
+          {timeLabel && <span className="project-cal-week-event-time">{fmtTime(p.start_time)}</span>}
+          <span className="project-cal-week-event-name">{head}</span>
+        </div>
+      )
+    }
+    return (
+      <>
+        {timeLabel && <div className="project-cal-week-event-time">{timeLabel}</div>}
+        <div
+          className="project-cal-week-event-name"
+          style={{ WebkitLineClamp: layout.nameLines } as React.CSSProperties}
+        >{head}</div>
+        {extra.slice(0, layout.extraLines).map((line, k) => (
+          <div key={k} className="project-cal-week-event-extra">{line}</div>
+        ))}
+      </>
+    )
   }
 
   function renderBlock(
@@ -486,55 +541,62 @@ function WeekView({
     allDay: boolean,
     lane?: { col: number; total: number },
   ) {
-    const monteurs = projectMonteurNames(p, staff)
     const timeLabel = fmtTimeRange(p)
     const extra = pillExtraLines(p, staff, fields)
-    const laneStyle: React.CSSProperties = {}
-    if (!allDay && lane && lane.total > 1) {
-      // Gleichverteilte Lanes mit kleinem Spalt; left/right der CSS-Defaults
-      // werden ueberschrieben (right: auto), damit width greift.
-      const widthPct = 100 / lane.total
-      laneStyle.left = `calc(${lane.col * widthPct}% + 2px)`
-      laneStyle.width = `calc(${widthPct}% - 4px)`
-      laneStyle.right = 'auto'
+    // key wird bewusst separat gesetzt — React 19 warnt, wenn er mitgespreadet wird.
+    const common = {
+      draggable: true,
+      onDragStart: (e: React.DragEvent) => {
+        dragGrabYRef.current = Math.round(e.nativeEvent.offsetY) || 0
+        setDragPayload(e, p.id, dayISO)
+      },
+      onClick: () => onSelect(p),
+      ...bind(p),
     }
-    // Getaktete Blöcke sind höhenbegrenzt (Dauer). Bei aktiven Zusatzfeldern eine
-    // Mindesthöhe erzwingen, damit die Infos sichtbar bleiben statt weggeschnitten
-    // zu werden — auch bei kurzen Einsätzen.
-    const extraMinHeight = extra.length ? 30 + extra.length * 14 : 0
+
+    // Der Ganztägig-Strip hat keine Höhenbeschränkung — dort wächst die Kachel
+    // mit ihrem Inhalt, nichts muss gekürzt werden.
+    if (allDay) {
+      return (
+        <div
+          key={p.id}
+          {...common}
+          className={`project-cal-week-event allday${extra.length ? ' has-extra' : ''}`}
+          style={{ background: pillBg(p) }}
+        >
+          <div className="project-cal-week-event-name">
+            {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
+            {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+            {p.name}
+          </div>
+          {extra.map((line, k) => (
+            <div key={k} className="project-cal-week-event-extra">{line}</div>
+          ))}
+        </div>
+      )
+    }
+
+    // Getaktete Kachel: Höhe = Dauer. Was nicht ganz hineinpasst, wird weggelassen
+    // statt mitten in der Zeile abgeschnitten — die vollen Angaben liefert die
+    // Hover-Karte.
+    const heightPx = timedBlockHeightPx(p, hourHeight)
+    const layout = tileLayout(heightPx, extra.length, lane?.total ?? 1)
     return (
       <div
         key={p.id}
-        className={`project-cal-week-event${allDay ? ' allday' : ''}${extra.length ? ' has-extra' : ''}`}
-        draggable
-        onDragStart={e => { dragGrabYRef.current = Math.round(e.nativeEvent.offsetY) || 0; setDragPayload(e, p.id, dayISO) }}
-        onClick={() => onSelect(p)}
-        title={`${p.name}${timeLabel ? ' · ' + timeLabel : ''}${monteurs ? ' · ' + monteurs : ''}`}
-        style={
-          allDay
-            ? { background: pillBg(p) }
-            : {
-                background: pillBg(p),
-                top: timeOffsetPx(p.start_time!),
-                height: p.end_time
-                  ? blockHeightPx(p.start_time!, p.end_time)
-                  : Math.max(WEEK_HOUR_HEIGHT, 44),
-                minHeight: extraMinHeight || undefined,
-                ...laneStyle,
-              }
+        {...common}
+        className={
+          `project-cal-week-event${layout.inline ? ' tight' : ''}` +
+          `${(lane?.total ?? 1) > 1 ? ' stacked' : ''}`
         }
+        style={{
+          background: pillBg(p),
+          top: timeOffsetPx(p.start_time!, startHour, hourHeight),
+          height: heightPx,
+          ...laneStyle(lane),
+        }}
       >
-        {timeLabel && !allDay && (
-          <div className="project-cal-week-event-time">{timeLabel}</div>
-        )}
-        <div className="project-cal-week-event-name">
-          {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
-          {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-          {p.name}
-        </div>
-        {extra.map((line, k) => (
-          <div key={k} className="project-cal-week-event-extra">{line}</div>
-        ))}
+        {tileBody(p, timeLabel, extra, layout)}
       </div>
     )
   }
@@ -582,7 +644,7 @@ function WeekView({
       <div className="project-cal-week-body" style={{ height: gridHeight + 1 }}>
         <div className="project-cal-week-hours">
           {hours.slice(0, -1).map(h => (
-            <div key={h} className="project-cal-week-hour-label" style={{ height: WEEK_HOUR_HEIGHT }}>
+            <div key={h} className="project-cal-week-hour-label" style={{ height: hourHeight }}>
               {String(h).padStart(2, '0')}:00
             </div>
           ))}
@@ -591,7 +653,7 @@ function WeekView({
         {days.map((d, i) => {
           const dayISO = toDateStr(d)
           const timed = projectsByDay[i].filter(p => p.start_time)
-          const lanes = computeLanes(timed, staff, fields)
+          const lanes = computeLanes(timed, hourHeight)
           // Nur Werktage (Mo–Fr) ausgrauen; Wochenende bleibt normal.
           const dow = d.getDay() // 0 = So, 6 = Sa
           const showDim = greyTopPx !== null && dow >= 1 && dow <= 5 && greyBottomPx > greyTopPx
@@ -604,7 +666,7 @@ function WeekView({
                 e.preventDefault()
                 const rect = e.currentTarget.getBoundingClientRect()
                 const topPx = e.clientY - rect.top - dragGrabYRef.current
-                setDropPreview({ dayISO, topPx, time: yToSnappedTime(topPx) })
+                setDropPreview({ dayISO, topPx, time: yToSnappedTime(topPx, startHour, endHour, hourHeight) })
               }}
               onDragLeave={e => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -614,7 +676,7 @@ function WeekView({
               onDrop={e => handleTimedDrop(e, d)}
             >
               {hours.slice(0, -1).map(h => (
-                <div key={h} className="project-cal-week-hour-cell" style={{ height: WEEK_HOUR_HEIGHT }} />
+                <div key={h} className="project-cal-week-hour-cell" style={{ height: hourHeight }} />
               ))}
               {showDim && (
                 <div
@@ -646,6 +708,7 @@ function WeekView({
           )
         })}
       </div>
+      {hover && <EventHoverCard hover={hover} staff={staff} />}
     </div>
   )
 }
@@ -977,6 +1040,22 @@ function AgendaView({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// Gewählte Zoom-Stufe des Zeitrasters. Reine Anzeige-Vorliebe pro Browser —
+// bewusst localStorage statt Tenant-Config, weil sie vom Bildschirm abhängt.
+// Muss in storageMigrations.isKnownKey stehen, sonst räumt der Schema-Wechsel
+// den Key als Legacy-Müll weg.
+const ZOOM_KEY = 'schedule-week-zoom'
+
+function readZoom(): number {
+  try {
+    const raw = window.localStorage.getItem(ZOOM_KEY)
+    const n = raw === null ? NaN : parseInt(raw, 10)
+    return Number.isInteger(n) && n >= 0 && n < WEEK_ZOOM_LEVELS.length ? n : WEEK_ZOOM_DEFAULT
+  } catch {
+    return WEEK_ZOOM_DEFAULT
+  }
+}
+
 export default function ProjectScheduleCalendar({
   projects, staff, loading, canton = 'ZH', onSelect, onReschedule, onCreateSlot,
   onVisibleWeekChange, onVisibleStaffChange, schedulingConfig,
@@ -998,7 +1077,18 @@ export default function ProjectScheduleCalendar({
     ;(kindColorVars as Record<string, string>)[`--kind-${k}`] = v
   }
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [zoom, setZoom] = useState(readZoom)
   const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
+
+  function changeZoom(delta: number) {
+    setZoom(prev => {
+      const next = Math.max(0, Math.min(WEEK_ZOOM_LEVELS.length - 1, prev + delta))
+      // Private-Mode / voller Storage darf den Zoom nicht blockieren.
+      try { window.localStorage.setItem(ZOOM_KEY, String(next)) } catch { /* egal */ }
+      return next
+    })
+  }
+
   // Mitarbeiteransicht: Index des aktuell fokussierten Mitarbeiters (in staff).
   const [staffIndex, setStaffIndex] = useState(0)
   // Index bei geänderter Staff-Liste in gültige Grenzen ziehen.
@@ -1206,6 +1296,27 @@ export default function ProjectScheduleCalendar({
         </div>
       )}
 
+      {!loading && !isMobile && (view === 'week' || view === 'staff') && (
+        <div className="project-cal-zoom">
+          <span className="project-cal-filter-label">Zeilenhöhe</span>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => changeZoom(-1)}
+            disabled={zoom === 0}
+            aria-label="Zeilenhöhe verkleinern"
+          >−</button>
+          <span className="project-cal-zoom-value">{WEEK_ZOOM_LABELS[zoom]}</span>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary admin-btn-sm"
+            onClick={() => changeZoom(1)}
+            disabled={zoom === WEEK_ZOOM_LEVELS.length - 1}
+            aria-label="Zeilenhöhe vergrössern"
+          >+</button>
+        </div>
+      )}
+
       {loading ? (
         <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
       ) : view === 'staff' && !focusedStaff ? (
@@ -1257,6 +1368,7 @@ export default function ProjectScheduleCalendar({
           holidays={holidays}
           greyAfter={greyAfter}
           greyUntil={greyUntil}
+          hourHeight={WEEK_ZOOM_LEVELS[zoom]}
         />
       )}
 
