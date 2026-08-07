@@ -61,6 +61,9 @@ interface ProjektleiterOption {
 interface Project {
   id: string
   name: string
+  // Projektnummer — eindeutig, anders als der Name. Steht in der Auswahl hinter
+  // dem Namen, damit zwei gleichnamige Projekte unterscheidbar bleiben.
+  project_id_text?: string | null
   is_closed?: boolean
   distance_km?: number | null
 }
@@ -244,7 +247,7 @@ function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
 
 // ─── Create Form ────────────────────────────────────────────
 
-export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoRestoreDraft }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string; autoRestoreDraft?: boolean }) {
+export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId, autoRestoreDraft }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string; lockedProjectId?: string; autoRestoreDraft?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
@@ -252,6 +255,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
   const [materialSupplierFilter, setMaterialSupplierFilter] = useState('')
   const [materialCategoryFilter, setMaterialCategoryFilter] = useState('')
   const [projectName, setProjectName] = useState(lockedProjectName ?? '')
+  // Projektnamen dürfen doppelt vorkommen — massgeblich ist die id. Der Name
+  // bleibt für Entwurfs-Key und Anzeige. Im gesperrten Modus (aus dem Projekt
+  // heraus) kommt die id vom Aufrufer.
+  const [projectId, setProjectId] = useState(lockedProjectId ?? '')
   const [laborRows, setLaborRows] = useState<LaborRow[]>([{ description: '', quantity: '', unit_price: null, hidden: false }])
   const [materialRows, setMaterialRows] = useState<MaterialRow[]>([{ art_nr: '', quantity: '' }])
   const [extraProducts, setExtraProducts] = useState<ExtraProductRow[]>([])
@@ -595,7 +602,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     const hasMaterial = materialRows.some(r => r.art_nr && parseNum(r.quantity) > 0)
     const hasExtra = extraProducts.some(r => r.description)
     const hasCharge = extraCharges.some(r => r.description)
-    const selectedProject = projects.find(p => p.name === projectName)
+    const selectedProject = projects.find(p => p.id === projectId) ?? projects.find(p => p.name === projectName)
     const projectDistanceKm = selectedProject?.distance_km ?? null
     const hasTravel = includeTravelCost && projectDistanceKm !== null
     const hasSpecial = specialRows.some(specialRowValid)
@@ -609,6 +616,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
     try {
       const payload = {
         project_name: projectName,
+        project_id: selectedProject?.id ?? projectId ?? null,
         labor_items: laborRows.filter(r => r.description && parseNum(r.quantity) > 0).map(r => ({
           description: r.description,
           quantity: parseNum(r.quantity),
@@ -750,9 +758,22 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
       {!lockedProjectName && (
         <div style={{ marginBottom: 20 }}>
           <label className="admin-form-label">Projekt *</label>
-          <select className="admin-form-select" value={projectName} onChange={e => setProjectName(e.target.value)}>
+          <select
+            className="admin-form-select"
+            value={projectId}
+            onChange={e => {
+              const p = projects.find(x => x.id === e.target.value)
+              setProjectId(e.target.value)
+              setProjectName(p?.name ?? '')
+            }}
+          >
             <option value="">-- Projekt wählen --</option>
-            {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            {/* Zwei Projekte dürfen gleich heissen — die Nummer unterscheidet sie. */}
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.project_id_text ? `${p.name} (${p.project_id_text})` : p.name}
+              </option>
+            ))}
           </select>
         </div>
       )}
@@ -911,7 +932,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, autoResto
 
       {/* Fahrspesen (Auto aus Projekt-Distanz) */}
       {(() => {
-        const selectedProject = projects.find(p => p.name === projectName)
+        const selectedProject = projects.find(p => p.id === projectId) ?? projects.find(p => p.name === projectName)
         const distanceKm = selectedProject?.distance_km ?? null
         const hasDistance = distanceKm !== null && distanceKm !== undefined
         const travelAmount = hasDistance ? computeTravelCost(Number(distanceKm)) : 0

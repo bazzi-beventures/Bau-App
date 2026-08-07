@@ -616,7 +616,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     try {
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
-        body: JSON.stringify({ project_name: project.name, use_quote: useQuote, remark }),
+        body: JSON.stringify({ project_name: project.name, project_id: project.id, use_quote: useQuote, remark }),
       }) as { quote_numbers?: string[]; warnings?: unknown } | null
       showToast(
         'Rechnung erstellt'
@@ -1720,6 +1720,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteCreateForm
               lockedProjectName={project.name}
+              lockedProjectId={project.id}
               autoRestoreDraft={resumeQuoteDraft}
               onDone={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes() }}
               onCancel={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)) }}

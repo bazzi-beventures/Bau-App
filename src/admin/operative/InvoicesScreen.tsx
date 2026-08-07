@@ -29,6 +29,9 @@ interface ProjektleiterOption {
 interface Project {
   id: string
   name: string
+  // Eindeutige Projektnummer — steht in der Auswahl hinter dem Namen, weil zwei
+  // Projekte gleich heissen dürfen.
+  project_id_text?: string | null
   customer?: { email?: string | null } | null
   is_closed?: boolean
 }
@@ -72,7 +75,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   // Generate invoice
   const [showGenerate, setShowGenerate] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
+  // genProject hält die Projekt-id (eindeutig), genProjectName den Anzeigenamen.
   const [genProject, setGenProject] = useState('')
+  const [genProjectName, setGenProjectName] = useState('')
   const [genUseQuote, setGenUseQuote] = useState(false)
   const [generating, setGenerating] = useState(false)
   // Arbeitsbeschrieb ("Ausgeführte Arbeiten") — Vorschlag aus den Rapporten, vom
@@ -120,6 +125,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
       setProjects(p.filter(x => !x.is_closed))
     } catch { /* ignore */ }
     setGenProject('')
+    setGenProjectName('')
     setGenUseQuote(false)
     setHasAcceptedQuote(false)
     setGenWorkDesc('')
@@ -127,12 +133,17 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setShowGenerate(true)
   }
 
-  async function checkQuote(projectName: string) {
-    setGenProject(projectName)
-    if (!projectName) { setHasAcceptedQuote(false); setGenWorkDesc(''); return }
+  async function checkQuote(projectId: string, projects: Project[]) {
+    const projectName = projects.find(p => p.id === projectId)?.name ?? ''
+    setGenProject(projectId)
+    setGenProjectName(projectName)
+    if (!projectId) { setHasAcceptedQuote(false); setGenWorkDesc(''); return }
     try {
-      const quotes = await apiFetch('/pwa/admin/quotes') as { project_name: string; status: string }[]
-      setHasAcceptedQuote(quotes.some(q => q.project_name === projectName && q.status === 'akzeptiert'))
+      const quotes = await apiFetch('/pwa/admin/quotes') as { project_id?: string | null; project_name: string; status: string }[]
+      // Zuordnung über die id; der Name nur für Alt-Offerten ohne project_id.
+      setHasAcceptedQuote(quotes.some(q =>
+        q.status === 'akzeptiert' &&
+        (q.project_id ? q.project_id === projectId : q.project_name === projectName)))
     } catch {
       setHasAcceptedQuote(false)
     }
@@ -141,7 +152,8 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setLoadingWorkDesc(true)
     try {
       const res = await apiFetch(
-        `/pwa/admin/invoices/work-description?project_name=${encodeURIComponent(projectName)}`,
+        `/pwa/admin/invoices/work-description?project_name=${encodeURIComponent(projectName)}`
+        + `&project_id=${encodeURIComponent(projectId)}`,
       ) as { work_description: string }
       setGenWorkDesc(res.work_description || '')
     } catch {
@@ -158,7 +170,8 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
       const res = await apiFetch('/pwa/admin/invoices/generate', {
         method: 'POST',
         body: JSON.stringify({
-          project_name: genProject,
+          project_name: genProjectName,
+          project_id: genProject,
           use_quote: genUseQuote,
           work_description: genWorkDesc,
           remark: genRemark,
@@ -524,9 +537,13 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
             <div className="admin-confirm-title">Rechnung erstellen</div>
             <div style={{ marginBottom: 12 }}>
               <label className="admin-form-label">Projekt</label>
-              <select className="admin-form-select" value={genProject} onChange={e => checkQuote(e.target.value)}>
+              <select className="admin-form-select" value={genProject} onChange={e => checkQuote(e.target.value, projects)}>
                 <option value="">-- Projekt wählen --</option>
-                {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.project_id_text ? `${p.name} (${p.project_id_text})` : p.name}
+                  </option>
+                ))}
               </select>
             </div>
             {hasAcceptedQuote && (
