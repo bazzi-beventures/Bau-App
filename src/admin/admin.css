@@ -707,6 +707,74 @@ select.admin-input {
   justify-content: center;
 }
 
+/* ─── Foto-Auswahl im Offerten-Versand ────────────────────── */
+/* Vorschaukacheln statt Dateinamen: der Admin muss sehen, was beim Kunden
+   ankommt. Gedeckelte Höhe, damit der Dialog bei 30 Fotos nicht ausufert. */
+.quote-foto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.quote-foto-tile {
+  position: relative;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  cursor: pointer;
+  overflow: hidden;
+  display: block;
+  text-align: left;
+}
+
+.quote-foto-tile.active {
+  border-color: var(--primary);
+}
+
+.quote-foto-tile img {
+  display: block;
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+/* Häkchen-Marke oben rechts; der leere Kreis zeigt, dass die Kachel wählbar ist. */
+.quote-foto-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  background: rgba(15, 23, 42, 0.45);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.quote-foto-tile.active .quote-foto-check {
+  background: var(--primary);
+}
+
+.quote-foto-name {
+  display: block;
+  padding: 3px 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ─── Forms ───────────────────────────────────────────────── */
 .admin-form-group {
   display: flex;
@@ -2928,6 +2996,258 @@ button.admin-list-item {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* ─── Tagesplan / Gantt (Mitarbeiter als Zeilen × Uhrzeit) ─── */
+
+.project-cal-gantt {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* Die Achse kann breiter als der Bildschirm sein — waagrecht scrollen, die
+   Namensspalte links und die Auslastung rechts bleiben stehen (sticky). */
+.project-cal-gantt-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.project-cal-gantt-inner {
+  min-width: 100%;
+}
+
+.project-cal-gantt-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.project-cal-gantt-row:last-child {
+  border-bottom: none;
+}
+
+.project-cal-gantt-header {
+  background: var(--bg);
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 40px;
+}
+
+.project-cal-gantt-name {
+  flex: 0 0 170px;
+  width: 170px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+
+.project-cal-gantt-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-cal-gantt-name.unassigned {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Auslastungsgrad des sichtbaren Zeitraums, rechts angedockt. margin-left:auto
+   hält das Badge am rechten Rand, auch wenn die Achse schmaler als der
+   Bildschirm ist. */
+.project-cal-gantt-util {
+  flex: 0 0 64px;
+  width: 64px;
+  margin-left: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.project-cal-gantt-util-badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: #fff;
+  min-width: 42px;
+  text-align: center;
+}
+
+.project-cal-gantt-util-badge.idle { background: var(--surface-2); color: var(--muted); }
+.project-cal-gantt-util-badge.low  { background: #16a34a; }
+.project-cal-gantt-util-badge.mid  { background: #ca8a04; }
+.project-cal-gantt-util-badge.high { background: #ea580c; }
+.project-cal-gantt-util-badge.over { background: var(--danger, #dc2626); }
+
+/* Zeitachse im Kopf: ein Block je Tag, darin die Stundenbeschriftung. */
+.project-cal-gantt-axis {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.project-cal-gantt-day-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid var(--border);
+  padding-top: 2px;
+}
+
+.project-cal-gantt-day-head.today .project-cal-gantt-day-title {
+  color: var(--primary, #3b82f6);
+  font-weight: 700;
+}
+
+.project-cal-gantt-day-title {
+  font-size: 11px;
+  font-weight: 600;
+  padding-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.project-cal-gantt-hours {
+  position: relative;
+  height: 16px;
+}
+
+.project-cal-gantt-hour-label {
+  position: absolute;
+  top: 0;
+  font-size: 10px;
+  color: var(--muted);
+  padding-left: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Zeile eines Mitarbeiters: Balken liegen absolut auf der Spur. */
+.project-cal-gantt-track {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.project-cal-gantt-track.creatable {
+  cursor: cell;
+}
+
+.project-cal-gantt-day-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px solid var(--border);
+  pointer-events: none;
+}
+
+/* Wochenende/Feiertag: Tagesspalte gedämpft. */
+.project-cal-gantt-offday {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-2);
+}
+
+/* Ausgegraute Nicht-Arbeitszeit (Werktage), rein visuell. */
+.project-cal-gantt-dim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(100, 116, 139, 0.10),
+    rgba(100, 116, 139, 0.10) 6px,
+    rgba(100, 116, 139, 0.16) 6px,
+    rgba(100, 116, 139, 0.16) 12px
+  );
+}
+
+.project-cal-gantt-hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid var(--border);
+  opacity: 0.45;
+}
+
+/* Einsatz-Balken: Dauer = Breite. */
+.project-cal-gantt-bar {
+  position: absolute;
+  border-radius: 4px;
+  padding: 0 6px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 24px;
+  cursor: grab;
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  z-index: 2;
+}
+
+.project-cal-gantt-bar:active {
+  cursor: grabbing;
+}
+
+/* Der Name hat Vorrang: er darf schrumpfen, die Uhrzeit weicht als Ganzes. */
+.project-cal-gantt-bar-name {
+  font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-cal-gantt-bar-time {
+  flex: 0 0 auto;
+  opacity: 0.85;
+  font-size: 10px;
+}
+
+/* Ganztägiger Einsatz: Band über den ganzen Tag, hinter den getakteten Balken. */
+.project-cal-gantt-bar.allday {
+  z-index: 1;
+  opacity: 0.45;
+  border-radius: 0;
+  line-height: normal;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.project-cal-gantt-bar.conflict {
+  box-shadow: 0 0 0 2px var(--danger, #dc2626);
+}
+
+.project-cal-gantt-bar-warn {
+  color: #fecaca;
+}
+
+/* Umschalter Tag / 3 Tage / 5 Tage in der Zoom-Leiste. */
+.project-cal-gantt-spans {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
 }
 
 @media (max-width: 1100px) {

@@ -1,6 +1,5 @@
 ﻿import { Fragment, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Project, projectCustomerName } from './ProjectsScreen'
+import { Project } from './ProjectsScreen'
 import {
   SCHEDULING_VIEWS, resolveScheduleDistances,
   type SchedulingConfig, type SchedulingViewKey,
@@ -8,33 +7,27 @@ import {
 import { useIsMobile } from '../useIsMobile'
 import {
   getSwissHolidays, getWeekDays, getMonthDays, toDateStr, isToday,
-  parseDateStr, diffDays, hhmmToMin, minToHHMM,
+  diffDays, hhmmToMin, minToHHMM, addDays,
 } from '../utils/calendarHelpers'
 import {
   computeWeekHours, computeLanes, laneStyle, tileLayout, timeOffsetPx, timedBlockHeightPx,
   yToSnappedTime, WEEK_SNAP_MIN, WEEK_ZOOM_LEVELS, WEEK_ZOOM_LABELS, WEEK_ZOOM_DEFAULT,
   type TileLayout,
 } from '../utils/weekGrid'
+import {
+  GANTT_DAY_CAPACITY_FALLBACK_H as DAY_CAPACITY_FALLBACK_H,
+  GANTT_SPANS, GANTT_SPAN_DEFAULT, GANTT_SPAN_LABELS,
+  GANTT_ZOOM_DEFAULT, GANTT_ZOOM_LABELS, GANTT_ZOOM_LEVELS,
+} from '../utils/ganttGrid'
+import ProjectScheduleGantt from './ProjectScheduleGantt'
+import {
+  fmtTime, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
+  projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload, useHoverCard,
+  type CalendarEntry, type StaffLite,
+} from './scheduleShared'
+import EventHoverCard from './EventHoverCard'
 
-// Drag-Transfer payload format: "<projectId>|<grabDayISO>|<grabOffsetY>|<sourceRowId>"
-// grabOffsetY = Y-Position des Mauszeigers innerhalb der gegriffenen Pille (px),
-// damit beim Drop in das Zeitraster der Block-Anfang dort landet, wo der Block
-// (nicht der Cursor) hingehört. sourceRowId = Monteur-Zeile, aus der der Chip in
-// der Plantafel gegriffen wurde ('' ausserhalb der Plantafel bzw. Zeile «Ohne Monteur»).
-const DRAG_MIME = 'application/x-bau-project'
-
-interface StaffLite {
-  id: string
-  name: string
-}
-
-// Kalender-Eintrag = EIN Termin (project_appointments). Der Screen spreadet das
-// Projekt und überlagert die Terminfelder; `id` ist die TERMIN-ID — dadurch sind
-// Keys/Lanes/Drag&Drop je Termin eindeutig, auch bei mehreren Terminen desselben
-// Projekts. termin_badge: Typ-Label (z.B. "Aufmass"), leer beim Standardfall.
-// termin_kind: roher Termin-Typ (aufmass/montage/service/sonstiges) für das
-// Typ-Symbol — nur bei Kundenprojekten gesetzt, interne Einsätze nutzen p.kind.
-export type CalendarEntry = Project & { termin_badge?: string; termin_kind?: string }
+export type { CalendarEntry }
 
 interface Props {
   projects: CalendarEntry[]
@@ -62,198 +55,9 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function projectCoversDay(p: Project, day: Date): boolean {
-  if (!p.start_date || !p.end_date) return false
-  const s = toDateStr(day)
-  return s >= p.start_date.slice(0, 10) && s <= p.end_date.slice(0, 10)
-}
-
-function fmtRange(p: Project): string {
-  if (!p.start_date || !p.end_date) return ''
-  const s = parseDateStr(p.start_date).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
-  const e = parseDateStr(p.end_date).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
-  const datePart = s === e ? s : `${s} – ${e}`
-  const timePart = fmtTimeRange(p)
-  return timePart ? `${datePart} · ${timePart}` : datePart
-}
-
-function fmtTime(t: string | null | undefined): string {
-  return t ? t.slice(0, 5) : ''
-}
-
-function fmtTimeRange(p: Project): string {
-  const s = fmtTime(p.start_time), e = fmtTime(p.end_time)
-  if (s && e) return `${s}–${e}`
-  if (s) return `ab ${s}`
-  if (e) return `bis ${e}`
-  return ''
-}
-
 function pillLabel(p: Project): string {
   const t = fmtTime(p.start_time)
   return t ? `${t} ${p.name}` : p.name
-}
-
-// Pill-Farbe je Einsatz-Art. Kundenprojekte bleiben Brand-Blau, interne
-// Einsätze unterscheiden sich farblich klar davon.
-// Die --kind-*-Variablen setzt der Kalender-Root aus der Tenant-Config (scheduling_config).
-// Fehlt eine Variable, greift der hier hinterlegte Default.
-const KIND_COLORS: Record<string, string> = {
-  project:     'var(--kind-project, var(--primary))',
-  teamsitzung: 'var(--kind-teamsitzung, #7c3aed)',  // Lila
-  lagerarbeit: 'var(--kind-lagerarbeit, #d97706)',  // Bernstein
-  werkstatt:   'var(--kind-werkstatt, #0d9488)',    // Türkis
-  sonstiges:   'var(--kind-sonstiges, #475569)',    // Slate
-}
-
-function pillBg(p: Project): string {
-  return KIND_COLORS[p.kind || 'project'] ?? KIND_COLORS.project
-}
-
-// Kleines Typ-Symbol je Aufgaben-Art: Kundenprojekte nach Termin-Typ
-// (termin_kind), interne Einsätze nach Einsatz-Art (kind).
-const TERMIN_SYMBOLS: Record<string, string> = {
-  aufmass: '📐',
-  montage: '🔧',
-  service: '🛠️',
-  sonstiges: '📋',
-}
-const KIND_SYMBOLS: Record<string, string> = {
-  teamsitzung: '👥',
-  lagerarbeit: '📦',
-  werkstatt: '⚙️',
-  sonstiges: '📌',
-}
-
-function kindSymbol(p: CalendarEntry): string {
-  if (p.kind && p.kind !== 'project') return KIND_SYMBOLS[p.kind] ?? ''
-  return TERMIN_SYMBOLS[p.termin_kind ?? 'montage'] ?? ''
-}
-
-// Optionale Zusatz-Zeilen auf der Kachel, gesteuert per Tenant-Config (scheduling_config.fields).
-function pillExtraLines(p: Project, staff: StaffLite[], fields?: Record<string, boolean>): string[] {
-  if (!fields) return []
-  const lines: string[] = []
-  if (fields.address && p.object_address) lines.push(p.object_address)
-  if (fields.projektleiter && p.projektleiter_id) {
-    const pl = staff.find(s => s.id === p.projektleiter_id)?.name
-    if (pl) lines.push(`PL: ${pl}`)
-  }
-  if (fields.customer) { const c = projectCustomerName(p); if (c) lines.push(c) }
-  if (fields.bemerkung && p.bemerkung) lines.push(p.bemerkung)
-  return lines
-}
-
-function projectMonteurNames(p: Project, staff: StaffLite[]): string {
-  if (!p.monteur_ids || p.monteur_ids.length === 0) return ''
-  const byId = new Map(staff.map(s => [s.id, s.name]))
-  return p.monteur_ids.map(id => byId.get(id) || '').filter(Boolean).join(', ')
-}
-
-// ─── Hover-Karte ──────────────────────────────────────────────────────────────
-// Eine Kalenderkachel ist zwangsläufig klein — ein 30-Minuten-Termin hat nicht
-// genug Höhe für Adresse, Kunde und Bemerkung. Statt den Text abzuschneiden
-// zeigt eine Karte beim Überfahren die vollen Angaben. Ersetzt den nativen
-// title-Tooltip, der erst nach ~1 s erscheint und keine Zeilen kennt.
-
-const HOVER_DELAY_MS = 220
-const HOVER_CARD_W = 260
-// Grobe Annahme für die Kartenhöhe, damit sie am unteren Rand nicht aus dem
-// Bild rutscht. Die exakte Höhe steht erst nach dem Rendern fest; CSS deckelt
-// zusätzlich per max-height.
-const HOVER_CARD_MAX_H = 230
-
-interface HoverState {
-  entry: CalendarEntry
-  rect: DOMRect
-}
-
-// Hover-Zustand + fertige Event-Handler für eine Kachel. Die Verzögerung
-// verhindert, dass beim Überstreichen mehrerer Kacheln Karten aufblitzen.
-function useHoverCard() {
-  const [hover, setHover] = useState<HoverState | null>(null)
-  const timerRef = useRef<number | null>(null)
-
-  function cancelTimer() {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }
-
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-  }, [])
-
-  function bind(entry: CalendarEntry) {
-    return {
-      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        cancelTimer()
-        timerRef.current = window.setTimeout(() => setHover({ entry, rect }), HOVER_DELAY_MS)
-      },
-      onMouseLeave: () => { cancelTimer(); setHover(null) },
-      // Beim Ziehen oder Klicken stört die Karte nur.
-      onMouseDown: () => { cancelTimer(); setHover(null) },
-    }
-  }
-
-  return { hover, bind }
-}
-
-function EventHoverCard({ hover, staff }: { hover: HoverState; staff: StaffLite[] }) {
-  const { entry: p, rect } = hover
-  const rows: [string, string][] = []
-  const kunde = projectCustomerName(p)
-  const pl = p.projektleiter_id ? staff.find(s => s.id === p.projektleiter_id)?.name : ''
-  const monteurs = projectMonteurNames(p, staff)
-  if (p.object_address) rows.push(['Adresse', p.object_address])
-  if (kunde) rows.push(['Kunde', kunde])
-  if (pl) rows.push(['Projektleiter', pl])
-  if (monteurs) rows.push(['Monteure', monteurs])
-  if (p.bemerkung) rows.push(['Bemerkung', p.bemerkung])
-
-  // Rechts neben der Kachel; bei zu wenig Platz nach links kippen. Vertikal an
-  // der Kachel ausgerichtet, aber im sichtbaren Bereich gehalten.
-  const flip = rect.right + 12 + HOVER_CARD_W > window.innerWidth
-  const left = flip ? Math.max(8, rect.left - 12 - HOVER_CARD_W) : rect.right + 12
-  const top = Math.max(8, Math.min(rect.top, window.innerHeight - HOVER_CARD_MAX_H))
-
-  return createPortal(
-    <div className="project-cal-hovercard" style={{ left, top, width: HOVER_CARD_W }} role="tooltip">
-      <div className="project-cal-hovercard-head">
-        <span className="project-cal-hovercard-dot" style={{ background: pillBg(p) }} />
-        {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
-        {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-        <strong>{p.name}</strong>
-      </div>
-      <div className="project-cal-hovercard-time">{fmtRange(p) || 'Ganztägig'}</div>
-      {rows.map(([label, value]) => (
-        <div key={label} className="project-cal-hovercard-row">
-          <span className="project-cal-hovercard-label">{label}</span>
-          <span>{value}</span>
-        </div>
-      ))}
-    </div>,
-    document.body,
-  )
-}
-
-// ─── Drag-Handlers ────────────────────────────────────────────────────────────
-
-function setDragPayload(e: React.DragEvent, projectId: string, grabDayISO: string, sourceRowId = '') {
-  const grabOffsetY = Math.round(e.nativeEvent.offsetY) || 0
-  const raw = `${projectId}|${grabDayISO}|${grabOffsetY}|${sourceRowId}`
-  e.dataTransfer.setData(DRAG_MIME, raw)
-  e.dataTransfer.setData('text/plain', raw)
-  e.dataTransfer.effectAllowed = 'move'
-}
-
-function readDragPayload(e: React.DragEvent): { projectId: string; grabDayISO: string; grabOffsetY: number; sourceRowId: string } | null {
-  const raw = e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')
-  if (!raw || !raw.includes('|')) return null
-  const [projectId, grabDayISO, grabOffsetY, sourceRowId] = raw.split('|')
-  return { projectId, grabDayISO, grabOffsetY: Number(grabOffsetY) || 0, sourceRowId: sourceRowId || '' }
 }
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
@@ -499,7 +303,7 @@ function WeekView({
     const proj = projById.get(payload.projectId)
     if (!proj) return
     const delta = diffDays(payload.grabDayISO, toDateStr(dropDay))
-    const time = yToSnappedTime(e.clientY - rect.top - payload.grabOffsetY, startHour, endHour, hourHeight)
+    const time = yToSnappedTime(e.clientY - rect.top - payload.grabOffset, startHour, endHour, hourHeight)
     onReschedule(proj.id, delta, time)
   }
 
@@ -1040,20 +844,30 @@ function AgendaView({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-// Gewählte Zoom-Stufe des Zeitrasters. Reine Anzeige-Vorliebe pro Browser —
+// Gewählte Zoom-Stufe der Zeitraster. Reine Anzeige-Vorliebe pro Browser —
 // bewusst localStorage statt Tenant-Config, weil sie vom Bildschirm abhängt.
-// Muss in storageMigrations.isKnownKey stehen, sonst räumt der Schema-Wechsel
-// den Key als Legacy-Müll weg.
+// Wochenraster (Zeilenhöhe) und Tagesplan (Stundenbreite) haben eigene Stufen
+// und darum eigene Keys. Beide müssen in storageMigrations.isKnownKey stehen,
+// sonst räumt der Schema-Wechsel sie als Legacy-Müll weg.
 const ZOOM_KEY = 'schedule-week-zoom'
+const GANTT_ZOOM_KEY = 'schedule-gantt-zoom'
+
+function readStoredLevel(key: string, count: number, fallback: number): number {
+  try {
+    const raw = window.localStorage.getItem(key)
+    const n = raw === null ? NaN : parseInt(raw, 10)
+    return Number.isInteger(n) && n >= 0 && n < count ? n : fallback
+  } catch {
+    return fallback
+  }
+}
 
 function readZoom(): number {
-  try {
-    const raw = window.localStorage.getItem(ZOOM_KEY)
-    const n = raw === null ? NaN : parseInt(raw, 10)
-    return Number.isInteger(n) && n >= 0 && n < WEEK_ZOOM_LEVELS.length ? n : WEEK_ZOOM_DEFAULT
-  } catch {
-    return WEEK_ZOOM_DEFAULT
-  }
+  return readStoredLevel(ZOOM_KEY, WEEK_ZOOM_LEVELS.length, WEEK_ZOOM_DEFAULT)
+}
+
+function readGanttZoom(): number {
+  return readStoredLevel(GANTT_ZOOM_KEY, GANTT_ZOOM_LEVELS.length, GANTT_ZOOM_DEFAULT)
 }
 
 export default function ProjectScheduleCalendar({
@@ -1078,15 +892,29 @@ export default function ProjectScheduleCalendar({
   }
   const [currentDate, setCurrentDate] = useState(new Date())
   const [zoom, setZoom] = useState(readZoom)
+  const [ganttZoom, setGanttZoom] = useState(readGanttZoom)
+  // Sichtbare Tage im Tagesplan (1 / 3 / 5).
+  const [ganttSpan, setGanttSpan] = useState<number>(GANTT_SPAN_DEFAULT)
   const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
 
+  // Zoom-Stufe der gerade aktiven Ansicht: Wochenraster = Zeilenhöhe,
+  // Tagesplan = Stundenbreite.
+  const zoomLevels: readonly number[] = view === 'gantt' ? GANTT_ZOOM_LEVELS : WEEK_ZOOM_LEVELS
+  const zoomLabels: readonly string[] = view === 'gantt' ? GANTT_ZOOM_LABELS : WEEK_ZOOM_LABELS
+  const zoomIndex = view === 'gantt' ? ganttZoom : zoom
+
   function changeZoom(delta: number) {
-    setZoom(prev => {
-      const next = Math.max(0, Math.min(WEEK_ZOOM_LEVELS.length - 1, prev + delta))
+    const isGantt = view === 'gantt'
+    const key = isGantt ? GANTT_ZOOM_KEY : ZOOM_KEY
+    const max = (isGantt ? GANTT_ZOOM_LEVELS.length : WEEK_ZOOM_LEVELS.length) - 1
+    const apply = (prev: number) => {
+      const next = Math.max(0, Math.min(max, prev + delta))
       // Private-Mode / voller Storage darf den Zoom nicht blockieren.
-      try { window.localStorage.setItem(ZOOM_KEY, String(next)) } catch { /* egal */ }
+      try { window.localStorage.setItem(key, String(next)) } catch { /* egal */ }
       return next
-    })
+    }
+    if (isGantt) setGanttZoom(apply)
+    else setZoom(apply)
   }
 
   // Mitarbeiteransicht: Index des aktuell fokussierten Mitarbeiters (in staff).
@@ -1156,21 +984,23 @@ export default function ProjectScheduleCalendar({
   // Auf Mobile ist die Ansicht immer die Wochen-Agenda → Navigation wochenweise,
   // unabhängig vom (dort ausgeblendeten) Monatsmodus.
   const monthNav = view === 'month' && !isMobile
+  // Der Tagesplan navigiert in seinem eigenen Zeitraum (1/3/5 Tage), nicht wochenweise.
+  const ganttNav = view === 'gantt' && !isMobile
+
+  function stepDays(days: number) {
+    setCurrentDate(d => addDays(d, days))
+  }
 
   function handlePrev() {
-    if (monthNav) {
-      setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
-    } else {
-      setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n })
-    }
+    if (monthNav) setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+    else if (ganttNav) stepDays(-ganttSpan)
+    else stepDays(-7)
   }
 
   function handleNext() {
-    if (monthNav) {
-      setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
-    } else {
-      setCurrentDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n })
-    }
+    if (monthNav) setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+    else if (ganttNav) stepDays(ganttSpan)
+    else stepDays(7)
   }
 
   // Neuer Termin aus dem Zeitraster: in der Mitarbeiteransicht ist der aktuell
@@ -1182,6 +1012,15 @@ export default function ProjectScheduleCalendar({
 
   const title = monthNav
     ? currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' })
+    : ganttNav
+    ? (() => {
+        const from = currentDate.toLocaleDateString('de-CH', {
+          weekday: 'short', day: '2-digit', month: '2-digit', year: ganttSpan > 1 ? undefined : 'numeric',
+        })
+        if (ganttSpan === 1) return from
+        const last = addDays(currentDate, ganttSpan - 1)
+        return `${from} – ${last.toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}`
+      })()
     : (() => {
         const days = getWeekDays(currentDate)
         const from = days[0].toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
@@ -1296,23 +1135,38 @@ export default function ProjectScheduleCalendar({
         </div>
       )}
 
-      {!loading && !isMobile && (view === 'week' || view === 'staff') && (
+      {!loading && !isMobile && (view === 'week' || view === 'staff' || view === 'gantt') && (
         <div className="project-cal-zoom">
-          <span className="project-cal-filter-label">Zeilenhöhe</span>
+          {view === 'gantt' && (
+            <>
+              <span className="project-cal-filter-label">Zeitraum</span>
+              <div className="project-cal-gantt-spans">
+                {GANTT_SPANS.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`admin-btn admin-btn-sm ${ganttSpan === s ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+                    onClick={() => setGanttSpan(s)}
+                  >{GANTT_SPAN_LABELS[s]}</button>
+                ))}
+              </div>
+            </>
+          )}
+          <span className="project-cal-filter-label">{view === 'gantt' ? 'Stundenbreite' : 'Zeilenhöhe'}</span>
           <button
             type="button"
             className="admin-btn admin-btn-secondary admin-btn-sm"
             onClick={() => changeZoom(-1)}
-            disabled={zoom === 0}
-            aria-label="Zeilenhöhe verkleinern"
+            disabled={zoomIndex === 0}
+            aria-label={view === 'gantt' ? 'Stundenbreite verkleinern' : 'Zeilenhöhe verkleinern'}
           >−</button>
-          <span className="project-cal-zoom-value">{WEEK_ZOOM_LABELS[zoom]}</span>
+          <span className="project-cal-zoom-value">{zoomLabels[zoomIndex]}</span>
           <button
             type="button"
             className="admin-btn admin-btn-secondary admin-btn-sm"
             onClick={() => changeZoom(1)}
-            disabled={zoom === WEEK_ZOOM_LEVELS.length - 1}
-            aria-label="Zeilenhöhe vergrössern"
+            disabled={zoomIndex === zoomLevels.length - 1}
+            aria-label={view === 'gantt' ? 'Stundenbreite vergrössern' : 'Zeilenhöhe vergrössern'}
           >+</button>
         </div>
       )}
@@ -1330,6 +1184,23 @@ export default function ProjectScheduleCalendar({
           onSelect={onSelect}
           onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
           holidays={holidays}
+        />
+      ) : view === 'gantt' ? (
+        <ProjectScheduleGantt
+          projects={visibleProjects}
+          staff={staff}
+          rowStaff={hiddenStaff.size > 0 ? staff.filter(s => !hiddenStaff.has(s.id)) : staff}
+          fields={fields}
+          currentDate={currentDate}
+          span={ganttSpan}
+          hourWidth={GANTT_ZOOM_LEVELS[ganttZoom]}
+          onSelect={onSelect}
+          onReschedule={(id, d, t, m) => { void onReschedule(id, d, t, m) }}
+          onCreateSlot={onCreateSlot}
+          holidays={holidays}
+          greyAfter={greyAfter}
+          greyUntil={greyUntil}
+          dayCapacityHours={schedulingConfig?.day_capacity_hours ?? DAY_CAPACITY_FALLBACK_H}
         />
       ) : view === 'plantafel' ? (
         <PlantafelView

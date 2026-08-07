@@ -600,6 +600,7 @@ export const SCHEDULING_VIEWS = [
   { key: 'week', label: 'Woche' },
   { key: 'staff', label: 'Mitarbeiter' },
   { key: 'plantafel', label: 'Plantafel' },
+  { key: 'gantt', label: 'Tagesplan' },
 ] as const
 
 export type SchedulingViewKey = (typeof SCHEDULING_VIEWS)[number]['key']
@@ -616,6 +617,8 @@ export interface SchedulingConfig {
   // ('' = bis Rasterende/Feierabend). Blockiert das Planen nicht.
   grey_after?: string
   grey_until?: string
+  // Arbeitsstunden je Werktag — Bezugsgrösse des Auslastungsgrads im Tagesplan.
+  day_capacity_hours?: number
 }
 
 export interface TenantSchedulingResponse {

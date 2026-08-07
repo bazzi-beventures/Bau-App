@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiFormFetch } from '../../api/client'
+import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 
 // Antwort von GET /pwa/admin/quotes/{id}/send-attachments — steuert, welche
-// Anhang-Quellen der Dialog anbietet (Feature-Flag prospekt_mit_offerte).
+// Anhang-Quellen der Dialog anbietet. Zwei getrennte Schalter: `enabled` für die
+// Dokumente (Feature prospekt_mit_offerte), `fotos_enabled` für die Projekt-Fotos
+// (Feature fotos_mit_offerte).
 interface SendAttachmentsInfo {
   enabled: boolean
+  fotos_enabled: boolean
   project_id: string | null
   projekt_anhaenge: { id: string; filename: string }[]
   vorlagen: { id: string; filename: string }[]
+  projekt_fotos: { id: string; filename: string; mime_type: string | null; created_at?: string | null }[]
 }
 
 interface Props {
@@ -18,12 +22,16 @@ interface Props {
   onSent: (email: string) => void
 }
 
-const EMPTY_INFO: SendAttachmentsInfo = { enabled: false, project_id: null, projekt_anhaenge: [], vorlagen: [] }
+const EMPTY_INFO: SendAttachmentsInfo = {
+  enabled: false, fotos_enabled: false, project_id: null,
+  projekt_anhaenge: [], vorlagen: [], projekt_fotos: [],
+}
 
 // Gemeinsamer Versand-Dialog für Offerten (Offerten-Liste + Projekt-Detail) mit
-// drei Anhang-Quellen: Projekt-Anhänge (Dokumente → Anhänge), direkt gewählte
-// Dateien (werden beim Senden als Projekt-Anhang hochgeladen) und mandantenweite
-// Vorlagen (Standard-Anhänge, z.B. AGB oder Produkt-Prospekte).
+// vier Anhang-Quellen: Projekt-Anhänge (Dokumente → Anhänge), direkt gewählte
+// Dateien (werden beim Senden als Projekt-Anhang hochgeladen), mandantenweite
+// Vorlagen (Standard-Anhänge, z.B. AGB oder Produkt-Prospekte) und die
+// Projekt-Fotos (Dokumente → Fotos).
 export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent }: Props) {
   const [email, setEmail] = useState(defaultEmail ?? '')
   const [sending, setSending] = useState(false)
@@ -31,6 +39,7 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
   const [info, setInfo] = useState<SendAttachmentsInfo>(EMPTY_INFO)
   const [selectedAnhaenge, setSelectedAnhaenge] = useState<Set<string>>(new Set())
   const [selectedVorlagen, setSelectedVorlagen] = useState<Set<string>>(new Set())
+  const [selectedFotos, setSelectedFotos] = useState<Set<string>>(new Set())
   const [directFiles, setDirectFiles] = useState<File[]>([])
   const [vorlagenSearch, setVorlagenSearch] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -59,6 +68,14 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
 
   function toggleVorlage(id: string) {
     setSelectedVorlagen(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleFoto(id: string) {
+    setSelectedFotos(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
@@ -110,6 +127,7 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
           recipient_email: email,
           anhang_file_ids: [...selectedAnhaenge, ...uploadedIds],
           vorlage_attachment_ids: [...selectedVorlagen],
+          foto_file_ids: [...selectedFotos],
         }),
       })
       onSent(email)
@@ -194,6 +212,55 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
             </button>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
               Wird zusätzlich beim Projekt unter Dokumente → Anhänge für Offerte abgelegt.
+            </div>
+          </div>
+        )}
+
+        {info.fotos_enabled && info.projekt_fotos.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label className="admin-form-label">
+                Fotos aus dem Projekt
+                {selectedFotos.size > 0 && (
+                  <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {selectedFotos.size} gewählt</span>
+                )}
+              </label>
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary admin-btn-sm"
+                onClick={() => setSelectedFotos(
+                  selectedFotos.size === info.projekt_fotos.length
+                    ? new Set()
+                    : new Set(info.projekt_fotos.map(f => f.id)),
+                )}
+              >
+                {selectedFotos.size === info.projekt_fotos.length ? 'Alle abwählen' : 'Alle wählen'}
+              </button>
+            </div>
+            {/* Vorschau statt blosser Dateiname: „IMG_4711.jpg" sagt niemandem, was
+                der Kunde zu sehen bekommt. Bewusst nichts vorausgewählt. */}
+            <div className="quote-foto-grid">
+              {info.projekt_fotos.map(f => {
+                const active = selectedFotos.has(f.id)
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`quote-foto-tile${active ? ' active' : ''}`}
+                    onClick={() => toggleFoto(f.id)}
+                    title={f.filename}
+                    aria-pressed={active}
+                    aria-label={f.filename}
+                  >
+                    <img src={apiUrl(`/pwa/admin/project-files/${f.id}/download`)} alt="" loading="lazy" />
+                    <span className="quote-foto-check" aria-hidden="true">{active ? '✓' : ''}</span>
+                    <span className="quote-foto-name">{f.filename}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+              Gewählte Fotos gehen mit der Offerte an den Kunden — für den Versand automatisch verkleinert.
             </div>
           </div>
         )}

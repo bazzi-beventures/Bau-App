@@ -193,6 +193,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           show_distances: sched.config.show_distances ?? sched.defaults.show_distances ?? true,
           grey_after: sched.config.grey_after ?? sched.defaults.grey_after ?? '',
           grey_until: sched.config.grey_until ?? sched.defaults.grey_until ?? '',
+          day_capacity_hours: sched.config.day_capacity_hours ?? sched.defaults.day_capacity_hours,
         })
       }
     } catch {

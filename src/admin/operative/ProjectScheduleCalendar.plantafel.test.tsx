@@ -42,7 +42,7 @@ function entry(over: Partial<CalendarEntry>): CalendarEntry {
 const CONFIG_ALL: SchedulingConfig = {
   fields: {},
   colors: {},
-  views: { month: true, week: true, staff: true, plantafel: true },
+  views: { month: true, week: true, staff: true, plantafel: true, gantt: true },
 }
 
 function renderCal(opts: {
@@ -131,7 +131,7 @@ describe('Plantafel', () => {
 
   it('abgeschaltete Ansichten erscheinen nicht als Button; Fallback auf die erste erlaubte', () => {
     const { container } = renderCal({
-      config: { ...CONFIG_ALL, views: { month: false, week: false, staff: false, plantafel: true } },
+      config: { ...CONFIG_ALL, views: { month: false, week: false, staff: false, gantt: false, plantafel: true } },
     })
     expect(screen.queryByRole('button', { name: 'Monat' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Woche' })).not.toBeInTheDocument()
@@ -233,7 +233,7 @@ describe('Plantafel', () => {
 
   it('ohne views-Config sind alle Ansichten verfügbar (Default an)', () => {
     renderCal({ config: undefined })
-    for (const label of ['Monat', 'Woche', 'Mitarbeiter', 'Plantafel']) {
+    for (const label of ['Monat', 'Woche', 'Mitarbeiter', 'Plantafel', 'Tagesplan']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
   })

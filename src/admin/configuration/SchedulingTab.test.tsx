@@ -25,9 +25,10 @@ const DEFAULTS = {
     project: '#3081ab', teamsitzung: '#7c3aed', lagerarbeit: '#d97706',
     werkstatt: '#0d9488', sonstiges: '#475569',
   },
-  views: { month: true, week: true, staff: true, plantafel: true },
+  views: { month: true, week: true, staff: true, plantafel: true, gantt: true },
   grey_after: '',
   grey_until: '',
+  day_capacity_hours: 8,
 }
 
 beforeEach(() => {
@@ -144,7 +145,7 @@ describe('SchedulingTab', () => {
     const user = await openTab()
 
     await screen.findByLabelText('Plantafel')
-    for (const label of ['Monat', 'Woche', 'Mitarbeiter', 'Plantafel']) {
+    for (const label of ['Monat', 'Woche', 'Mitarbeiter', 'Plantafel', 'Tagesplan']) {
       await user.click(screen.getByLabelText(label))
     }
     expect(screen.getByText('Mindestens eine Ansicht muss aktiviert sein.')).toBeInTheDocument()

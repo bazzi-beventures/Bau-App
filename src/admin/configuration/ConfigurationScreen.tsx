@@ -1110,6 +1110,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
       show_distances: cfg.show_distances ?? def.show_distances ?? true,
       grey_after: cfg.grey_after ?? def.grey_after ?? '',
       grey_until: cfg.grey_until ?? def.grey_until ?? '',
+      day_capacity_hours: cfg.day_capacity_hours ?? def.day_capacity_hours ?? 8,
     }
   }
 
@@ -1139,6 +1140,10 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
   const rangeInvalid = !!config.grey_after && !!config.grey_until && config.grey_until <= config.grey_after
   // Fehlender Key = Ansicht an (Default) — deshalb explizit auf false prüfen.
   const allViewsOff = SCHEDULING_VIEWS.every(v => config.views?.[v.key] === false)
+  // Gleiche Grenzen wie serverseitig (db/tenants.py) — ein Speichern ausserhalb
+  // würde ohnehin mit 400 zurückkommen.
+  const capacity = config.day_capacity_hours ?? 8
+  const capacityInvalid = !Number.isFinite(capacity) || capacity < 1 || capacity > 24
 
   function setField(key: string, value: boolean) {
     setConfig(prev => prev && { ...prev, fields: { ...prev.fields, [key]: value } })
@@ -1191,7 +1196,8 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
       <div style={{ fontWeight: 600, marginBottom: 6 }}>Verfügbare Ansichten</div>
       <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
         Welche Kalender-Ansichten in der Einsatzplanung zur Auswahl stehen.
-        Die Plantafel zeigt jeden Monteur als eigene Zeile über die Woche.
+        Die Plantafel zeigt jeden Monteur als eigene Zeile über die Woche, der
+        Tagesplan zusätzlich mit Uhrzeit-Achse und Auslastungsgrad je Mitarbeiter.
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: allViewsOff ? 6 : 24 }}>
         {SCHEDULING_VIEWS.map(v => (
@@ -1219,6 +1225,35 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
         />
         Fahrdistanzen zwischen Einsätzen in der Plantafel anzeigen
       </label>
+
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Tages-Kapazität</div>
+      <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+        Planbare Einsatzstunden pro Mitarbeiter und Werktag. Bezugsgrösse für den
+        Auslastungsgrad im Tagesplan – 8&nbsp;h und 4&nbsp;h geplant ergeben 50&nbsp;%.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+        <input
+          type="number"
+          className="admin-input"
+          min={1}
+          max={24}
+          step={0.5}
+          value={config.day_capacity_hours ?? 8}
+          onChange={e => setConfig(prev => {
+            if (!prev) return prev
+            const n = parseFloat(e.target.value)
+            return { ...prev, day_capacity_hours: Number.isFinite(n) ? n : prev.day_capacity_hours }
+          })}
+          style={{ width: 120 }}
+          aria-label="Tages-Kapazität in Stunden"
+        />
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>Stunden pro Werktag</span>
+      </div>
+      {capacityInvalid && (
+        <div style={{ fontSize: 13, color: 'var(--danger, #c0392b)', marginTop: -14, marginBottom: 24 }}>
+          Tages-Kapazität muss zwischen 1 und 24 Stunden liegen.
+        </div>
+      )}
 
       <div style={{ fontWeight: 600, marginBottom: 10 }}>Zusätzliche Felder auf der Kachel</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
@@ -1297,7 +1332,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
         <button
           className="admin-btn admin-btn-primary"
           onClick={save}
-          disabled={!dirty || saving || rangeInvalid || allViewsOff}
+          disabled={!dirty || saving || rangeInvalid || allViewsOff || capacityInvalid}
         >
           {saving ? 'Speichern…' : 'Speichern'}
         </button>
