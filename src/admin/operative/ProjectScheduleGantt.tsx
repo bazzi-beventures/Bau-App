@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { Project } from './ProjectsScreen'
 import {
   CalendarEntry, StaffLite,
-  useHoverCard, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
+  useHoverCard, entryTitle, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
   projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
@@ -43,6 +43,8 @@ interface Props {
   // Breite einer Stunde in px (Zoom-Stufe).
   hourWidth: number
   onSelect: (p: Project) => void
+  // Doppelklick auf einen Balken: springt in die Projektmaske (siehe Kalender-Props).
+  onOpenProject?: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) => void
   // Klick auf freie Rasterfläche → neuer Termin (1 h ab der geklickten Uhrzeit)
   // mit dem Zeilen-Mitarbeiter vorbelegt (null = Zeile «Ohne Monteur»).
@@ -57,7 +59,7 @@ interface Props {
 
 export default function ProjectScheduleGantt({
   projects, staff, rowStaff, fields, currentDate, span, hourWidth,
-  onSelect, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil, dayCapacityHours,
+  onSelect, onOpenProject, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil, dayCapacityHours,
 }: Props) {
   const { hover, bind } = useHoverCard()
   // Zeile, über der gerade ein Balken schwebt: rowId ('' = «Ohne Monteur»).
@@ -173,6 +175,11 @@ export default function ProjectScheduleGantt({
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '', 'x')}
         onClick={() => onSelect(p)}
+        onDoubleClick={onOpenProject ? e => {
+          e.preventDefault()
+          window.getSelection()?.removeAllRanges()
+          onOpenProject(p)
+        } : undefined}
         style={{
           background: pillBg(p),
           left: geo.leftPx,
@@ -183,14 +190,14 @@ export default function ProjectScheduleGantt({
           height: allDay ? '100%' : GANTT_BAR_H,
         }}
         title={[
-          p.name, timeLabel || 'ganztägig', projectMonteurNames(p, staff), ...extra,
+          entryTitle(p), timeLabel || 'ganztägig', projectMonteurNames(p, staff), ...extra,
           conflict ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Mitarbeiters' : '',
         ].filter(Boolean).join(' · ')}
         {...bind(p)}
       >
         {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
         {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-        <span className="project-cal-gantt-bar-name">{p.name}</span>
+        <span className="project-cal-gantt-bar-name">{entryTitle(p)}</span>
         {timeLabel && showTime && <span className="project-cal-gantt-bar-time">{timeLabel}</span>}
         {conflict && <span className="project-cal-gantt-bar-warn">⚠</span>}
       </div>

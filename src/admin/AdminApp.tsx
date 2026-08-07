@@ -185,7 +185,16 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'corrections':  return guard('timekeeping', <CorrectionsScreen onBadgeChange={loadDashboard} />)
       case 'hr-reports':   return guard('hr', <HrReportsScreen />)
       case 'vacation':     return guard('hr', <VacationOverviewScreen />)
-      case 'projects':     return <ProjectsScreen openNew={detailId === 'new'} onConsumedNew={clearDetail} />
+      // detailId ist entweder 'new' (Neu-Maske) oder eine Projekt-id (Direktsprung
+      // aus der Einsatzplanung).
+      case 'projects':     return (
+        <ProjectsScreen
+          openNew={detailId === 'new'}
+          onConsumedNew={clearDetail}
+          openProjectId={detailId && detailId !== 'new' ? detailId : undefined}
+          onConsumedProjectId={clearDetail}
+        />
+      )
       case 'project-drafts': return <ProjectDraftsScreen onBadgeChange={loadDashboard} />
       case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={guardedNav} />)
       case 'customers':    return <CustomersScreen />

@@ -240,10 +240,24 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
 
   // Klick auf einen Kalenderblock: Entry-ID = Termin-ID → Termin + Projekt auflösen.
   function handleCalendarSelect(entry: Project) {
-    const appt = appointments.find(a => a.id === entry.id)
-    const project = projects.find(p => p.id === (appt?.project_id ?? entry.id))
+    const project = resolveEntryProject(entry)
     if (!project) return
-    selectProject(project, appt)
+    selectProject(project, appointments.find(a => a.id === entry.id))
+  }
+
+  // Doppelklick auf einen Kalenderblock: in die Projektmaske springen. Das Panel
+  // rechts plant nur Termine — Adresse, Kunde, Kontakte, Dokumente hängen am
+  // Projekt und lassen sich nur dort ändern.
+  function handleCalendarOpen(entry: Project) {
+    const project = resolveEntryProject(entry)
+    if (project && onNav) onNav('projects', project.id)
+  }
+
+  // Entry-ID ist die TERMIN-ID (siehe calendarEntries); interne Einsätze ohne
+  // Termin tragen die Projekt-ID. Beide Wege führen auf dasselbe Projekt.
+  function resolveEntryProject(entry: Project): Project | undefined {
+    const appt = appointments.find(a => a.id === entry.id)
+    return projects.find(p => p.id === (appt?.project_id ?? entry.id))
   }
 
   function clearSelection() {
@@ -634,6 +648,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             loading={loading}
             canton={canton}
             onSelect={handleCalendarSelect}
+            onOpenProject={onNav ? handleCalendarOpen : undefined}
             onReschedule={handleReschedule}
             onCreateSlot={handleCreateSlot}
             onVisibleWeekChange={setVisibleWeekIso}

@@ -5,7 +5,7 @@
 import { createPortal } from 'react-dom'
 import { projectCustomerName } from './ProjectsScreen'
 import {
-  fmtRange, kindSymbol, pillBg, projectMonteurNames,
+  entryTitle, fmtRange, kindSymbol, pillBg, projectMonteurNames,
   type HoverState, type StaffLite,
 } from './scheduleShared'
 
@@ -39,7 +39,7 @@ export default function EventHoverCard({ hover, staff }: { hover: HoverState; st
         <span className="project-cal-hovercard-dot" style={{ background: pillBg(p) }} />
         {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
         {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-        <strong>{p.name}</strong>
+        <strong>{entryTitle(p)}</strong>
       </div>
       <div className="project-cal-hovercard-time">{fmtRange(p) || 'Ganztägig'}</div>
       {rows.map(([label, value]) => (

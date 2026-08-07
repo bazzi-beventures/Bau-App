@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -153,6 +153,11 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 interface ProjectsScreenProps {
   openNew?: boolean
   onConsumedNew?: () => void
+  // Direktsprung in ein Projekt (Projekt-id), z.B. per Doppelklick auf einen
+  // Einsatz in der Einsatzplanung. Die Zeile wird einzeln nachgeladen — sie
+  // muss auf der aktuellen Listenseite gar nicht vorkommen.
+  openProjectId?: string
+  onConsumedProjectId?: () => void
 }
 
 interface ProjectsListResponse {
@@ -167,7 +172,16 @@ interface ProjectsListResponse {
 
 const PAGE_SIZE = 50
 
-export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScreenProps = {}) {
+/** Ein einzelnes Projekt in Listen-Form. Bewusst hier und nicht in api/admin.ts:
+ *  dort steht ein schlankerer Project-Typ für Dropdowns, der der Projektmaske
+ *  nicht genügt. */
+function fetchProject(id: string): Promise<Project> {
+  return apiFetch(`/pwa/admin/projects/${id}`) as Promise<Project>
+}
+
+export default function ProjectsScreen({
+  openNew, onConsumedNew, openProjectId, onConsumedProjectId,
+}: ProjectsScreenProps = {}) {
   const [data, setData] = useState<ProjectsListResponse>({
     rows: [], total: 0, open_count: 0, closed_count: 0, archived_count: 0, page: 1, page_size: PAGE_SIZE,
   })
@@ -224,6 +238,26 @@ export default function ProjectsScreen({ openNew, onConsumedNew }: ProjectsScree
       onConsumedNew?.()
     }
   }, [openNew, onConsumedNew])
+
+  // Direktsprung: Projekt einzeln nachladen und die Maske öffnen. Schlägt das
+  // fehl (gelöscht, kein Zugriff), bleibt es bei der Übersicht — der Sprung ist
+  // eine Abkürzung, kein Pflichtweg.
+  //
+  // Der Ref merkt sich die bereits angestossene id. Ohne ihn würde jedes
+  // Neurendern während des laufenden Requests den Effect erneut auslösen: die
+  // Consumed-Callbacks sind nicht memoisiert, ihre Identität wechselt ständig.
+  const jumpedToRef = useRef<string | null>(null)
+  useEffect(() => {
+    // Zurückgesetzt, sobald der Sprung verbraucht ist — sonst liesse sich
+    // dasselbe Projekt kein zweites Mal per Doppelklick öffnen.
+    if (!openProjectId) { jumpedToRef.current = null; return }
+    if (jumpedToRef.current === openProjectId) return
+    jumpedToRef.current = openProjectId
+    fetchProject(openProjectId)
+      .then(p => { setShowNew(false); setSelected(p) })
+      .catch(() => {})
+      .finally(() => onConsumedProjectId?.())
+  }, [openProjectId, onConsumedProjectId])
 
   // Suche: 300ms Debounce, damit nicht jeder Tastendruck einen Roundtrip ausloest.
   useEffect(() => {

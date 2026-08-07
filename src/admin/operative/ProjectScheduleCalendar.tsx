@@ -21,7 +21,7 @@ import {
 } from '../utils/ganttGrid'
 import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
-  fmtTime, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
+  entryTitle, fmtTime, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
   projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload, useHoverCard,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
@@ -35,6 +35,10 @@ interface Props {
   loading: boolean
   canton?: string
   onSelect: (p: Project) => void
+  // Doppelklick auf einen Einsatz: springt in die Projektmaske. Das Panel rechts
+  // plant nur Termine — Adresse, Kunde, Kontakte usw. lassen sich nur dort ändern.
+  // Fehlt der Handler (z.B. ohne Navigation im Test), bleibt es beim Einfachklick.
+  onOpenProject?: (p: Project) => void
   // Verschiebt einen Einsatz im Kalender. deltaDays = Tagesversatz; startTime
   // steuert die Uhrzeit: undefined = Zeit beibehalten (Monat / Ganztägig-Strip),
   // 'HH:MM' = neue Startzeit (Drop ins Zeitraster), null = Zeit löschen (ganztägig).
@@ -57,7 +61,22 @@ interface Props {
 
 function pillLabel(p: Project): string {
   const t = fmtTime(p.start_time)
-  return t ? `${t} ${p.name}` : p.name
+  const name = entryTitle(p)
+  return t ? `${t} ${name}` : name
+}
+
+// Doppelklick öffnet das Projekt. Der Einfachklick (Panel) feuert dabei zwangsläufig
+// mit — er ist folgenlos, weil die Projektmaske den Screen ohnehin ersetzt. Die
+// Textauswahl, die ein Doppelklick sonst auslöst, wird unterdrückt.
+function openBinding(p: CalendarEntry, onOpenProject?: (p: Project) => void) {
+  if (!onOpenProject) return {}
+  return {
+    onDoubleClick: (e: React.MouseEvent) => {
+      e.preventDefault()
+      window.getSelection()?.removeAllRanges()
+      onOpenProject(p)
+    },
+  }
 }
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
@@ -73,7 +92,7 @@ function CalendarLegend({ canton }: { canton: string }) {
         📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
-        Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen. Mit der Maus auf einem Einsatz stehen bleiben zeigt alle Angaben.
+        Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen. Mit der Maus auf einem Einsatz stehen bleiben zeigt alle Angaben, <strong>Doppelklick</strong> öffnet das Projekt.
       </div>
     </div>
   )
@@ -82,13 +101,14 @@ function CalendarLegend({ canton }: { canton: string }) {
 // ─── Month View ───────────────────────────────────────────────────────────────
 
 function MonthView({
-  projects, staff, fields, currentDate, onSelect, onReschedule, holidays,
+  projects, staff, fields, currentDate, onSelect, onOpenProject, onReschedule, holidays,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
+  onOpenProject?: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
   holidays: Map<string, string>
 }) {
@@ -154,6 +174,7 @@ function MonthView({
                     onDragStart={e => setDragPayload(e, p.id, dayISO)}
                     style={{ background: pillBg(p) }}
                     onClick={() => onSelect(p)}
+                    {...openBinding(p, onOpenProject)}
                     {...bind(p)}
                   >
                     {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
@@ -179,14 +200,15 @@ function MonthView({
 // utils/weekGrid.ts — hier bleibt nur das Rendern.
 
 function WeekView({
-  projects, staff, fields, currentDate, onSelect, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil,
-  hourHeight,
+  projects, staff, fields, currentDate, onSelect, onOpenProject, onReschedule, onCreateSlot, holidays,
+  greyAfter, greyUntil, hourHeight,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
+  onOpenProject?: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null) => void
   onCreateSlot?: (dayISO: string, startTime: string, endTime: string) => void
   holidays: Map<string, string>
@@ -314,7 +336,7 @@ function WeekView({
       <>
         {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
         {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-        {p.name}
+        {entryTitle(p)}
       </>
     )
     if (layout.inline) {
@@ -355,6 +377,7 @@ function WeekView({
         setDragPayload(e, p.id, dayISO)
       },
       onClick: () => onSelect(p),
+      ...openBinding(p, onOpenProject),
       ...bind(p),
     }
 
@@ -371,7 +394,7 @@ function WeekView({
           <div className="project-cal-week-event-name">
             {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
             {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-            {p.name}
+            {entryTitle(p)}
           </div>
           {extra.map((line, k) => (
             <div key={k} className="project-cal-week-event-extra">{line}</div>
@@ -539,7 +562,8 @@ function pairKey(a: string | null | undefined, b: string | null | undefined): st
 // den Quell-Monteur auf den Ziel-Monteur um (restliches Team bleibt erhalten).
 
 function PlantafelView({
-  projects, staff, rowStaff, fields, currentDate, onSelect, onReschedule, onCreateCell, holidays, showDistances,
+  projects, staff, rowStaff, fields, currentDate, onSelect, onOpenProject, onReschedule, onCreateCell, holidays,
+  showDistances,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
@@ -549,6 +573,7 @@ function PlantafelView({
   fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
+  onOpenProject?: (p: Project) => void
   onReschedule: (id: string, deltaDays: number, startTime?: string | null, monteurIds?: string[]) => void
   // Klick auf leere Zelle → neuer Termin an diesem Tag mit dem Zeilen-Monteur
   // vorbelegt (null = Zeile «Ohne Monteur»).
@@ -684,9 +709,10 @@ function PlantafelView({
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '')}
         onClick={() => onSelect(p)}
+        {...openBinding(p, onOpenProject)}
         style={{ background: pillBg(p) }}
         title={[
-          p.name, timeLabel, monteurs, ...extra,
+          entryTitle(p), timeLabel, monteurs, ...extra,
           conflict ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Monteurs' : '',
         ].filter(Boolean).join(' · ')}
       >
@@ -697,7 +723,7 @@ function PlantafelView({
         </span>
         <span className="project-cal-board-chip-name">
           {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-          {p.name}
+          {entryTitle(p)}
         </span>
       </div>
     )
@@ -784,13 +810,14 @@ function PlantafelView({
 // Verschieben passiert über das Bearbeitungs-Panel (Tap → onSelect), neue
 // Einsätze über den +-Button im Tag-Header (Default-Slot 08:00–09:00).
 function AgendaView({
-  projects, staff, fields, currentDate, onSelect, onCreateSlot, holidays,
+  projects, staff, fields, currentDate, onSelect, onOpenProject, onCreateSlot, holidays,
 }: {
   projects: CalendarEntry[]
   staff: StaffLite[]
   fields?: Record<string, boolean>
   currentDate: Date
   onSelect: (p: Project) => void
+  onOpenProject?: (p: Project) => void
   onCreateSlot?: (dayISO: string, startTime: string, endTime: string) => void
   holidays: Map<string, string>
 }) {
@@ -827,9 +854,10 @@ function AgendaView({
                   className="project-cal-agenda-event"
                   style={{ background: pillBg(p) }}
                   onClick={() => onSelect(p)}
+                  {...openBinding(p, onOpenProject)}
                 >
                   <span className="project-cal-agenda-event-time">{fmtTimeRange(p) || 'Ganztägig'}</span>
-                  <strong>{kindSymbol(p) ? `${kindSymbol(p)} ` : ''}{p.termin_badge ? `${p.termin_badge} · ` : ''}{p.name}</strong>
+                  <strong>{kindSymbol(p) ? `${kindSymbol(p)} ` : ''}{p.termin_badge ? `${p.termin_badge} · ` : ''}{entryTitle(p)}</strong>
                   {monteurs && <span className="project-cal-agenda-event-sub">{monteurs}</span>}
                   {extra.map((line, j) => <span key={j} className="project-cal-agenda-event-sub">{line}</span>)}
                 </div>
@@ -871,7 +899,7 @@ function readGanttZoom(): number {
 }
 
 export default function ProjectScheduleCalendar({
-  projects, staff, loading, canton = 'ZH', onSelect, onReschedule, onCreateSlot,
+  projects, staff, loading, canton = 'ZH', onSelect, onOpenProject, onReschedule, onCreateSlot,
   onVisibleWeekChange, onVisibleStaffChange, schedulingConfig,
 }: Props) {
   const [viewMode, setViewMode] = useState<SchedulingViewKey>('month')
@@ -1182,6 +1210,7 @@ export default function ProjectScheduleCalendar({
           fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
+          onOpenProject={onOpenProject}
           onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
           holidays={holidays}
         />
@@ -1195,6 +1224,7 @@ export default function ProjectScheduleCalendar({
           span={ganttSpan}
           hourWidth={GANTT_ZOOM_LEVELS[ganttZoom]}
           onSelect={onSelect}
+          onOpenProject={onOpenProject}
           onReschedule={(id, d, t, m) => { void onReschedule(id, d, t, m) }}
           onCreateSlot={onCreateSlot}
           holidays={holidays}
@@ -1210,6 +1240,7 @@ export default function ProjectScheduleCalendar({
           fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
+          onOpenProject={onOpenProject}
           onReschedule={(id, d, t, m) => { void onReschedule(id, d, t, m) }}
           onCreateCell={onCreateSlot
             ? (dayISO, monteurId) => onCreateSlot(dayISO, '08:00', '09:00', monteurId)
@@ -1224,6 +1255,7 @@ export default function ProjectScheduleCalendar({
           fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
+          onOpenProject={onOpenProject}
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           holidays={holidays}
         />
@@ -1234,6 +1266,7 @@ export default function ProjectScheduleCalendar({
           fields={fields}
           currentDate={currentDate}
           onSelect={onSelect}
+          onOpenProject={onOpenProject}
           onReschedule={(id, d, t) => { void onReschedule(id, d, t) }}
           onCreateSlot={onCreateSlot ? handleCreateSlot : undefined}
           holidays={holidays}

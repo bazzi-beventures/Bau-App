@@ -34,6 +34,20 @@ export function fmtTime(t: string | null | undefined): string {
   return t ? t.slice(0, 5) : ''
 }
 
+// Anzeigename einer Kalenderkachel: Projektnummer vor dem Namen.
+//
+// Die aus der Alt-Software importierten Projekte tragen ihre Nummer schon im
+// Namen ("261125 Heller Winterthur") — dort würde ein Präfix sie verdoppeln.
+// Neu angelegte Projekte bekommen die Nummer nur in project_id_text, im
+// Kalender fehlte sie deshalb bisher ganz. Interne Einsätze (Teamsitzung,
+// Werkstatt …) haben keine Nummer und bleiben unverändert.
+export function entryTitle(p: Project): string {
+  const name = p.name ?? ''
+  const nr = (p.project_id_text ?? '').trim()
+  if (!nr || name.includes(nr)) return name
+  return `${nr} ${name}`
+}
+
 export function fmtTimeRange(p: Project): string {
   const s = fmtTime(p.start_time), e = fmtTime(p.end_time)
   if (s && e) return `${s}–${e}`
