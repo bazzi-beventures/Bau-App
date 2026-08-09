@@ -717,6 +717,24 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
+  // Postversand: derselbe Endpunkt wie in der Rechnungsübersicht (InvoicesScreen).
+  // `sentDate` ist das Aufgabedatum bei der Post — daraus leitet das Backend das
+  // Zahlungsziel ab, deshalb nachtragbar statt "jetzt".
+  async function handleMarkInvoiceSentByPost(invoiceId: number, sentDate: string): Promise<boolean> {
+    try {
+      await apiFetch(`/pwa/admin/invoices/${invoiceId}/mark-sent`, {
+        method: 'POST',
+        body: JSON.stringify({ sent_date: sentDate }),
+      })
+      showToast('Rechnung als per Post versendet markiert')
+      await reloadInvoices()
+      return true
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler')
+      return false
+    }
+  }
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
@@ -1626,6 +1644,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onUnmarkPaid={handleUnmarkInvoicePaid}
           onArchive={handleArchiveInvoice}
           onSendInvoice={handleSendInvoice}
+          onMarkSentByPost={handleMarkInvoiceSentByPost}
         />
       )}
 

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { apiUrl } from '../../../api/client'
-import { fmtCHF, fmtDate } from '../../utils/format'
+import { fmtCHF, fmtDate, todayISO } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ActionRow } from '../../components/ActionRow'
@@ -1041,12 +1041,17 @@ interface InvoicesTabProps {
   onUnmarkPaid: (invoiceId: number) => Promise<void>
   onArchive: (invoiceId: number) => Promise<void>
   onSendInvoice: (invoiceId: number, recipientEmail: string) => Promise<boolean>
+  // Postversand: markiert als gesendet, ohne zu mailen. `sentDate` ist das
+  // Aufgabedatum bei der Post (ISO), aus dem das Zahlungsziel läuft.
+  onMarkSentByPost: (invoiceId: number, sentDate: string) => Promise<boolean>
 }
 
-export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onUnmarkPaid, onArchive, onSendInvoice }: InvoicesTabProps) {
+export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onUnmarkPaid, onArchive, onSendInvoice, onMarkSentByPost }: InvoicesTabProps) {
   const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
+  const [confirmPostal, setConfirmPostal] = useState<ProjectInvoice | null>(null)
+  const [postalDate, setPostalDate] = useState('')
   // Generieren-Dialog: traegt das Bemerkungs-Feld und (ohne unterschriebenen
   // Rapport) den frueheren Bestaetigungs-Hinweis — ein Dialog statt zwei.
   const [showGenerate, setShowGenerate] = useState(false)
@@ -1077,6 +1082,21 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
     await onUnmarkPaid(confirmUnpay.id)
     setActing(false)
     setConfirmUnpay(null)
+  }
+
+  function openPostal(inv: ProjectInvoice) {
+    setPostalDate(todayISO())
+    setConfirmPostal(inv)
+  }
+
+  async function handlePostalConfirm() {
+    if (!confirmPostal || !postalDate) return
+    setActing(true)
+    const ok = await onMarkSentByPost(confirmPostal.id, postalDate)
+    setActing(false)
+    // Nur bei Erfolg schliessen — sonst wäre die Fehlermeldung des Backends
+    // (409 «kein PDF», 400 «Datum») weg, bevor sie jemand liest.
+    if (ok) setConfirmPostal(null)
   }
 
   function handleGenerateClick() {
@@ -1153,6 +1173,15 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                         >
                           Senden
                         </button>
+                        {/* Postversand nur, solange die Rechnung den Betrieb noch nicht
+                            verlassen hat, und nur mit vorliegendem PDF — genau die zwei
+                            Guards des Endpunkts. Ohne die Bedingungen wäre der Knopf
+                            sichtbar, aber jeder Klick ein 409. */}
+                        {(inv.status === 'ausstehend' || inv.status === 'offen') && (inv.storage_path || inv.pdf_url) && (
+                          <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openPostal(inv)}>
+                            Per Post versendet
+                          </button>
+                        )}
                         <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
                       </>
                     )}
@@ -1279,6 +1308,41 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
               <button className="admin-btn admin-btn-secondary" onClick={() => setSendInvoice(null)} disabled={sending}>Abbrechen</button>
               <button className="admin-btn admin-btn-primary" onClick={handleSend} disabled={!sendEmail || sending}>
                 {sending ? 'Wird gesendet…' : 'Rechnung senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog: Postversand — Wortlaut wie in der Rechnungsübersicht */}
+      {confirmPostal && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Als per Post versendet markieren?</div>
+            <div className="admin-confirm-text">
+              {confirmPostal.invoice_number} · {fmtCHF(confirmPostal.total_amount)}<br />
+              Es wird keine E-Mail verschickt. Die Rechnung gilt danach als gesendet und
+              läuft normal ins Mahnwesen — die Zahlungsfrist zählt ab dem Aufgabedatum.
+            </div>
+            <div style={{ margin: '12px 0' }}>
+              <label className="admin-form-label" htmlFor="proj-postal-sent-date">Aufgabedatum</label>
+              <input
+                id="proj-postal-sent-date"
+                className="admin-form-input"
+                type="date"
+                value={postalDate}
+                max={todayISO()}
+                onChange={e => setPostalDate(e.target.value)}
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPostal(null)} disabled={acting}>Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => void handlePostalConfirm()}
+                disabled={acting || !postalDate}
+              >
+                {acting ? 'Wird markiert…' : 'Als versendet markieren'}
               </button>
             </div>
           </div>
