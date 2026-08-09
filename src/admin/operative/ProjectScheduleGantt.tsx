@@ -6,7 +6,7 @@
 // Rasterlogik liegt in utils/ganttGrid.ts, gemeinsame Formatierung/Farben und das
 // Drag-Payload in scheduleShared.ts.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Project } from './ProjectsScreen'
 import {
   CalendarEntry, StaffLite,
@@ -40,7 +40,8 @@ interface Props {
   currentDate: Date
   // Anzahl sichtbarer Tage (1 / 3 / 5).
   span: number
-  // Breite einer Stunde in px (Zoom-Stufe).
+  // Breite einer Stunde in px (Zoom-Stufe). Wirkt als Mindestbreite — ist der
+  // Bildschirm breiter als das Raster, wird die Stunde bis zur vollen Breite gestreckt.
   hourWidth: number
   onSelect: (p: Project) => void
   // Doppelklick auf einen Balken: springt in die Projektmaske (siehe Kalender-Props).
@@ -67,6 +68,23 @@ export default function ProjectScheduleGantt({
   const days = ganttDays(currentDate, span)
   const staffIds = new Set(staff.map(s => s.id))
 
+  // Breite des Scroll-Containers beobachten: ist der Bildschirm breiter als das
+  // Raster in der gewählten Zoom-Stufe, bliebe zwischen Achse und %-Spalte tote
+  // weisse Fläche — stattdessen wird die Stunde gestreckt, bis die Achse die
+  // volle Breite füllt. Die Zoom-Stufe wirkt damit als Mindestbreite.
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollW, setScrollW] = useState(0)
+  useEffect(() => {
+    const el = scrollRef.current
+    // jsdom (Tests) kennt keinen ResizeObserver — dann bleibt es bei der Zoom-Stufe.
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const update = () => setScrollW(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   // Einträge einer Zeile an einem Tag. rowId null = «Ohne Monteur».
   function cellEntries(rowId: string | null, day: Date): CalendarEntry[] {
     return projects
@@ -86,7 +104,12 @@ export default function ProjectScheduleGantt({
   const { startHour, endHour } = computeWeekHours(visibleTimed)
   const hours: number[] = []
   for (let h = startHour; h < endHour; h++) hours.push(h)
-  const dayW = dayWidthPx(startHour, endHour, hourWidth)
+  // Effektive Stundenbreite: Zoom-Stufe, oder mehr, wenn Platz da ist (Stretch).
+  // Abrunden auf 1/100 px, damit die Achse nie um Subpixel überläuft und einen
+  // unnötigen Scrollbalken erzeugt.
+  const fillHourW = (scrollW - NAME_COL_W - UTIL_COL_W) / (days.length * (endHour - startHour))
+  const hourW = Math.max(hourWidth, Math.floor(fillHourW * 100) / 100 || 0)
+  const dayW = dayWidthPx(startHour, endHour, hourW)
   const axisW = dayW * days.length
   // Positionen ausserhalb der Achse auf den sichtbaren Bereich ziehen, sonst
   // landet ein Drop rechts des letzten Tages rechnerisch wieder am Tagesanfang.
@@ -95,10 +118,10 @@ export default function ProjectScheduleGantt({
   // Ausgrau-Fenster (Nicht-Arbeitszeit) je Werktag, auf das Raster begrenzt.
   const HHMM = /^\d{2}:\d{2}$/
   const greyLeft = greyAfter && HHMM.test(greyAfter)
-    ? Math.max(0, Math.min(dayW, timeOffsetX(greyAfter, startHour, hourWidth)))
+    ? Math.max(0, Math.min(dayW, timeOffsetX(greyAfter, startHour, hourW)))
     : null
   const greyRight = greyUntil && HHMM.test(greyUntil)
-    ? Math.max(0, Math.min(dayW, timeOffsetX(greyUntil, startHour, hourWidth)))
+    ? Math.max(0, Math.min(dayW, timeOffsetX(greyUntil, startHour, hourW)))
     : dayW
 
   // Kapazität des sichtbaren Zeitraums: nur Werktage ohne Feiertag zählen —
@@ -120,11 +143,11 @@ export default function ProjectScheduleGantt({
     const rect = e.currentTarget.getBoundingClientRect()
     // Der Balken soll dort landen, wo sein Anfang hingehört — nicht der Cursor.
     const x = clampX(e.clientX - rect.left - payload.grabOffset)
-    const dayIndex = xToDayIndex(x, days.length, startHour, endHour, hourWidth)
+    const dayIndex = xToDayIndex(x, days.length, startHour, endHour, hourW)
     const delta = diffDays(payload.grabDayISO, toDateStr(days[dayIndex]))
     // Ganztägige Einsätze bleiben ganztägig — sie haben keine Uhrzeit, die das
     // Raster sinnvoll setzen könnte.
-    const time = proj.start_time ? xToSnappedTime(x, startHour, endHour, hourWidth) : undefined
+    const time = proj.start_time ? xToSnappedTime(x, startHour, endHour, hourW) : undefined
 
     const srcRow = payload.sourceRowId || null
     // Zeilenwechsel = Umzuweisung: Quell-Monteur raus, Ziel-Monteur rein.
@@ -144,12 +167,12 @@ export default function ProjectScheduleGantt({
     if (!onCreateSlot || e.target !== e.currentTarget) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = clampX(e.clientX - rect.left)
-    const dayIndex = xToDayIndex(x, days.length, startHour, endHour, hourWidth)
-    const startTime = xToSnappedTime(x, startHour, endHour, hourWidth)
+    const dayIndex = xToDayIndex(x, days.length, startHour, endHour, hourW)
+    const startTime = xToSnappedTime(x, startHour, endHour, hourW)
     // Endzeit eine Stunde später — im selben Tag, damit sie nicht in die
     // Anfangszeit des Folgetages kippt.
     const endTime = xToSnappedTime(
-      Math.min(x + hourWidth, (dayIndex + 1) * dayW - 1), startHour, endHour, hourWidth,
+      Math.min(x + hourW, (dayIndex + 1) * dayW - 1), startHour, endHour, hourW,
     )
     onCreateSlot(toDateStr(days[dayIndex]), startTime, endTime, rowId)
   }
@@ -160,7 +183,7 @@ export default function ProjectScheduleGantt({
     const allDay = !p.start_time
     const geo = allDay
       ? { leftPx: dayIndex * dayW, widthPx: dayW }
-      : barMetrics(p, dayIndex, startHour, endHour, hourWidth)
+      : barMetrics(p, dayIndex, startHour, endHour, hourW)
     // Auf einem schmalen Balken hat nur eines von beiden Platz — dann gewinnt der
     // Name: die Uhrzeit steht ohnehin in der Position auf der Achse (und in der
     // Hover-Karte). Eine halb abgeschnittene Uhrzeit wäre schlechter als keine.
@@ -272,7 +295,7 @@ export default function ProjectScheduleGantt({
                   <div
                     key={h}
                     className="project-cal-gantt-hour-line"
-                    style={{ left: (h - startHour) * hourWidth }}
+                    style={{ left: (h - startHour) * hourW }}
                   />
                 ))}
               </div>
@@ -304,7 +327,7 @@ export default function ProjectScheduleGantt({
 
   return (
     <div className="project-cal-gantt">
-      <div className="project-cal-gantt-scroll">
+      <div className="project-cal-gantt-scroll" ref={scrollRef}>
         {/* minWidth statt width: passt die Achse auf den Bildschirm, bleibt sie
             trotzdem über die volle Breite und das Auslastungs-Badge rechts. */}
         <div className="project-cal-gantt-inner" style={{ minWidth: NAME_COL_W + axisW + UTIL_COL_W }}>
@@ -328,7 +351,7 @@ export default function ProjectScheduleGantt({
                         <span
                           key={h}
                           className="project-cal-gantt-hour-label"
-                          style={{ left: (h - startHour) * hourWidth, width: hourWidth }}
+                          style={{ left: (h - startHour) * hourW, width: hourW }}
                         >
                           {String(h).padStart(2, '0')}
                         </span>

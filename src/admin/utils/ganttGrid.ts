@@ -26,7 +26,7 @@ export const GANTT_ZOOM_DEFAULT = 2
 // Wählbare Anzahl Tage auf der Achse (wie im Screenshot: Tag / 3 Tage / 5 Tage).
 export const GANTT_SPANS = [1, 3, 5] as const
 export const GANTT_SPAN_LABELS: Record<number, string> = { 1: 'Tag', 3: '3 Tage', 5: '5 Tage' }
-export const GANTT_SPAN_DEFAULT = 1
+export const GANTT_SPAN_DEFAULT = 5
 
 export function ganttDays(start: Date, span: number): Date[] {
   const out: Date[] = []

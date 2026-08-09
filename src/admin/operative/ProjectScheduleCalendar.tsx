@@ -879,6 +879,9 @@ function AgendaView({
 // sonst räumt der Schema-Wechsel sie als Legacy-Müll weg.
 const ZOOM_KEY = 'schedule-week-zoom'
 const GANTT_ZOOM_KEY = 'schedule-gantt-zoom'
+// Sichtbarer Zeitraum des Tagesplans (1 / 3 / 5 Tage) — gleiche Logik wie der
+// Zoom: reine Anzeige-Vorliebe pro Browser, defensiv geparst.
+const GANTT_SPAN_KEY = 'schedule-gantt-span'
 
 function readStoredLevel(key: string, count: number, fallback: number): number {
   try {
@@ -896,6 +899,16 @@ function readZoom(): number {
 
 function readGanttZoom(): number {
   return readStoredLevel(GANTT_ZOOM_KEY, GANTT_ZOOM_LEVELS.length, GANTT_ZOOM_DEFAULT)
+}
+
+function readGanttSpan(): number {
+  try {
+    const raw = window.localStorage.getItem(GANTT_SPAN_KEY)
+    const n = raw === null ? NaN : parseInt(raw, 10)
+    return (GANTT_SPANS as readonly number[]).includes(n) ? n : GANTT_SPAN_DEFAULT
+  } catch {
+    return GANTT_SPAN_DEFAULT
+  }
 }
 
 export default function ProjectScheduleCalendar({
@@ -921,8 +934,8 @@ export default function ProjectScheduleCalendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [zoom, setZoom] = useState(readZoom)
   const [ganttZoom, setGanttZoom] = useState(readGanttZoom)
-  // Sichtbare Tage im Tagesplan (1 / 3 / 5).
-  const [ganttSpan, setGanttSpan] = useState<number>(GANTT_SPAN_DEFAULT)
+  // Sichtbare Tage im Tagesplan (1 / 3 / 5), pro Browser gemerkt.
+  const [ganttSpan, setGanttSpan] = useState<number>(readGanttSpan)
   const [hiddenStaff, setHiddenStaff] = useState<Set<string>>(new Set())
 
   // Zoom-Stufe der gerade aktiven Ansicht: Wochenraster = Zeilenhöhe,
@@ -1174,7 +1187,11 @@ export default function ProjectScheduleCalendar({
                     key={s}
                     type="button"
                     className={`admin-btn admin-btn-sm ${ganttSpan === s ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                    onClick={() => setGanttSpan(s)}
+                    onClick={() => {
+                      setGanttSpan(s)
+                      // Private-Mode / voller Storage darf die Auswahl nicht blockieren.
+                      try { window.localStorage.setItem(GANTT_SPAN_KEY, String(s)) } catch { /* egal */ }
+                    }}
                   >{GANTT_SPAN_LABELS[s]}</button>
                 ))}
               </div>

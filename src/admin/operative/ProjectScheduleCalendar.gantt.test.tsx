@@ -83,6 +83,9 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(DAY)
   localStorage.clear()
+  // Standard-Zeitraum ist 5 Tage — die Geometrie- und Auslastungs-Tests rechnen
+  // aber mit einem einzelnen Tag. Der eigene Default-Test entfernt den Key wieder.
+  localStorage.setItem('schedule-gantt-span', '1')
 })
 
 describe('Tagesplan (Gantt)', () => {
@@ -202,9 +205,17 @@ describe('Tagesplan (Gantt)', () => {
 
     await user.click(screen.getByRole('button', { name: '3 Tage' }))
     expect(container.querySelectorAll('.project-cal-gantt-day-head')).toHaveLength(3)
+    // Der gewählte Zeitraum überlebt den Reload (localStorage).
+    expect(localStorage.getItem('schedule-gantt-span')).toBe('3')
     // Weiter geht es jetzt in Drei-Tages-Schritten.
     await user.click(screen.getByRole('button', { name: '→' }))
     expect(screen.getByText(/10\.08\. – .*12\.08\.2026/)).toBeInTheDocument()
+  })
+
+  it('startet ohne gemerkten Zeitraum mit 5 Tagen', () => {
+    localStorage.removeItem('schedule-gantt-span')
+    const { container } = renderGantt({ entries: [] })
+    expect(container.querySelectorAll('.project-cal-gantt-day-head')).toHaveLength(5)
   })
 
   it('merkt sich die Stundenbreite im localStorage', async () => {

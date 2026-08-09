@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 18
+export const APP_DATA_VERSION = 19
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -30,6 +30,7 @@ function isKnownKey(k: string): boolean {
   if (k === 'helpbubble-pos') return true  // gemerkte Drag-Position der Hilfe-Blase
   if (k === 'schedule-week-zoom') return true  // Zoom-Stufe des Wochen-Zeitrasters
   if (k === 'schedule-gantt-zoom') return true  // Zoom-Stufe des Tagesplans (Gantt)
+  if (k === 'schedule-gantt-span') return true  // Sichtbarer Zeitraum des Tagesplans (1/3/5 Tage)
   // Infrastruktur
   if (k === STORAGE_VERSION_KEY) return true
   if (k === 'app_build_id') return true
@@ -267,7 +268,19 @@ const migration_17_to_18: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17, migration_17_to_18]
+// v18 → v19: Neuer localStorage-Key `schedule-gantt-span` für den sichtbaren
+// Zeitraum des Tagesplans (1/3/5 Tage). Wie beim Gantt-Zoom rein additiv und
+// defensiv geparst (Default 5 Tage bei fehlend/korrupt) — kein Wipe nötig.
+// No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_18_to_19: Migration = {
+  from: 18,
+  to: 19,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17, migration_17_to_18, migration_18_to_19]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)
