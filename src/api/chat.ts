@@ -27,6 +27,8 @@ export interface ChatResponse {
     date: string
     staff: { name: string; hours: number }[]
     items: SummaryItem[]
+    // Vorauswahl der Leistungsart-Chips (aus dem Projekt geerbt).
+    art_der_arbeit?: string[]
   }
 }
 
@@ -104,6 +106,9 @@ export interface ConfirmExtras {
   // Vor dem Speichern im Chat gesammelte Zusatz-Positionen.
   kleinmaterial?: { amount_chf: number | null; count: number; scope: string } | null
   ersatzteile?: { art_nr: string; amount: number }[]
+  // Angekreuzte Leistungsart (reports.art_der_arbeit). undefined = nichts gesagt,
+  // dann bleibt die Vorbelegung aus dem Projekt stehen; [] heisst "keine".
+  art_der_arbeit?: string[]
 }
 
 export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatResponse> {
@@ -112,6 +117,7 @@ export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatRes
     body: JSON.stringify({
       kleinmaterial: extras.kleinmaterial ?? null,
       ersatzteile: extras.ersatzteile ?? [],
+      art_der_arbeit: extras.art_der_arbeit ?? null,
     }),
   }) as Promise<ChatResponse>
 }

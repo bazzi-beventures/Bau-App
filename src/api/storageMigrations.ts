@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 17
+export const APP_DATA_VERSION = 18
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -253,7 +253,21 @@ const migration_16_to_17: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17]
+// v17 → v18: RapportDraft bekommt den Leistungsart-Zwischenschritt
+// (`workTypesCollected`, `collectedWorkTypes`, `suggestedWorkTypes`) — der Monteur
+// kreuzt vor dem Speichern an, was er gemacht hat (reports.art_der_arbeit,
+// Migration 20260809). Rein additiv, alle drei Felder optional mit Fallback: ein
+// Draft aus der Vorversion beginnt den Schritt neu, das ist ein Klick, kein
+// Datenverlust. No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_17_to_18: Migration = {
+  from: 17,
+  to: 18,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17, migration_17_to_18]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)

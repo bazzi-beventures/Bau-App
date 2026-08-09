@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, apiUrl } from '../../api/client'
 import { INVOICE_STATUS_LABELS as STATUS_LABELS, INVOICE_STATUS_BADGE as STATUS_BADGE } from '../constants/statuses'
-import { fmtCHF, fmtDate } from '../utils/format'
+import { fmtCHF, fmtDate, todayISO } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
@@ -71,6 +71,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
   const [confirmUnpay, setConfirmUnpay] = useState<Invoice | null>(null)
   const [confirmArchive, setConfirmArchive] = useState<Invoice | null>(null)
+  // Postversand: Rechnung als versendet markieren, ohne sie zu mailen.
+  const [confirmPostal, setConfirmPostal] = useState<Invoice | null>(null)
+  const [postalDate, setPostalDate] = useState('')
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   // Generate invoice
   const [showGenerate, setShowGenerate] = useState(false)
@@ -257,6 +260,29 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     }
   }
 
+  function openPostal(inv: Invoice) {
+    setPostalDate(todayISO())
+    setConfirmPostal(inv)
+  }
+
+  async function handleMarkSentByPost(id: number) {
+    setActing(id)
+    try {
+      await apiFetch(`/pwa/admin/invoices/${id}/mark-sent`, {
+        method: 'POST',
+        body: JSON.stringify({ sent_date: postalDate }),
+      })
+      showToast('Rechnung als per Post versendet markiert', 'success')
+      setConfirmPostal(null)
+      load()
+      onBadgeChange?.()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler', 'error')
+    } finally {
+      setActing(null)
+    }
+  }
+
   async function handleUnmarkPaid(id: number) {
     setActing(id)
     try {
@@ -348,9 +374,14 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                     </a>
                   )}
                   {(inv.status === 'ausstehend' || inv.status === 'offen') && (
-                    <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openSendInvoice(inv)} disabled={acting === inv.id}>
-                      Senden
-                    </button>
+                    <>
+                      <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => openSendInvoice(inv)} disabled={acting === inv.id}>
+                        Senden
+                      </button>
+                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => openPostal(inv)} disabled={acting === inv.id}>
+                        Per Post versendet
+                      </button>
+                    </>
                   )}
                   {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                     <>
@@ -412,13 +443,22 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                         </a>
                       )}
                       {(inv.status === 'ausstehend' || inv.status === 'offen') && (
-                        <button
-                          className="admin-btn admin-btn-primary admin-btn-sm"
-                          onClick={() => openSendInvoice(inv)}
-                          disabled={acting === inv.id}
-                        >
-                          Senden
-                        </button>
+                        <>
+                          <button
+                            className="admin-btn admin-btn-primary admin-btn-sm"
+                            onClick={() => openSendInvoice(inv)}
+                            disabled={acting === inv.id}
+                          >
+                            Senden
+                          </button>
+                          <button
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            onClick={() => openPostal(inv)}
+                            disabled={acting === inv.id}
+                          >
+                            Per Post versendet
+                          </button>
+                        </>
                       )}
                       {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                         <>
@@ -473,6 +513,42 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 disabled={acting === confirmPaid.id}
               >
                 {acting === confirmPaid.id ? '…' : 'Ja, bezahlt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bestätigungsdialog Postversand */}
+      {confirmPostal && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box">
+            <div className="admin-confirm-title">Als per Post versendet markieren?</div>
+            <div className="admin-confirm-text">
+              {confirmPostal.invoice_number} · {fmtCHF(confirmPostal.total_amount)}<br />
+              Projekt: {confirmPostal.project_name}<br />
+              Es wird keine E-Mail verschickt. Die Rechnung gilt danach als gesendet und
+              läuft normal ins Mahnwesen — die Zahlungsfrist zählt ab dem Aufgabedatum.
+            </div>
+            <div style={{ margin: '12px 0' }}>
+              <label className="admin-form-label" htmlFor="postal-sent-date">Aufgabedatum</label>
+              <input
+                id="postal-sent-date"
+                className="admin-form-input"
+                type="date"
+                value={postalDate}
+                max={todayISO()}
+                onChange={e => setPostalDate(e.target.value)}
+              />
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPostal(null)}>Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => handleMarkSentByPost(confirmPostal.id)}
+                disabled={acting === confirmPostal.id || !postalDate}
+              >
+                {acting === confirmPostal.id ? '…' : 'Als versendet markieren'}
               </button>
             </div>
           </div>

@@ -36,6 +36,12 @@ export interface RapportDraftState {
   // nach der Unterschrift ist er abgenommen. Fehlt im Draft (ältere Version),
   // gilt "nicht unterschrieben"; der Server prüft es ohnehin selbst nach.
   reportSigned?: boolean
+  // Leistungsart-Zwischenschritt (reports.art_der_arbeit). Alle drei optional:
+  // ein Draft aus einer älteren App-Version hat sie nicht, dann beginnt der Schritt
+  // wieder von vorn — das ist ein Klick, kein Datenverlust.
+  workTypesCollected?: boolean
+  collectedWorkTypes?: string[]
+  suggestedWorkTypes?: string[]
 }
 
 interface StoredDraft extends RapportDraftState {

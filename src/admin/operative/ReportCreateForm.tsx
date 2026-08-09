@@ -32,7 +32,24 @@ export interface ReportFormProject {
   // trägt seinen eigenen Wert (reports.is_warranty) — bei einem Serviceeinsatz kann
   // ein Teil Garantie sein und der Rest nicht.
   is_warranty?: boolean | null
+  // Leistungsart-Vermutung des Projekts (projects.art_der_arbeit, Mehrfachauswahl):
+  // belegt die Ankreuzleiste vor, genau wie auf dem gedruckten Blatt. Der Rapport
+  // trägt danach seinen eigenen Wert (reports.art_der_arbeit) — auf einem
+  // Neumontage-Projekt ist der dritte Einsatz eben eine Reparatur.
+  art_der_arbeit?: string[] | null
 }
+
+// Kanonische Leistungsarten. Werte = CHECK-Constraint von reports.art_der_arbeit
+// (Migration 20260809) und Spiegel von db.projects.WORK_TYPES; Labels wie auf dem
+// gedruckten Rapportblatt (services/paper_rapport.WORK_TYPES).
+export const WORK_TYPES: { value: string; label: string }[] = [
+  { value: 'Neumontage', label: 'Neumontage' },
+  { value: 'Wiedermontage', label: 'Wiedermontage' },
+  { value: 'Umbau', label: 'Umbau/Ersatz' },
+  { value: 'Reparatur', label: 'Reparatur' },
+  { value: 'Wartung', label: 'Service/Wartung' },
+  { value: 'Demontage', label: 'Demontage' },
+]
 
 export interface ReportFormStaff {
   id: string
@@ -167,6 +184,17 @@ export function ReportCreateForm({
   const [beratung, setBeratung] = useState(false)
   // Garantie je Einsatz. Vorbelegt aus dem Projekt, aber eigenständig korrigierbar.
   const [isWarranty, setIsWarranty] = useState(!!project.is_warranty)
+  // Leistungsart je Einsatz. Vorbelegt aus dem Projekt (nur kanonische Werte — im
+  // Bestand stehen dort teils Alt-Werte, die das Backend nicht annimmt).
+  const [artDerArbeit, setArtDerArbeit] = useState<string[]>(
+    () => WORK_TYPES.map(w => w.value).filter(v => (project.art_der_arbeit ?? []).includes(v))
+  )
+
+  function toggleWorkType(value: string) {
+    setArtDerArbeit(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
   // Einbauort je Materialzeile ist tenant-spezifisch (Flag `material_standort`).
   const [locationEnabled, setLocationEnabled] = useState(false)
   // Material ist optional: standardmässig keine Zeile. Der Katalog wird erst geladen,
@@ -469,6 +497,7 @@ export function ReportCreateForm({
         massaufnahme: boolean
         beratung: boolean
         is_warranty: boolean
+        art_der_arbeit: string[]
         materials?: { art_nr: string; amount: number; location?: string }[]
         kleinmaterial?: { item_name: string; count: number; amount_chf: number }
         fixed_materials?: { item_name: string; amount: number; unit: string; unit_price: number }[]
@@ -484,6 +513,9 @@ export function ReportCreateForm({
         // Wer das Häkchen bewusst entfernt, meint «dieser Einsatz ist verrechenbar»
         // — auch in einem Garantie-Projekt.
         is_warranty: isWarranty,
+        // Wie is_warranty immer mitschicken: das Backend erbt nur beim fehlenden
+        // Feld vom Projekt. Eine leer geräumte Leiste ist eine Aussage.
+        art_der_arbeit: artDerArbeit,
       }
       if (materialItems.length > 0) payload.materials = materialItems
       if (fixedMaterials.length > 0) payload.fixed_materials = fixedMaterials
@@ -551,6 +583,28 @@ export function ReportCreateForm({
           onChange={e => setReportDate(e.target.value)}
         />
       </div>
+
+      {/* Leistungsart — die obere Ankreuzleiste des gedruckten Blattes. Bis zur
+          Migration 20260809 gab es dafür kein Feld: was der Monteur angekreuzt hatte,
+          blieb beim Abtippen auf dem Papier. */}
+      <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+        <legend style={{ fontWeight: 600, padding: '0 8px' }}>
+          Leistungsart
+          <InfoHint text="Was bei diesem Einsatz gemacht wurde — Mehrfachauswahl, wie auf dem Rapportblatt. Aus dem Projekt vorbelegt und hier korrigierbar: auf einem Neumontage-Projekt kann ein einzelner Einsatz eine Reparatur sein. Die Angabe ist dokumentarisch und ändert die Verrechnung nicht." />
+        </legend>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 14 }}>
+          {WORK_TYPES.map(w => (
+            <label key={w.value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={artDerArbeit.includes(w.value)}
+                onChange={() => toggleWorkType(w.value)}
+              />
+              {w.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       {/* Einsatzart + Verrechnung. Die drei Angaben konnte bis 2026-08-05 nur der
           Chat-Pfad setzen; das Papierformular hält sie fest, hier werden sie erfasst. */}

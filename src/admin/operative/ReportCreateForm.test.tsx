@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   ReportCreateForm, materialUnitPrice, materialLineTotal, materialRowsTotal, fixedRowsTotal,
@@ -253,6 +253,7 @@ describe('ReportCreateForm', () => {
       massaufnahme: false,
       beratung: false,
       is_warranty: false,
+      art_der_arbeit: [],
     })
     await waitFor(() => expect(onDone).toHaveBeenCalled())
   })
@@ -443,8 +444,8 @@ describe('ReportCreateForm', () => {
     expect(body).not.toHaveProperty('kleinmaterial')
     expect(body).not.toHaveProperty('materials')
     // Exakt die Grundform: Material-/Kleinmaterial-Keys entfallen, die
-    // Einsatzart-Flags sind immer dabei (das Backend erbt die Garantie sonst
-    // stillschweigend vom Projekt).
+    // Einsatzart-Flags und die Leistungsart sind immer dabei (das Backend erbt sie
+    // sonst stillschweigend vom Projekt).
     expect(body).toEqual({
       report_date: expect.any(String),
       description: 'Arbeiten gemäss Offerte OFF-2026-014',
@@ -452,6 +453,7 @@ describe('ReportCreateForm', () => {
       massaufnahme: false,
       beratung: false,
       is_warranty: false,
+      art_der_arbeit: [],
     })
   })
 
@@ -906,6 +908,81 @@ describe('ReportCreateForm', () => {
 
     await waitFor(() => expect(postFired()).toBe(true))
     expect(lastPostBody().is_warranty).toBe(false)
+  })
+
+  it('belegt die Leistungsart aus dem Projekt vor und sendet sie mit', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(), { ...PROJECT, art_der_arbeit: ['Neumontage'] })
+
+    expect(screen.getByLabelText('Neumontage')).toBeChecked()
+    expect(screen.getByLabelText('Reparatur')).not.toBeChecked()
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().art_der_arbeit).toEqual(['Neumontage'])
+  })
+
+  it('erlaubt eine vom Projekt abweichende Leistungsart', async () => {
+    // Der eigentliche Zweck: auf einem Neumontage-Projekt ist dieser Einsatz eine
+    // Reparatur. Bis zur Migration 20260809 gab es dafür kein Feld.
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(), { ...PROJECT, art_der_arbeit: ['Neumontage'] })
+
+    await user.click(screen.getByLabelText('Neumontage'))   // abwählen
+    await user.click(screen.getByLabelText('Reparatur'))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().art_der_arbeit).toEqual(['Reparatur'])
+  })
+
+  it('sendet eine leer geräumte Leistungsart als leere Liste', async () => {
+    // Leer ist eine Aussage — sonst erbte das Backend wieder vom Projekt.
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(), { ...PROJECT, art_der_arbeit: ['Neumontage'] })
+
+    await user.click(screen.getByLabelText('Neumontage'))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().art_der_arbeit).toEqual([])
+  })
+
+  it('ignoriert nicht-kanonische Alt-Werte des Projekts bei der Vorbelegung', async () => {
+    // «Garantiefall» war vor Migration 20260419 eine Leistungsart; das Backend
+    // nimmt den Wert nicht mehr an, die Leiste darf ihn also nicht anbieten.
+    // (Das gleichnamige Häkchen der Einsatzart-Leiste ist etwas anderes — deshalb
+    // innerhalb des Leistungsart-Fieldsets suchen.)
+    const user = userEvent.setup()
+    renderForm([makeQuote()], vi.fn(), vi.fn(),
+      { ...PROJECT, art_der_arbeit: ['Garantiefall', 'Reparatur'] })
+
+    const leistungsart = within(screen.getByRole('group', { name: /^Leistungsart/ }))
+    expect(leistungsart.getByLabelText('Reparatur')).toBeChecked()
+    expect(leistungsart.queryByLabelText('Garantiefall')).toBeNull()
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().art_der_arbeit).toEqual(['Reparatur'])
+  })
+
+  it('bietet alle sechs Leistungsarten an', async () => {
+    renderForm([makeQuote()])
+
+    for (const label of ['Neumontage', 'Wiedermontage', 'Umbau/Ersatz', 'Reparatur',
+                         'Service/Wartung', 'Demontage']) {
+      expect(screen.getByLabelText(label)).not.toBeChecked()
+    }
   })
 
   it('zeigt das Einbauort-Feld nur mit Feature-Flag', async () => {

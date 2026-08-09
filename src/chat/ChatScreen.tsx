@@ -8,6 +8,7 @@ import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
 import KleinmaterialPrompt, { KleinmaterialSelection } from './KleinmaterialPrompt'
 import ErsatzteilPrompt, { ErsatzteilSelection } from './ErsatzteilPrompt'
+import LeistungsartPrompt from './LeistungsartPrompt'
 import { loadDraft, saveDraft } from './rapportDraft'
 
 interface Message {
@@ -68,6 +69,11 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const draft = draftRef.current
 
   // Vor dem Speichern gesammelte Zusatz-Positionen (werden beim Bestätigen mitgebucht).
+  // Leistungsart (reports.art_der_arbeit): erster Schritt vor dem Speichern.
+  const [workTypesCollected, setWorkTypesCollected] = useState(() => draft?.workTypesCollected ?? false)
+  const [collectedWorkTypes, setCollectedWorkTypes] = useState<string[]>(() => draft?.collectedWorkTypes ?? [])
+  // Vorauswahl aus dem Projekt (kommt mit der Zusammenfassung vom Backend).
+  const [suggestedWorkTypes, setSuggestedWorkTypes] = useState<string[]>(() => draft?.suggestedWorkTypes ?? [])
   const [kleinCollected, setKleinCollected] = useState(() => draft?.kleinCollected ?? false)
   const [ersatzCollected, setErsatzCollected] = useState(() => draft?.ersatzCollected ?? false)
   const [collectedKlein, setCollectedKlein] = useState<KleinmaterialSelection | null>(() => draft?.collectedKlein ?? null)
@@ -96,10 +102,12 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
       summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId, reportSigned,
+      workTypesCollected, collectedWorkTypes, suggestedWorkTypes,
     }, Date.now())
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
       collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
-      pendingSignReportId, downloadReportId, reportSigned])
+      pendingSignReportId, downloadReportId, reportSigned,
+      workTypesCollected, collectedWorkTypes, suggestedWorkTypes])
 
   // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
   // zurücksetzen — das löscht zugleich den Draft, weil der Zustand wieder leer ist.
@@ -109,6 +117,9 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     setErsatzCollected(false)
     setCollectedKlein(null)
     setCollectedErsatz([])
+    setWorkTypesCollected(false)
+    setCollectedWorkTypes([])
+    setSuggestedWorkTypes([])
     setSummaryItems([])
     setPendingConfirm(false)
     setPendingDisambiguation(false)
@@ -169,11 +180,14 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingQuoteQuestion(false)
       // Hauptmaterialien der Zusammenfassung merken (für die Gesamt-Übersicht)
       setSummaryItems(res.pending_summary?.items ?? [])
-      // Neue Bestätigung → Zusatz-Material-Schritte zurücksetzen
+      // Neue Bestätigung → Zwischenschritte zurücksetzen
       setKleinCollected(false)
       setErsatzCollected(false)
       setCollectedKlein(null)
       setCollectedErsatz([])
+      setWorkTypesCollected(false)
+      setCollectedWorkTypes([])
+      setSuggestedWorkTypes(res.pending_summary?.art_der_arbeit ?? [])
     } else if (res.action_taken === 'disambiguate') {
       setPendingDisambiguation(true)
       setPendingConfirm(false)
@@ -290,6 +304,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       const res = await confirmReport({
         kleinmaterial: collectedKlein,
         ersatzteile: collectedErsatz.map(it => ({ art_nr: it.art_nr, amount: it.amount })),
+        art_der_arbeit: collectedWorkTypes,
       })
       addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
       handleActionState(res)
@@ -359,9 +374,14 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     : null
 
   // Vor dem Speichern: erst Klein-, dann Ersatzteil-Schritt, dann Speichern-Button.
-  const kleinStepPending = pendingConfirm && kleinmaterialEnabled && !!kleinmaterialCfg && !kleinCollected
-  const ersatzStepPending = pendingConfirm && !kleinStepPending && ersatzteilEnabled && !ersatzCollected
-  const confirmReady = pendingConfirm && !kleinStepPending && !ersatzStepPending
+  // Reihenfolge der Zwischenschritte: Leistungsart → Kleinmaterial → Ersatzteile.
+  // Die Leistungsart steht zuerst, weil sie den Einsatz beschreibt; Material ist Detail.
+  const workTypeStepPending = pendingConfirm && !workTypesCollected
+  const kleinStepPending = pendingConfirm && !workTypeStepPending
+    && kleinmaterialEnabled && !!kleinmaterialCfg && !kleinCollected
+  const ersatzStepPending = pendingConfirm && !workTypeStepPending && !kleinStepPending
+    && ersatzteilEnabled && !ersatzCollected
+  const confirmReady = pendingConfirm && !workTypeStepPending && !kleinStepPending && !ersatzStepPending
   const hasExtras = !!collectedKlein?.amount_chf || collectedErsatz.length > 0
 
   return (
@@ -439,6 +459,14 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
               Nein, normaler Flow
             </button>
           </div>
+        )}
+
+        {/* Vor dem Speichern: Leistungsart ankreuzen (immer, kein Feature-Flag) */}
+        {workTypeStepPending && !loading && (
+          <LeistungsartPrompt
+            initial={suggestedWorkTypes}
+            onSubmit={(sel) => { setCollectedWorkTypes(sel); setWorkTypesCollected(true) }}
+          />
         )}
 
         {/* Vor dem Speichern: Klein-/Schmiermaterial-Schritt (Feature aktiv) */}

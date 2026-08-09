@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtCHF, fmtDate } from './format'
+import { fmtCHF, fmtDate, todayISO } from './format'
 
 describe('fmtCHF', () => {
   it('zeigt immer genau zwei Dezimalstellen', () => {
@@ -41,5 +41,23 @@ describe('fmtDate', () => {
 
   it('formatiert auch volle ISO-Timestamps', () => {
     expect(fmtDate('2026-01-09T10:30:00Z')).toBe('09.01.2026')
+  })
+})
+
+describe('todayISO', () => {
+  it('liefert JJJJ-MM-TT mit führenden Nullen', () => {
+    expect(todayISO(new Date(2026, 0, 5, 12, 0))).toBe('2026-01-05')
+    expect(todayISO(new Date(2026, 11, 31, 12, 0))).toBe('2026-12-31')
+  })
+
+  it('nimmt das LOKALE Datum, nicht das UTC-Datum', () => {
+    // 00:30 Ortszeit ist in der Schweiz noch der Vortag in UTC — toISOString() würde
+    // hier den 8. liefern und ein Aufgabedatum stillschweigend einen Tag zurücksetzen.
+    expect(todayISO(new Date(2026, 7, 9, 0, 30))).toBe('2026-08-09')
+  })
+
+  it('ohne Argument das heutige Datum', () => {
+    const now = new Date()
+    expect(todayISO()).toBe(todayISO(now))
   })
 })
