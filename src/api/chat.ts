@@ -15,9 +15,20 @@ export interface SummaryItem {
   art_nr?: string
 }
 
+/**
+ * Maschinenlesbares Ergebnis einer Zeit-Aktion — für die Offline-Queue, die den
+ * deutschen Antworttext nicht parsen soll. Siehe services/pwa_timekeeping.py.
+ *   applied  — hat gewirkt                        → aus der Queue entfernen
+ *   noop     — Zustand war schon so (Doppel-Tap)  → aus der Queue entfernen
+ *   rejected — dauerhaft nicht anwendbar          → Queue anhalten, Korrekturantrag
+ *   retry    — vorübergehender Fehler             → Queue anhalten, später erneut
+ */
+export type ZeitOutcome = 'applied' | 'noop' | 'rejected' | 'retry'
+
 export interface ChatResponse {
   reply: string
   action_taken: string | null
+  outcome?: ZeitOutcome
   transcription?: string
   report_id?: number | string
   correction_id?: string

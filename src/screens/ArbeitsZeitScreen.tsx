@@ -1,30 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
 import { ApiError, isNetworkError, isOfflineError } from '../api/client'
+import { drainActions, isQueueStuck, loadQueue, saveQueue } from '../api/zeitQueue'
 import { BerichtType } from './BerichtScreen'
-
-const OFFLINE_QUEUE_KEY = 'zeit_offline_queue'
-
-// Nach so vielen fehlgeschlagenen Drain-Versuchen gilt die Queue als verklemmt.
-// Schützt vor dem Bevenetures-Szenario: alte SW-Installation hängt auf alter
-// Origin, Backend blockt sie per CORS, Browser ist online, jede Drain-Runde
-// scheitert — ohne Cap würde die Queue ewig wachsen und der User würde es nie
-// bemerken.
-const MAX_DRAIN_ATTEMPTS = 10
-
-interface QueuedAction {
-  action: ZeitAction
-  recorded_at: string
-  attempts?: number
-}
-
-function loadQueue(): QueuedAction[] {
-  try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]') } catch { return [] }
-}
-
-function saveQueue(q: QueuedAction[]) {
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q))
-}
 
 interface Props {
   displayName: string
@@ -115,9 +93,7 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
   const [reportLoading] = useState(false)
   const [queueSize, setQueueSize] = useState(() => loadQueue().length)
   const [draining, setDraining] = useState(false)
-  const [queueStuck, setQueueStuck] = useState(() =>
-    loadQueue().some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS),
-  )
+  const [queueStuck, setQueueStuck] = useState(() => isQueueStuck(loadQueue()))
 
   // Re-Entrancy-Schutz: flatterndes Netz (mehrere online-Events kurz
   // hintereinander) darf keine zwei Drains parallel starten — sonst wird
@@ -131,25 +107,29 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     if (q.length === 0) return
     drainingRef.current = true
     setDraining(true)
-    const remaining: QueuedAction[] = []
+    let outcome: Awaited<ReturnType<typeof drainActions>> | null = null
     try {
-      for (const item of q) {
-        try {
-          await zeitAction(item.action, { recorded_at: item.recorded_at })
-        } catch {
-          remaining.push({ ...item, attempts: (item.attempts ?? 0) + 1 })
-        }
-      }
+      outcome = await drainActions(q, item => zeitAction(item.action, { recorded_at: item.recorded_at }))
     } finally {
       // Während des Drains kann sendAction neue Stempel angehängt haben —
       // die dürfen beim Zurückschreiben nicht überschrieben werden.
-      const merged = [...remaining, ...loadQueue().slice(q.length)]
+      const merged = [...(outcome?.remaining ?? q), ...loadQueue().slice(q.length)]
       saveQueue(merged)
       setQueueSize(merged.length)
-      setQueueStuck(merged.some(it => (it.attempts ?? 0) >= MAX_DRAIN_ATTEMPTS))
+      setQueueStuck(isQueueStuck(merged))
       setDraining(false)
       drainingRef.current = false
-      if (merged.length === 0) {
+
+      // Abgelehnte Stempel haben Vorrang in der Meldung: sie sind nicht gebucht
+      // und ohne Korrekturantrag für immer weg.
+      const rejected = outcome?.rejected ?? []
+      if (rejected.length > 0) {
+        setResult({
+          text: `${rejected.length} Stempel konnte${rejected.length > 1 ? 'n' : ''} nicht übernommen werden: `
+            + `${rejected[0].reply} Bitte stelle einen Korrekturantrag.`,
+          isError: true,
+        })
+      } else if (merged.length === 0 && (outcome?.applied ?? 0) > 0) {
         setResult({ text: 'Offline-Aktionen wurden erfolgreich synchronisiert.', isError: false })
       }
     }
@@ -224,13 +204,33 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
     }
   }
 
+  function enqueue(action: ZeitAction, recorded_at: string, text: string) {
+    const q = loadQueue()
+    q.push({ action, recorded_at })
+    saveQueue(q)
+    setQueueSize(q.length)
+    setResult({ text, isError: false })
+  }
+
   async function sendAction(action: ZeitAction, idx: number) {
     setResult(null)
     setLoadingIdx(idx)
     const recorded_at = new Date().toISOString()
+
+    // Liegen noch ältere Stempel in der Queue, muss dieser sich hinten anstellen.
+    // Sonst überholt er sie: das Netz kommt zurück, der Monteur tippt sofort
+    // "Ausstempeln", es geht live raus — auf eine Session, deren Einstempeln noch
+    // in der Queue liegt. Der Server kennt sie nicht, der Stempel ist verloren.
+    if (loadQueue().length > 0) {
+      enqueue(action, recorded_at, 'Wird nach den älteren Stempeln gesendet.')
+      setLoadingIdx(null)
+      void drainQueue()
+      return
+    }
+
     try {
       const res = await zeitAction(action, { recorded_at })
-      setResult({ text: res.reply, isError: false })
+      setResult({ text: res.reply, isError: !res.action_taken })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLoggedOut()
@@ -242,11 +242,7 @@ export default function ArbeitsZeitScreen({ logoUrl, onNavHome, onNavRapport, on
       // verlorener Lohn. Den Dauerfehler-Fall (CORS/Origin, ebenfalls status 0)
       // fängt der MAX_DRAIN_ATTEMPTS-Deckel der Queue ab.
       if (isNetworkError(err)) {
-        const q = loadQueue()
-        q.push({ action, recorded_at })
-        saveQueue(q)
-        setQueueSize(q.length)
-        setResult({ text: `Offline gespeichert – wird gesendet sobald Verbindung vorhanden.`, isError: false })
+        enqueue(action, recorded_at, 'Offline gespeichert – wird gesendet sobald Verbindung vorhanden.')
       } else {
         setResult({ text: 'Fehler beim Senden. Bitte erneut versuchen.', isError: true })
       }
