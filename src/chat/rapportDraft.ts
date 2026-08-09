@@ -31,6 +31,11 @@ export interface RapportDraftState {
   pendingQuoteQuestion: boolean
   pendingSignReportId: number | null
   downloadReportId: number | null
+  // Projekt des laufenden Rapports (aus pending_summary.project). Trägt die
+  // Rückfrage in planRapportStart: tippt der Monteur im selben Projekt erneut auf
+  // «Rapport erstellen», springt er in seinen laufenden Rapport statt ihn zu
+  // verwerfen. Fehlt im Draft (ältere Version) → es wird gefragt.
+  pendingProject?: string | null
   // Wurde der gespeicherte Rapport vom Kunden unterschrieben (statt übersprungen)?
   // Steuert, ob der Monteur ihn im Abschluss-Schritt noch selbst löschen darf —
   // nach der Unterschrift ist er abgenommen. Fehlt im Draft (ältere Version),

@@ -87,6 +87,9 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const [pendingDisambiguation, setPendingDisambiguation] = useState(() => draft?.pendingDisambiguation ?? false)
   const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(() => draft?.pendingQuoteQuestion ?? false)
   const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(() => draft?.pendingSignReportId ?? null)
+  // Projekt des laufenden Rapports — damit «Rapport erstellen» im selben Projekt in
+  // den laufenden Rapport zurückspringt, statt ihn stillschweigend zu verwerfen.
+  const [pendingProject, setPendingProject] = useState<string | null>(() => draft?.pendingProject ?? null)
   const [downloadReportId, setDownloadReportId] = useState<number | null>(() => draft?.downloadReportId ?? null)
   const [pdfDownloading, setPdfDownloading] = useState(false)
   // Unterschrieben (statt übersprungen)? Danach ist der Rapport abgenommen und
@@ -102,12 +105,12 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
       summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId, reportSigned,
-      workTypesCollected, collectedWorkTypes, suggestedWorkTypes,
+      workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject,
     }, Date.now())
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
       collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId, reportSigned,
-      workTypesCollected, collectedWorkTypes, suggestedWorkTypes])
+      workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject])
 
   // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
   // zurücksetzen — das löscht zugleich den Draft, weil der Zustand wieder leer ist.
@@ -127,6 +130,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     setPendingSignReportId(null)
     setDownloadReportId(null)
     setReportSigned(false)
+    setPendingProject(null)
   }
 
   // Selbstkorrektur: falscher Auftrag erwischt oder versehentlich doppelt erfasst.
@@ -180,6 +184,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingQuoteQuestion(false)
       // Hauptmaterialien der Zusammenfassung merken (für die Gesamt-Übersicht)
       setSummaryItems(res.pending_summary?.items ?? [])
+      setPendingProject(res.pending_summary?.project ?? null)
       // Neue Bestätigung → Zwischenschritte zurücksetzen
       setKleinCollected(false)
       setErsatzCollected(false)

@@ -19,6 +19,9 @@ import HelpBubble from './shared/HelpBubble'
 import { consumeBack } from './shared/backButton'
 import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
+import { clearDraft, loadDraft } from './chat/rapportDraft'
+import { discardPrompt, planRapportStart } from './chat/rapportStart'
+import { cancelReport } from './api/chat'
 
 type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen'
 
@@ -187,6 +190,32 @@ export default function App() {
   const hasStoredIdentity = Boolean(
     localStorage.getItem(SK.AUTHORIZED_USER_ID) && localStorage.getItem(SK.TENANT_SLUG)
   )
+
+  // «Rapport erstellen» aus dem Projekt-Detail. Der Knopf startete früher immer einen
+  // neuen Rapport — wartete im Chat noch einer auf «Speichern», war er damit weg
+  // (Client-State überschrieben, Server-Puffer beim nächsten log_report ersetzt).
+  // Das trifft, wer zwischendurch aufs Projekt schaut: der Projekt-Detail hat keinen
+  // eigenen Weg zurück in den laufenden Rapport, dieser Knopf sieht danach aus.
+  async function startRapport(projectName: string) {
+    const userId = user?.authorized_user_id ?? localStorage.getItem(SK.AUTHORIZED_USER_ID) ?? ''
+    const plan = planRapportStart(userId ? loadDraft(userId, Date.now()) : null, projectName)
+
+    if (plan.kind === 'resume') { setScreen('rapport'); return }
+
+    if (plan.kind === 'confirm-discard') {
+      if (!window.confirm(discardPrompt(plan.pendingProject, projectName))) {
+        setScreen('rapport')   // Abbrechen → zurück in den laufenden Rapport
+        return
+      }
+      // Verwerfen heisst auch server-seitig aufräumen: sonst hängt der alte
+      // Gesprächsverlauf im neuen Rapport und der Bot fragt Beantwortetes erneut.
+      try { await cancelReport() } catch { /* best-effort — der Neustart zählt */ }
+      if (userId) clearDraft(userId)
+    }
+
+    setRapportInitialMessage(`Neuer Rapport für Projekt "${projectName}"`)
+    setScreen('rapport')
+  }
 
   const loadBranding = useCallback(async () => {
     const slug = localStorage.getItem(SK.TENANT_SLUG) ?? ''
@@ -444,10 +473,7 @@ export default function App() {
         logoUrl={effectiveLogo}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
-        onStartRapport={(projectName) => {
-          setRapportInitialMessage(`Neuer Rapport für Projekt "${projectName}"`)
-          setScreen('rapport')
-        }}
+        onStartRapport={(projectName) => void startRapport(projectName)}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProfile={() => setScreen('profile')}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
