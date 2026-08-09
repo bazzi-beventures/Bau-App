@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError, apiFormFetch, apiUrl, isNetworkError } from '../api/client'
-import { deleteOwnRapport, fetchOwnProjectReports, OwnProjectReport } from '../api/chat'
+import { deleteOwnRapport, downloadRapportPdf, fetchProjectReports, ProjectReport } from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
+import { mapsUrl } from '../shared/mapsLink'
 
 // Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle).
 // Siehe ProjektEntwurfScreen für das gleiche Muster (zeit_/projektEntwurf_queue).
@@ -189,6 +190,31 @@ function formatDateTime(iso: string): string {
   return d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Adresse als Kartenlink. Fällt auf reinen Text zurück, wenn nichts Brauchbares
+// drinsteht — ein toter Maps-Link wäre schlimmer als gar keiner.
+function MapsAddress({ address }: { address: string }) {
+  const href = mapsUrl(address)
+  if (!href) return <>{address}</>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${address} in Google Maps öffnen`}
+      style={{
+        color: 'var(--accent-blue)', textDecoration: 'none',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+      {address}
+    </a>
+  )
+}
+
 type ViewMode = 'grid' | 'timeline'
 
 export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onStartRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
@@ -204,10 +230,12 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   const [renameValue, setRenameValue] = useState('')
   const [comments, setComments] = useState<ProjectComment[]>([])
   const [tasks, setTasks] = useState<ProjectTask[]>([])
-  // Eigene Rapporte des Projekts — für die Selbstkorrektur, wenn der Monteur den
-  // Fehler erst später merkt (im Chat gibt es den Knopf direkt nach dem Speichern).
-  const [ownReports, setOwnReports] = useState<OwnProjectReport[]>([])
+  // Rapporte des Projekts — nachlesen, was erfasst wurde (auch von Kollegen), das
+  // PDF öffnen, und den eigenen Fehleintrag korrigieren, wenn er erst später auffällt
+  // (im Chat gibt es den Löschen-Knopf direkt nach dem Speichern).
+  const [reports, setReports] = useState<ProjectReport[]>([])
   const [deletingReportId, setDeletingReportId] = useState<number | null>(null)
+  const [openingReportId, setOpeningReportId] = useState<number | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<FileCategory>('fotos')
@@ -236,18 +264,18 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     setFiles([])
     setComments([])
     setTasks([])
-    setOwnReports([])
+    setReports([])
     setLoadingDetail(true)
     Promise.all([
       apiFetch(`/pwa/projects/${selected.id}/files`).catch(() => []) as Promise<ProjectFile[]>,
       apiFetch(`/pwa/projects/${selected.id}/comments`).catch(() => []) as Promise<ProjectComment[]>,
       apiFetch(`/pwa/projects/${selected.id}/tasks`).catch(() => []) as Promise<ProjectTask[]>,
-      fetchOwnProjectReports(selected.id).catch(() => [] as OwnProjectReport[]),
+      fetchProjectReports(selected.id).catch(() => [] as ProjectReport[]),
     ]).then(([f, c, t, r]) => {
       setFiles(f)
       setComments(c)
       setTasks(t)
-      setOwnReports(r)
+      setReports(r)
     }).finally(() => setLoadingDetail(false))
   }, [selected?.id])
 
@@ -364,9 +392,32 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     }
   }
 
+  // Rapport-PDF öffnen. Der Server rendert es frisch (zugriffsgeprüft: eigener
+  // Rapport oder eigenes Projekt) — deshalb Blob statt Direkt-URL.
+  async function handleOpenReportPdf(report: ProjectReport) {
+    setOpeningReportId(report.id)
+    try {
+      const { blob, filename } = await downloadRapportPdf(report.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // Auf dem Handy öffnet der PDF-Viewer die Datei; am Desktop landet sie im
+      // Download-Ordner. Ein neues Fenster (window.open) blockiert iOS Safari,
+      // weil der await den User-Gesten-Kontext verliert.
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      window.alert('Rapport konnte nicht geöffnet werden.')
+    } finally {
+      setOpeningReportId(null)
+    }
+  }
+
   // Eigenen Fehleintrag wegräumen. Der Server lässt nur eigene, unsignierte und
   // unverrechnete Rapporte zu — hier wird der Knopf entsprechend nur dort gezeigt.
-  async function handleDeleteOwnReport(report: OwnProjectReport) {
+  async function handleDeleteOwnReport(report: ProjectReport) {
     if (!window.confirm(
       `Rapport vom ${formatDate(report.report_date)} wirklich löschen? `
       + 'Erfasste Stunden und Material werden mitgelöscht.'
@@ -374,7 +425,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     setDeletingReportId(report.id)
     try {
       await deleteOwnRapport(report.id)
-      setOwnReports(prev => prev.filter(r => r.id !== report.id))
+      setReports(prev => prev.filter(r => r.id !== report.id))
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
       window.alert(err instanceof Error && err.message
@@ -542,16 +593,18 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             </div>
           )}
 
-          {/* Meine Rapporte — Selbstkorrektur, wenn der Fehler erst später auffällt.
-              Nur die eigenen Einträge; löschbar solange ohne Unterschrift und ohne
-              Rechnung (der Server prüft dieselben Regeln nochmals). */}
-          {!loadingDetail && ownReports.length > 0 && (
+          {/* Rapporte des Projekts — was auf diesem Auftrag bereits erfasst wurde,
+              inkl. der Einträge von Kollegen (sonst schreibt der zweite Mann
+              denselben Tag nochmals). Das PDF holt der Server zugriffsgeprüft.
+              Löschen nur beim eigenen Rapport und solange ohne Unterschrift und ohne
+              Rechnung — der Server prüft dieselben Regeln nochmals. */}
+          {!loadingDetail && reports.length > 0 && (
             <div className="projekte-detail-card">
-              <div className="projekte-detail-title">Meine Rapporte</div>
-              {ownReports.map(r => {
+              <div className="projekte-detail-title">Rapporte</div>
+              {reports.map(r => {
                 const billed = !!r.invoice_id
                 const signed = !!r.signature_timestamp
-                const canDelete = !billed && !signed
+                const canDelete = r.is_own && !billed && !signed
                 return (
                   <div
                     key={r.id}
@@ -567,65 +620,103 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                           {billed ? 'abgerechnet' : signed ? 'unterschrieben' : 'ohne Unterschrift'}
                         </span>
                       </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted, #71717a)', marginTop: 1 }}>
+                        {r.is_own ? 'von dir erfasst' : (r.created_by || 'Kollege')}
+                      </div>
                       {r.description && (
                         <div style={{ fontSize: 13, color: 'var(--text-muted, #71717a)', whiteSpace: 'pre-wrap' }}>
                           {r.description}
                         </div>
                       )}
                     </div>
-                    {canDelete && (
+                    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <button
                         type="button"
-                        onClick={() => void handleDeleteOwnReport(r)}
-                        disabled={deletingReportId === r.id}
+                        onClick={() => void handleOpenReportPdf(r)}
+                        disabled={openingReportId === r.id}
                         style={{
-                          flexShrink: 0, padding: '6px 10px', borderRadius: 8,
-                          border: '1px solid #e53e3e', background: 'transparent',
-                          color: '#e53e3e', fontSize: 13, fontWeight: 600,
-                          cursor: deletingReportId === r.id ? 'default' : 'pointer',
+                          padding: '6px 10px', borderRadius: 8,
+                          border: '1px solid var(--accent-blue)', background: 'transparent',
+                          color: 'var(--accent-blue)', fontSize: 13, fontWeight: 600,
+                          cursor: openingReportId === r.id ? 'default' : 'pointer',
                         }}
                       >
-                        {deletingReportId === r.id ? '…' : 'Löschen'}
+                        {openingReportId === r.id ? '…' : '📄 Ansehen'}
                       </button>
-                    )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteOwnReport(r)}
+                          disabled={deletingReportId === r.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 8,
+                            border: '1px solid #e53e3e', background: 'transparent',
+                            color: '#e53e3e', fontSize: 13, fontWeight: 600,
+                            cursor: deletingReportId === r.id ? 'default' : 'pointer',
+                          }}
+                        >
+                          {deletingReportId === r.id ? '…' : 'Löschen'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}
             </div>
           )}
 
-          {/* Projektinfos */}
-          <div className="projekte-detail-card">
-            <div className="projekte-detail-title">Projektinfos</div>
-            {(selected.customer?.billing_name || selected.customer?.name) && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Kunde</span>
-                <span className="projekte-detail-value">{selected.customer?.billing_name || selected.customer?.name}</span>
+          {/* Projektinfos. Adressen sind Kartenlinks — antippen führt direkt in die
+              Navigation, statt die Adresse abzutippen. Die Kundenadresse steht nur
+              dann zusätzlich da, wenn sie sich von der Objektadresse unterscheidet. */}
+          {(() => {
+            const objectAddress = selected.object_address || selected.customer?.object_address || null
+            const customerAddress = selected.customer?.address || null
+            const showCustomerAddress = !!customerAddress
+              && customerAddress.trim() !== (objectAddress ?? '').trim()
+            return (
+              <div className="projekte-detail-card">
+                <div className="projekte-detail-title">Projektinfos</div>
+                {(selected.customer?.billing_name || selected.customer?.name) && (
+                  <div className="projekte-detail-row">
+                    <span className="projekte-detail-label">Kunde</span>
+                    <span className="projekte-detail-value">{selected.customer?.billing_name || selected.customer?.name}</span>
+                  </div>
+                )}
+                {selected.object_name && (
+                  <div className="projekte-detail-row">
+                    <span className="projekte-detail-label">Objekt</span>
+                    <span className="projekte-detail-value">{selected.object_name}</span>
+                  </div>
+                )}
+                {objectAddress && (
+                  <div className="projekte-detail-row">
+                    <span className="projekte-detail-label">Objektadresse</span>
+                    <span className="projekte-detail-value">
+                      <MapsAddress address={objectAddress} />
+                    </span>
+                  </div>
+                )}
+                {showCustomerAddress && (
+                  <div className="projekte-detail-row">
+                    <span className="projekte-detail-label">Kundenadresse</span>
+                    <span className="projekte-detail-value">
+                      <MapsAddress address={customerAddress} />
+                    </span>
+                  </div>
+                )}
+                {selected.projektleiter_name && (
+                  <div className="projekte-detail-row">
+                    <span className="projekte-detail-label">Projektleiter</span>
+                    <span className="projekte-detail-value">{selected.projektleiter_name}</span>
+                  </div>
+                )}
+                {!selected.customer && !selected.object_name && !objectAddress
+                  && !selected.projektleiter_name && (
+                  <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
+                )}
               </div>
-            )}
-            {selected.object_name && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Objekt</span>
-                <span className="projekte-detail-value">{selected.object_name}</span>
-              </div>
-            )}
-            {selected.object_address && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Objektadresse</span>
-                <span className="projekte-detail-value">{selected.object_address}</span>
-              </div>
-            )}
-            {selected.projektleiter_name && (
-              <div className="projekte-detail-row">
-                <span className="projekte-detail-label">Projektleiter</span>
-                <span className="projekte-detail-value">{selected.projektleiter_name}</span>
-              </div>
-            )}
-            {!selected.customer && !selected.object_name && !selected.object_address
-              && !selected.projektleiter_name && (
-              <div className="projekte-detail-empty">Keine weiteren Informationen eingetragen.</div>
-            )}
-          </div>
+            )
+          })()}
 
           {/* Einsatz-Termin */}
           {selected.start_date && (

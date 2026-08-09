@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AuthUser } from './UsersScreen'
+import { assignableRoles, mayAnonymize } from './userRoles'
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -19,17 +20,17 @@ function EyeIcon({ open }: { open: boolean }) {
 
 interface Props {
   user: AuthUser | null
+  // Rolle des eingeloggten Benutzers — begrenzt die vergebbaren Rollen und die
+  // Gefahrenzone (siehe userRoles.ts, Spiegel der Backend-Matrix).
+  actingRole: string
   onClose: () => void
   onSaved: () => void
 }
 
-const CREATABLE_ROLES = ['user_light', 'user', 'admin']
-const ALL_ROLES = ['user_light', 'user', 'admin', 'management', 'superadmin']
-
 // Spiegelt services/password_policy.py — die verbindliche Prüfung passiert im Backend.
 const MIN_PASSWORD_LENGTH = 12
 
-export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
+export default function UserDetailScreen({ user, actingRole, onClose, onSaved }: Props) {
   const isNew = !user
   const [email, setEmail] = useState(user?.email ?? '')
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
@@ -45,6 +46,15 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
   const [confirmAnonymize, setConfirmAnonymize] = useState(false)
   const [acting, setActing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+
+  // Vergebbare Rollen + die bereits gesetzte Rolle: das Backend lässt eine
+  // unveränderte Rolle durch, auch wenn der Handelnde sie nicht neu vergeben dürfte.
+  const roleOptions = (() => {
+    const opts = [...assignableRoles(actingRole)] as string[]
+    const current = user?.role
+    if (current && !opts.includes(current)) opts.push(current)
+    return opts
+  })()
 
   function showToast(msg: string) {
     setToast(msg)
@@ -158,8 +168,13 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
               <div className="admin-form-group">
                 <label className="admin-form-label">Rolle</label>
                 <select className="admin-form-select" value={role} onChange={e => setRole(e.target.value)}>
-                  {(isNew ? CREATABLE_ROLES : ALL_ROLES).map(r => <option key={r} value={r}>{r}</option>)}
+                  {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
+                {roleOptions.length === 1 && (
+                  <div className="admin-form-hint">
+                    Höhere Rollen vergibt nur das Management.
+                  </div>
+                )}
               </div>
               {!isNew && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -230,7 +245,8 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
               </form>
             </div>
 
-            {/* Gefahrenzone */}
+            {/* Gefahrenzone — DSGVO-Löschung ist irreversibel und bleibt Management vorbehalten */}
+            {mayAnonymize(actingRole) && (
             <div className="admin-table-wrap" style={{ padding: 20 }}>
               <div className="admin-section-title" style={{ color: '#ef4444' }}>Gefahrenzone</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
@@ -246,6 +262,7 @@ export default function UserDetailScreen({ user, onClose, onSaved }: Props) {
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

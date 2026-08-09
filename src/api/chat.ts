@@ -155,8 +155,11 @@ export async function deleteOwnRapport(reportId: number): Promise<void> {
   await apiFetch(`/pwa/chat/report/${reportId}`, { method: 'DELETE' })
 }
 
-// Eigene Rapporte eines Projekts (Mitarbeiter-PWA, Projekt-Detail).
-export interface OwnProjectReport {
+// Rapporte eines Projekts (Mitarbeiter-PWA, Projekt-Detail) — auch die der Kollegen,
+// sonst schreibt der zweite Mann denselben Tag nochmals. `is_own` trägt die
+// Selbstkorrektur: nur eigene Rapporte sind löschbar (der Server prüft dieselbe
+// Regel nochmals).
+export interface ProjectReport {
   id: number
   report_date: string
   description: string | null
@@ -165,10 +168,11 @@ export interface OwnProjectReport {
   invoice_id: number | null
   created_at: string
   source: string | null
+  is_own: boolean
 }
 
-export async function fetchOwnProjectReports(projectId: string): Promise<OwnProjectReport[]> {
-  return apiFetch(`/pwa/projects/${projectId}/my-reports`) as Promise<OwnProjectReport[]>
+export async function fetchProjectReports(projectId: string): Promise<ProjectReport[]> {
+  return apiFetch(`/pwa/projects/${projectId}/reports`) as Promise<ProjectReport[]>
 }
 
 // ─── Häufig benutzte Ersatzteile (Rapport-Abschluss) ─────────

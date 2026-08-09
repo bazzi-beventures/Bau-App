@@ -13,19 +13,20 @@ export const WORK_TYPES: { value: string; label: string }[] = [
 ]
 
 interface Props {
-  // Vorauswahl aus dem Projekt (pending_summary.art_der_arbeit). Nicht-kanonische
-  // Alt-Werte hat das Backend bereits aussortiert.
+  // Aktueller Stand (pending_summary.art_der_arbeit bzw. die zuletzt getroffene
+  // Auswahl). Nicht-kanonische Alt-Werte hat das Backend bereits aussortiert.
   initial: string[]
   onSubmit: (workTypes: string[]) => void
 }
 
-// Vor dem Speichern: Mitarbeiter kreuzt an, was er gemacht hat — dieselbe Leiste wie
-// oben auf dem gedruckten Rapportblatt. Sammelt nur die Auswahl; geschrieben wird sie
-// zusammen mit dem Rapport beim Bestätigen (reports.art_der_arbeit).
+// Mitarbeiter kreuzt an, was er gemacht hat — dieselbe Leiste wie oben auf dem
+// gedruckten Rapportblatt. Sammelt nur die Auswahl; geschrieben wird sie zusammen
+// mit dem Rapport beim Bestätigen (reports.art_der_arbeit).
 //
-// Bewusst ohne Feature-Flag und ohne Übersprung-Automatik: die Angabe ist eine
-// Ankreuz-Frage, die das Büro sonst nachtelefonieren muss. «Weiter» ohne Auswahl ist
-// erlaubt — nicht jeder Einsatz passt in eine der sechs Arten.
+// Der Schritt erscheint nur, wenn das Projekt (Offerte/Auftrag) keine Leistungsart
+// mitbringt — sonst steht sie in der Zusammenfassung und wird von dort über «Ändern»
+// hierher aufgerufen. «Weiter» ohne Auswahl ist erlaubt: nicht jeder Einsatz passt
+// in eine der sechs Arten.
 export default function LeistungsartPrompt({ initial, onSubmit }: Props) {
   const [selected, setSelected] = useState<string[]>(
     () => WORK_TYPES.map(w => w.value).filter(v => initial.includes(v))
@@ -41,19 +42,25 @@ export default function LeistungsartPrompt({ initial, onSubmit }: Props) {
     <div className="kleinmaterial-prompt">
       <div className="kleinmaterial-title">Was wurde gemacht?</div>
       <div className="kleinmaterial-sub">
-        Leistungsart des Einsatzes — Mehrfachauswahl möglich. Aus dem Projekt
-        vorausgewählt; wenn du etwas anderes gemacht hast, hier ändern.
+        Leistungsart des Einsatzes — Mehrfachauswahl möglich.
       </div>
 
-      <div className="kleinmaterial-presets">
+      {/* Eigenes Raster statt der kleinmaterial-Chips: die sechs Labels sind
+          unterschiedlich lang, mit `flex: 1` wird jede Zeile anders breit und der
+          letzte Knopf über die volle Breite gezogen. Zwei gleich breite Spalten
+          bleiben auf jedem Handy lesbar. */}
+      <div className="leistungsart-grid">
         {WORK_TYPES.map(w => (
           <button
             key={w.value}
             type="button"
             aria-pressed={selected.includes(w.value)}
-            className={`kleinmaterial-preset ${selected.includes(w.value) ? 'is-selected' : ''}`}
+            className={`leistungsart-chip ${selected.includes(w.value) ? 'is-selected' : ''}`}
             onClick={() => toggle(w.value)}
           >
+            <span className="leistungsart-chip-check" aria-hidden="true">
+              {selected.includes(w.value) ? '✓' : ''}
+            </span>
             {w.label}
           </button>
         ))}

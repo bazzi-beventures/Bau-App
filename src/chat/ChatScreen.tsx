@@ -8,7 +8,7 @@ import ChatInput from './ChatInput'
 import SignaturePad from './SignaturePad'
 import KleinmaterialPrompt, { KleinmaterialSelection } from './KleinmaterialPrompt'
 import ErsatzteilPrompt, { ErsatzteilSelection } from './ErsatzteilPrompt'
-import LeistungsartPrompt from './LeistungsartPrompt'
+import LeistungsartPrompt, { WORK_TYPES } from './LeistungsartPrompt'
 import { loadDraft, saveDraft } from './rapportDraft'
 
 interface Message {
@@ -185,9 +185,14 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setErsatzCollected(false)
       setCollectedKlein(null)
       setCollectedErsatz([])
-      setWorkTypesCollected(false)
-      setCollectedWorkTypes([])
-      setSuggestedWorkTypes(res.pending_summary?.art_der_arbeit ?? [])
+      // Leistungsart: steht sie schon am Projekt (aus Offerte/Auftrag), wird sie
+      // NICHT nochmals abgefragt — der Monteur hat sie sonst bei jedem Rapport
+      // erneut angekreuzt, obwohl das Büro sie längst erfasst hat. Sie steht in
+      // der Zusammenfassung und lässt sich dort über «Ändern» korrigieren.
+      const suggested = res.pending_summary?.art_der_arbeit ?? []
+      setSuggestedWorkTypes(suggested)
+      setCollectedWorkTypes(suggested)
+      setWorkTypesCollected(suggested.length > 0)
     } else if (res.action_taken === 'disambiguate') {
       setPendingDisambiguation(true)
       setPendingConfirm(false)
@@ -461,10 +466,14 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
           </div>
         )}
 
-        {/* Vor dem Speichern: Leistungsart ankreuzen (immer, kein Feature-Flag) */}
+        {/* Vor dem Speichern: Leistungsart ankreuzen — nur wenn sie nicht schon vom
+            Projekt (Offerte/Auftrag) kommt, sowie beim «Ändern» aus der
+            Zusammenfassung. */}
         {workTypeStepPending && !loading && (
           <LeistungsartPrompt
-            initial={suggestedWorkTypes}
+            // Fallback auf die Projekt-Vorauswahl deckt Entwürfe ab, die noch vor
+            // dieser Änderung gespeichert wurden (collectedWorkTypes dort leer).
+            initial={collectedWorkTypes.length > 0 ? collectedWorkTypes : suggestedWorkTypes}
             onSubmit={(sel) => { setCollectedWorkTypes(sel); setWorkTypesCollected(true) }}
           />
         )}
@@ -487,6 +496,27 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
         {/* Recap der gesammelten Zusatz-Positionen + Speichern/Abbrechen */}
         {confirmReady && !loading && (
           <>
+            {/* Leistungsart: aus dem Projekt übernommen (Offerte/Auftrag) oder eben
+                angekreuzt — hier sichtbar statt als eigene Abfrage, korrigierbar
+                über «Ändern». */}
+            <div className="leistungsart-recap">
+              <div className="leistungsart-recap-text">
+                <span className="leistungsart-recap-label">Leistungsart</span>
+                <span className="leistungsart-recap-value">
+                  {collectedWorkTypes.length > 0
+                    ? collectedWorkTypes.map(v => WORK_TYPES.find(w => w.value === v)?.label ?? v).join(', ')
+                    : 'keine angegeben'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="leistungsart-recap-edit"
+                onClick={() => setWorkTypesCollected(false)}
+              >
+                Ändern
+              </button>
+            </div>
+
             {hasExtras && (
               <div className="kleinmaterial-prompt">
                 {/* Komplette Material-Übersicht (Haupt + Klein + Ersatzteile) —

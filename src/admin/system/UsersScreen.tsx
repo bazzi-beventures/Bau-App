@@ -3,6 +3,7 @@ import { apiFetch } from '../../api/client'
 import UserDetailScreen from './UserDetailScreen'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
+import { mayEditTarget } from './userRoles'
 
 export interface AuthUser {
   id: string
@@ -15,7 +16,13 @@ export interface AuthUser {
   username: string | null
 }
 
-export default function UsersScreen() {
+interface Props {
+  // Rolle des eingeloggten Benutzers — entscheidet, welche Konten er öffnen und
+  // welche Rollen er vergeben darf (Spiegel der Backend-Matrix, siehe userRoles.ts).
+  actingRole: string
+}
+
+export default function UsersScreen({ actingRole }: Props) {
   const isMobile = useIsMobile()
   const [users, setUsers] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,10 +51,14 @@ export default function UsersScreen() {
     )
   })
 
+  // Konten oberhalb der eigenen Ebene bleiben zu — das Backend lehnt sie ohnehin ab.
+  const canOpen = (u: AuthUser) => mayEditTarget(actingRole, u.role)
+
   if (selected || showNew) {
     return (
       <UserDetailScreen
         user={showNew ? null : selected}
+        actingRole={actingRole}
         onClose={() => { setSelected(null); setShowNew(false) }}
         onSaved={() => { setSelected(null); setShowNew(false); load() }}
       />
@@ -85,7 +96,7 @@ export default function UsersScreen() {
           <AdminCardList
             items={filtered}
             keyFor={u => String(u.id)}
-            onItemClick={u => setSelected(u)}
+            onItemClick={u => { if (canOpen(u)) setSelected(u) }}
             empty="Keine Benutzer gefunden."
             renderCard={u => (
               <>
@@ -125,7 +136,12 @@ export default function UsersScreen() {
               {filtered.length === 0 ? (
                 <tr><td colSpan={6} className="admin-table-empty">Keine Benutzer gefunden.</td></tr>
               ) : filtered.map(u => (
-                <tr key={u.id} onClick={() => setSelected(u)}>
+                <tr
+                  key={u.id}
+                  onClick={() => { if (canOpen(u)) setSelected(u) }}
+                  style={canOpen(u) ? undefined : { cursor: 'default', opacity: 0.6 }}
+                  title={canOpen(u) ? undefined : 'Dieses Konto darf nur das Management bearbeiten.'}
+                >
                   <td><strong>{u.display_name || '—'}</strong></td>
                   <td style={{ color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{u.username || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{u.email || '—'}</td>

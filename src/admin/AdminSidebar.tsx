@@ -130,17 +130,15 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
           </>
         )}
 
-        {isManagement && (
-          <>
-            <div className="admin-nav-group-label">System</div>
-            <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
-            {has('document_backup') && (
-              <NavItem label="Datensicherung" target="document-backup" current={screen} onNav={onNav} icon={<IconDocument />} />
-            )}
-            {isSuperadmin && (
-              <NavItem label="Admin-Tools" target="admin-tools" current={screen} onNav={onNav} icon={<IconSettings />} />
-            )}
-          </>
+        {/* Benutzerverwaltung auch für Admins — sie legen Mitarbeiter an. Datensicherung
+            und Admin-Tools bleiben Management bzw. Superadmin vorbehalten. */}
+        <div className="admin-nav-group-label">System</div>
+        <NavItem label="Benutzerverwaltung" target="users" current={screen} onNav={onNav} icon={<IconKey />} />
+        {isManagement && has('document_backup') && (
+          <NavItem label="Datensicherung" target="document-backup" current={screen} onNav={onNav} icon={<IconDocument />} />
+        )}
+        {isSuperadmin && (
+          <NavItem label="Admin-Tools" target="admin-tools" current={screen} onNav={onNav} icon={<IconSettings />} />
         )}
       </nav>
 

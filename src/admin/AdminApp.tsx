@@ -170,7 +170,10 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
 
   function renderScreen() {
-    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'users' || screen === 'bulk-clockin' || screen === 'document-backup') && !isManagement) {
+    // 'users' fehlt hier bewusst: die Benutzerverwaltung steht auch dem Admin offen
+    // (Mitarbeiter anlegen, Passwort/PIN setzen). Was er dort darf, regelt die
+    // Rollen-Matrix im Backend (agents/routers/admin_users.py) und UsersScreen.
+    if ((screen === 'pricing-rules' || screen === 'quote-templates' || screen === 'kpis' || screen === 'bulk-clockin' || screen === 'document-backup') && !isManagement) {
       return <ComingSoon title="Kein Zugriff" />
     }
     if (screen === 'admin-tools' && !isSuperadmin) {
@@ -207,7 +210,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'materials':    return <MaterialsScreen user={user} />
       case 'pricing-rules':return <PricingRulesScreen />
       case 'quote-templates': return <QuoteTemplatesScreen />
-      case 'users':        return <UsersScreen />
+      case 'users':        return <UsersScreen actingRole={user.role} />
       case 'kpis':         return guard('kpis', <KpiScreen />)
       case 'document-backup': return guard('document_backup', <DocumentBackupScreen />)
       case 'admin-tools':  return <AdminToolsScreen userRole={user.role} />
