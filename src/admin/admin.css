@@ -3549,3 +3549,63 @@ button.admin-list-item {
     max-height: none;
   }
 }
+
+/* Ansichten-Umschalter + Feld-Ansicht (Nachtrag 2026-08-10) */
+.tb-filterbar-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tb-filterbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.tb-card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.tb-status-chip {
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.tb-status-chip.in_arbeit {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.tb-status-chip.wartet {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.tb-card-done-btn {
+  float: right;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  margin-top: -2px;
+}
+
+.tb-card-done-btn:hover {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-soft);
+}

@@ -1044,10 +1044,24 @@ export interface TaskBoardStaff {
   kuerzel: string | null
 }
 
+export interface TaskTypeInfo {
+  label: string
+  field: string
+  /** Fester Prozessschritt: nur der Sync erledigt die Karte, manuelles
+   *  Abhaken lehnt der Server ab (auto_task_process_bound). */
+  prozessgebunden: boolean
+}
+
+export interface BoardField {
+  key: string
+  label: string
+}
+
 export interface TaskBoardResponse {
   tasks: BoardTask[]
   columns: BoardColumn[]
-  task_types: Record<string, string>
+  fields: BoardField[]
+  task_types: Record<string, TaskTypeInfo>
   me_staff_id: string | null
   can_filter_all: boolean
   assignee: string
