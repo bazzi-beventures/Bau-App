@@ -53,3 +53,6 @@ export function IconAftersales() {
   // Chat-/Feedback-Blase — steht für die Nachfass-/Feedback-Kommunikation.
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10c0 3.31-3.58 6-8 6a9.6 9.6 0 0 1-2.6-.36L3 17l1.05-3.15A5.2 5.2 0 0 1 2 10c0-3.31 3.58-6 8-6s8 2.69 8 6zM7 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm3 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm3 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" clipRule="evenodd"/></svg>
 }
+export function IconTasks() {
+  return <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3zm9 0a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1h-3z"/><path d="M3 17a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1z" opacity=".45"/></svg>
+}

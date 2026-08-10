@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 export type AdminScreen =
   | 'dashboard'
+  | 'tasks'
   | 'my-time'
   | 'staff'
   | 'bulk-clockin'

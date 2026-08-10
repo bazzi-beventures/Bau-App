@@ -6,7 +6,7 @@ import {
   IconDashboard, IconFolder, IconClock, IconCash,
   IconUsers, IconAddressBook, IconReceipt, IconCalendar,
   IconDocument, IconBox, IconTag, IconChart, IconKey, IconLogout, IconSettings,
-  IconAftersales,
+  IconAftersales, IconTasks,
 } from './AdminIcons'
 
 interface Props {
@@ -17,11 +17,13 @@ interface Props {
   displayName: string
   role: string
   enabledModules: string[]
+  showTaskBoard?: boolean
   badges?: {
     corrections?: number
     absences?: number
     invoices?: number
     drafts?: number
+    tasks?: number
   }
 }
 
@@ -43,7 +45,7 @@ function IconSwitchUser() {
   )
 }
 
-export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, enabledModules, badges }: Props) {
+export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, enabledModules, showTaskBoard, badges }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -51,7 +53,7 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
   const isSuperadmin = role === 'superadmin'
   const has = (m: ModuleName) => enabledModules.includes(m)
   const isMoreActive = !PRIMARY_TABS.includes(screen)
-  const hasSecondaryBadge = (badges?.absences ?? 0) > 0
+  const hasSecondaryBadge = (badges?.absences ?? 0) > 0 || (showTaskBoard && (badges?.tasks ?? 0) > 0)
 
   function navigate(target: AdminScreen) {
     setDrawerOpen(false)
@@ -142,6 +144,14 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
               <div className="admin-mobile-drawer-group">
                 <div className="admin-mobile-drawer-group-label">Häufig genutzt</div>
 
+                {showTaskBoard && (
+                  <button className={`admin-mobile-drawer-item${screen === 'tasks' ? ' active' : ''}`} onClick={() => navigate('tasks')}>
+                    <IconTasks /><span>Aufgaben</span>
+                    {(badges?.tasks ?? 0) > 0 && (
+                      <span className="admin-mobile-drawer-item-badge">{badges!.tasks}</span>
+                    )}
+                  </button>
+                )}
                 {has('timekeeping') && (
                   <button className={`admin-mobile-drawer-item${screen === 'my-time' ? ' active' : ''}`} onClick={() => navigate('my-time')}>
                     <IconClock /><span>Meine Zeit</span>

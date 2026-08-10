@@ -19,6 +19,7 @@ export type ModuleName =
   | 'admin_clock_in_push'
   | 'aftersales'
   | 'document_backup'
+  | 'task_board'
 
 export function hasModule(user: UserInfo | null, name: ModuleName): boolean {
   if (!user) return false

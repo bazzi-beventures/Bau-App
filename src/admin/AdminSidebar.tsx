@@ -4,7 +4,7 @@ import { ModuleName } from '../api/modules'
 import {
   IconDashboard, IconUsers, IconCalendar, IconClock, IconDocument, IconBox,
   IconFolder, IconReceipt, IconCash, IconTag, IconKey, IconChart,
-  IconLogout, IconAddressBook, IconSettings, IconAftersales,
+  IconLogout, IconAddressBook, IconSettings, IconAftersales, IconTasks,
 } from './AdminIcons'
 
 interface Props {
@@ -16,11 +16,13 @@ interface Props {
   role: string
   tenantName: string
   enabledModules: string[]
+  showTaskBoard?: boolean
   badges?: {
     corrections?: number
     absences?: number
     invoices?: number
     drafts?: number
+    tasks?: number
   }
 }
 
@@ -49,7 +51,7 @@ function NavItem({ label, target, current, onNav, badge, icon }: NavItemProps) {
   )
 }
 
-export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, enabledModules, badges }: Props) {
+export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUser, displayName, role, tenantName, enabledModules, showTaskBoard, badges }: Props) {
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const isManagement = role === 'management' || role === 'superadmin'
   const isSuperadmin = role === 'superadmin'
@@ -68,6 +70,9 @@ export default function AdminSidebar({ screen, onNav, onLoggedOut, onSwitchToUse
 
       <nav className="admin-nav">
         <NavItem label="Dashboard" target="dashboard" current={screen} onNav={onNav} icon={<IconDashboard />} />
+        {showTaskBoard && (
+          <NavItem label="Aufgaben" target="tasks" current={screen} onNav={onNav} icon={<IconTasks />} badge={badges?.tasks} />
+        )}
         {has('timekeeping') && (
           <NavItem label="Meine Zeit" target="my-time" current={screen} onNav={onNav} icon={<IconClock />} />
         )}

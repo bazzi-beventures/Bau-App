@@ -9,6 +9,7 @@ import { useIsMobile } from './useIsMobile'
 import { dirtyGuard } from './unsavedChanges'
 import { UnsavedChangesDialog } from './components/UnsavedChangesDialog'
 import DashboardScreen from './dashboard/DashboardScreen'
+import TaskBoardScreen from './tasks/TaskBoardScreen'
 import StaffScreen from './personal/StaffScreen'
 import BulkClockInScreen from './personal/BulkClockInScreen'
 import MyTimeScreen from './personal/MyTimeScreen'
@@ -70,6 +71,7 @@ interface Props {
 
 const SCREEN_TITLES: Record<AdminScreen, string> = {
   'dashboard': 'Dashboard',
+  'tasks': 'Aufgaben',
   'my-time': 'Meine Zeiterfassung',
   'staff': 'Mitarbeiter',
   'bulk-clockin': 'Massen-Einstempeln',
@@ -155,6 +157,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     absences: dashboard?.pending_absences ?? 0,
     invoices: dashboard?.open_invoices ?? 0,
     drafts: dashboard?.pending_drafts ?? 0,
+    tasks: dashboard?.my_open_tasks ?? 0,
   }
 
   const isManagement = user.role === 'management' || user.role === 'superadmin'
@@ -168,6 +171,9 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_admin' = unabhängiger
   // Schalter für den Admin-Bereich (Default an).
   const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
+  // Modul 'task_board' schaltet das Board an/ab; das gleichnamige Feature-Flag
+  // hält nur die Schwellwert-Parameter (feature_registry.py).
+  const showTaskBoard = hasModule(user, 'task_board')
 
   function renderScreen() {
     // 'users' fehlt hier bewusst: die Benutzerverwaltung steht auch dem Admin offen
@@ -181,6 +187,9 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     }
     switch (screen) {
       case 'dashboard':    return <DashboardScreen dashboard={dashboard} onNav={guardedNav} onBadgeChange={loadDashboard} />
+      case 'tasks':        return showTaskBoard
+        ? <TaskBoardScreen onNav={guardedNav} onBadgeChange={loadDashboard} />
+        : <ComingSoon title="Kein Zugriff" />
       case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} />)
       case 'staff':        return <StaffScreen />
       case 'bulk-clockin': return guard('timekeeping', <BulkClockInScreen />)
@@ -255,6 +264,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           role={user.role}
           tenantName={tenantName}
           enabledModules={user.enabled_modules ?? []}
+          showTaskBoard={showTaskBoard}
           badges={badges}
         />
       )}
@@ -284,6 +294,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           displayName={user.display_name}
           role={user.role}
           enabledModules={user.enabled_modules ?? []}
+          showTaskBoard={showTaskBoard}
           badges={badges}
         />
       )}

@@ -17,6 +17,7 @@ export interface AdminDashboard {
   pending_drafts: number
   recently_accepted_quotes: number
   recently_rejected_quotes: number
+  my_open_tasks?: number
 }
 
 export interface OverdueProject {
@@ -1009,4 +1010,90 @@ export async function getDocumentBackup(id: number): Promise<DocumentBackupJob> 
 
 export async function cancelDocumentBackup(id: number): Promise<DocumentBackupJob> {
   return apiFetch(`/pwa/admin/document-backup/${id}/cancel`, { method: 'POST' }) as Promise<DocumentBackupJob>
+}
+
+// ─── Aufgaben-Board (Kanban) ────────────────────────────────
+
+export type BoardColumn = 'offen' | 'in_arbeit' | 'wartet' | 'erledigt'
+
+export interface BoardTask {
+  id: string
+  source: 'auto' | 'manuell'
+  task_type: string | null
+  title: string
+  description: string | null
+  project_id: string | null
+  project_name: string | null
+  ref_kind: 'quote' | 'invoice' | 'project' | 'draft' | 'approval' | 'aftersales' | null
+  ref_id: string | null
+  status: BoardColumn
+  sort_order: number
+  assignee_staff_id: string | null
+  assignee_locked: boolean
+  due_date: string | null
+  created_by_name: string | null
+  done_at: string | null
+  done_by_name: string | null
+  auto_done: boolean
+  created_at: string
+}
+
+export interface TaskBoardStaff {
+  id: string
+  name: string | null
+  kuerzel: string | null
+}
+
+export interface TaskBoardResponse {
+  tasks: BoardTask[]
+  columns: BoardColumn[]
+  task_types: Record<string, string>
+  me_staff_id: string | null
+  can_filter_all: boolean
+  assignee: string
+  projektleiter: TaskBoardStaff[]
+  staff: TaskBoardStaff[]
+}
+
+export async function getTaskBoard(assignee: string, refresh = false): Promise<TaskBoardResponse> {
+  const params = new URLSearchParams({ assignee })
+  if (refresh) params.set('refresh', '1')
+  return apiFetch(`/pwa/admin/tasks?${params}`) as Promise<TaskBoardResponse>
+}
+
+export interface CreateBoardTaskBody {
+  title: string
+  description?: string | null
+  project_id?: string | null
+  assignee_staff_id?: string | null
+  due_date?: string | null
+}
+
+export async function createBoardTask(body: CreateBoardTaskBody): Promise<BoardTask | null> {
+  const res = await apiFetch('/pwa/admin/tasks', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }) as { task: BoardTask | null }
+  return res.task
+}
+
+export interface PatchBoardTaskBody {
+  status?: BoardColumn
+  sort_order?: number
+  assignee_staff_id?: string | null
+  due_date?: string | null
+  title?: string
+  description?: string | null
+}
+
+export async function updateBoardTask(taskId: string, body: PatchBoardTaskBody): Promise<BoardTask | null> {
+  const res = await apiFetch(`/pwa/admin/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  }) as { task: BoardTask | null }
+  return res.task
+}
+
+export async function deleteBoardTask(taskId: string): Promise<void> {
+  await apiFetch(`/pwa/admin/tasks/${taskId}`, { method: 'DELETE' })
 }

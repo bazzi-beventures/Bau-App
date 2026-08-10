@@ -3349,3 +3349,203 @@ button.admin-list-item {
   .project-detail-body { grid-template-columns: 1fr; }
   .project-detail-comments { position: static; max-height: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Aufgaben-Board (Kanban) — tb-*
+   ───────────────────────────────────────────────────────────── */
+
+.tb-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.tb-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tb-chip:hover { color: var(--text); }
+
+.tb-chip.active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tb-pl-select { width: auto; min-width: 160px; }
+
+.tb-board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 16px;
+}
+
+.tb-column {
+  flex: 1 1 0;
+  min-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+
+.tb-column.done { opacity: 0.85; }
+
+.tb-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tb-column-count {
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.tb-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 12px;
+  overflow-y: auto;
+  min-height: 60px;
+}
+
+.tb-column-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px 0;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.tb-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: grab;
+  transition: border-color 0.12s ease;
+}
+
+.tb-card:hover { border-color: var(--primary); }
+.tb-card.done { opacity: 0.65; }
+.tb-card.done .tb-card-title { text-decoration: line-through; }
+
+.tb-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tb-card-type {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-card-type.manual {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.tb-card-avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tb-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.tb-card-project {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tb-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.tb-due.overdue { color: var(--danger); font-weight: 600; }
+
+/* Detail-/Erfassungs-Modal */
+.tb-detail { display: flex; flex-direction: column; gap: 12px; }
+.tb-detail-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.tb-detail-desc { font-size: 13px; color: var(--text-muted); white-space: pre-wrap; }
+.tb-detail-row { font-size: 13px; color: var(--text-muted); }
+
+.tb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1 1 140px;
+}
+
+.tb-field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.tb-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .tb-board {
+    /* Spalten bleiben nebeneinander und horizontal swipebar; Statuswechsel geht
+       auf Touch zusätzlich über das Karten-Detail (Spalten-Dropdown). */
+    scroll-snap-type: x mandatory;
+  }
+  .tb-column {
+    min-width: 78vw;
+    scroll-snap-align: start;
+    max-height: none;
+  }
+}
