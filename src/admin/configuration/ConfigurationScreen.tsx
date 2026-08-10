@@ -1587,15 +1587,21 @@ function FeatureField({
   disabled?: boolean
 }) {
   if (field.type === 'bool') {
+    // Unter-Schalter eines Features (der 'enabled'-Schalter selbst sitzt in der
+    // Kopfzeile): bei ausgeschaltetem Feature ausgegraut wie die anderen Feldtypen.
     return (
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-        <input
-          type="checkbox"
-          checked={!!value}
-          onChange={e => onChange(e.target.checked)}
-        />
-        <span>{field.label}</span>
-      </label>
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={!!value}
+            disabled={disabled}
+            onChange={e => onChange(e.target.checked)}
+          />
+          <span>{field.label}</span>
+        </label>
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
     )
   }
   if (field.type === 'number') {
