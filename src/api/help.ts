@@ -26,6 +26,8 @@ export type HelpDoc = {
   name: string
   size?: number | null
   updated_at?: string | null
+  /** Vom Anbieter publiziertes Systemhandbuch (`_system_*`) — nicht löschbar. */
+  system?: boolean
 }
 
 export type ReindexStatus = {

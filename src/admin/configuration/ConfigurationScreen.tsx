@@ -1845,6 +1845,10 @@ function HelpDocsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'er
         privaten Bucket <code>help-docs</code>. Nach dem Hoch- oder Herunterladen den{' '}
         <strong>Reindex</strong> auslösen, damit der Bot die Änderungen kennt (läuft sonst
         automatisch nachts um 03:30).
+        <br />
+        Einträge mit dem Vermerk <em>vom Anbieter gepflegt</em> sind das auf diesen Mandanten
+        zugeschnittene Werkora-Handbuch — es wird automatisch aktualisiert und lässt sich hier
+        weder ersetzen noch löschen.
       </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1901,13 +1905,17 @@ function HelpDocsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'er
                 <td style={{ fontWeight: 600 }}>{d.name}</td>
                 <td>{formatBytes(d.size)}</td>
                 <td>
-                  <button
-                    className="admin-btn admin-btn-secondary"
-                    style={{ fontSize: 11, padding: '3px 8px' }}
-                    onClick={() => onDelete(d.name)}
-                  >
-                    Löschen
-                  </button>
+                  {d.system ? (
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>vom Anbieter gepflegt</span>
+                  ) : (
+                    <button
+                      className="admin-btn admin-btn-secondary"
+                      style={{ fontSize: 11, padding: '3px 8px' }}
+                      onClick={() => onDelete(d.name)}
+                    >
+                      Löschen
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
