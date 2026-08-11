@@ -6,12 +6,16 @@
 // EventHoverCard.tsx (diese Datei bleibt frei von JSX).
 
 import { useEffect, useRef, useState } from 'react'
+import { resolveScheduleDistances } from '../../api/admin'
 import { Project, projectCustomerName } from './ProjectsScreen'
 import { parseDateStr, toDateStr } from '../utils/calendarHelpers'
 
 export interface StaffLite {
   id: string
   name: string
+  // Personal-Kürzel aus dem Mitarbeiterstamm (z.B. "MW"). Optional — fehlt es,
+  // greift staffShortLabel() auf die Initialen des Namens zurück.
+  kuerzel?: string | null
 }
 
 // Kalender-Eintrag = EIN Termin (project_appointments). Der Screen spreadet das
@@ -56,6 +60,51 @@ export function fmtTimeRange(p: Project): string {
   return ''
 }
 
+// Ortschaft aus der Objektadresse — die Zeile, die der Disponent auf einer
+// Tagesplan-Kachel wirklich braucht ("wo muss der Monteur hin"). Die volle
+// Adresse steht in der Hover-Karte.
+//
+// Schweizer Adressen tragen die Ortschaft hinter der vierstelligen PLZ
+// ("Hofstettweg 5, 8405 Winterthur" → "Winterthur"); ein angehängtes Land
+// ("…, Schweiz") stört darum nicht. Ohne PLZ gilt nur ein einzelner Teil ohne
+// Hausnummer als Ortschaft — sonst würde eine reine Strassenangabe als Ort
+// durchgehen.
+export function addressLocality(addr: string | null | undefined): string {
+  const parts = (addr ?? '').split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const m = parts[i].match(/\b\d{4}\s+(\D.*)$/)
+    if (m) return m[1].trim()
+  }
+  if (parts.length === 1) return /\d/.test(parts[0]) ? '' : parts[0]
+  return parts.length > 1 ? parts[parts.length - 1] : ''
+}
+
+// Kürzel eines Mitarbeiters: gepflegtes Personal-Kürzel, sonst Initialen
+// ("Marvin Walser" → "MW"). Immer max. 3 Zeichen, damit die Chips gleich breit
+// bleiben.
+export function staffShortLabel(s: StaffLite): string {
+  const k = (s.kuerzel ?? '').trim()
+  if (k) return k.slice(0, 3).toUpperCase()
+  return s.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+// Kürzel des Termin-Teams, gedeckelt: ein 6-Mann-Einsatz würde sonst den
+// Projektnamen von der Kachel drängen. Was wegfällt, zeigt "+n" an (und die
+// Hover-Karte nennt ohnehin alle Namen).
+export function crewShortLabels(p: Project, staff: StaffLite[], max = 3): string[] {
+  const byId = new Map(staff.map(s => [s.id, s]))
+  const known = (p.monteur_ids ?? []).map(id => byId.get(id)).filter((s): s is StaffLite => !!s)
+  const shown = known.slice(0, max).map(staffShortLabel)
+  if (known.length > max) shown.push(`+${known.length - max}`)
+  return shown
+}
+
 export function fmtRange(p: Project): string {
   if (!p.start_date || !p.end_date) return ''
   const s = parseDateStr(p.start_date).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
@@ -76,6 +125,8 @@ export const KIND_COLORS: Record<string, string> = {
   teamsitzung: 'var(--kind-teamsitzung, #7c3aed)',  // Lila
   lagerarbeit: 'var(--kind-lagerarbeit, #d97706)',  // Bernstein
   werkstatt:   'var(--kind-werkstatt, #0d9488)',    // Türkis
+  weiterbildung: 'var(--kind-weiterbildung, #db2777)',  // Magenta
+  reservation: 'var(--kind-reservation, #65a30d)',  // Limette
   sonstiges:   'var(--kind-sonstiges, #475569)',    // Slate
 }
 
@@ -95,6 +146,8 @@ const KIND_SYMBOLS: Record<string, string> = {
   teamsitzung: '👥',
   lagerarbeit: '📦',
   werkstatt: '⚙️',
+  weiterbildung: '🎓',
+  reservation: '🔒',
   sonstiges: '📌',
 }
 
@@ -134,6 +187,9 @@ const HOVER_DELAY_MS = 220
 export interface HoverState {
   entry: CalendarEntry
   rect: DOMRect
+  // Warnhinweis zur Kachel (z.B. Doppelbuchung). Steht in der Karte statt in
+  // einem title-Tooltip — zwei Tooltips übereinander sind unlesbar.
+  note?: string
 }
 
 // Hover-Zustand + fertige Event-Handler für eine Kachel. Die Verzögerung
@@ -153,12 +209,12 @@ export function useHoverCard() {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
   }, [])
 
-  function bind(entry: CalendarEntry) {
+  function bind(entry: CalendarEntry, note?: string) {
     return {
       onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
         const rect = e.currentTarget.getBoundingClientRect()
         cancelTimer()
-        timerRef.current = window.setTimeout(() => setHover({ entry, rect }), HOVER_DELAY_MS)
+        timerRef.current = window.setTimeout(() => setHover({ entry, rect, note }), HOVER_DELAY_MS)
       },
       onMouseLeave: () => { cancelTimer(); setHover(null) },
       // Beim Ziehen oder Klicken stört die Karte nur.
@@ -167,6 +223,67 @@ export function useHoverCard() {
   }
 
   return { hover, bind }
+}
+
+// ─── Fahrdistanzen zwischen zwei Einsätzen ───────────────────────────────────
+// Genutzt von Plantafel (senkrecht zwischen zwei Chips) und Tagesplan (waagrecht
+// in der Lücke zwischen zwei Balken).
+
+// Kanonischer Cache-Key für ein Adresspaar — gleiche Normalisierung wie das
+// Backend (getrimmt, lexikografisch sortiert), Trenner ist ein Steuerzeichen,
+// das in Adressen nicht vorkommt. null = leer/identisch → keine Distanz nötig.
+export const PAIR_SEP = '\u0001'
+
+export function pairKey(a: string | null | undefined, b: string | null | undefined): string | null {
+  const x = (a ?? '').trim()
+  const y = (b ?? '').trim()
+  if (!x || !y || x === y) return null
+  return x <= y ? `${x}${PAIR_SEP}${y}` : `${y}${PAIR_SEP}${x}`
+}
+
+// Löst die übergebenen Adresspaare (pairKey-Strings) beim Server auf und liefert
+// eine Funktion, die zwei Einsätze in km übersetzt. Distanz ist reine Zusatzinfo:
+// Fehler bleiben still, unbekannte Paare geben null.
+export function useScheduleDistances(pairKeys: string[]) {
+  // Aufgelöste Distanzen (pairKey → km); wächst über Wochenwechsel mit.
+  const [distances, setDistances] = useState<Record<string, number>>({})
+  // Bereits angefragte Paare — verhindert Wiederholungs-Requests für Paare,
+  // die der Server (noch) nicht auflösen konnte.
+  const requestedPairsRef = useRef<Set<string>>(new Set())
+  const neededSig = [...new Set(pairKeys)].sort().join('\n')
+
+  // Fehlende Paare gebündelt beim Server anfragen (cache-first, dort gedeckelt).
+  // Deps bewusst nur die Paar-Signatur: erneut versucht wird erst, wenn sich
+  // die sichtbare Ansicht ändert — nicht bei jedem Distanz-Merge.
+  useEffect(() => {
+    if (!neededSig) return
+    const missing = neededSig.split('\n').filter(k => !requestedPairsRef.current.has(k))
+    if (missing.length === 0) return
+    missing.forEach(k => requestedPairsRef.current.add(k))
+    let cancelled = false
+    resolveScheduleDistances(missing.map(k => k.split(PAIR_SEP) as [string, string]))
+      .then(res => {
+        if (cancelled || res.distances.length === 0) return
+        setDistances(prev => {
+          const next = { ...prev }
+          for (const d of res.distances) {
+            const k = pairKey(d.a, d.b)
+            if (k) next[k] = d.km
+          }
+          return next
+        })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [neededSig])
+
+  // km zwischen zwei Einsätzen (beide getaktet, Adressen vorhanden/verschieden).
+  return function distBetween(a: Project, b: Project): number | null {
+    if (!a.start_time || !b.start_time) return null
+    const k = pairKey(a.object_address, b.object_address)
+    if (!k) return null
+    return distances[k] ?? null
+  }
 }
 
 // ─── Drag-Handlers ────────────────────────────────────────────────────────────

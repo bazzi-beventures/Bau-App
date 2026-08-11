@@ -40,9 +40,17 @@ export function ganttDays(start: Date, span: number): Date[] {
 // greif- und klickbar bleiben.
 export const GANTT_MIN_BAR_PX = 14
 // Höhe eines Balkens und Abstand zwischen zwei Lanes derselben Zeile.
-export const GANTT_BAR_H = 24
+// Der Balken trägt zwei Zeilen (Kürzel + Titel, darunter die Ortschaft); die
+// Höhe ist fix, damit alle Zeilen gleich hoch bleiben, auch wenn eine Adresse
+// fehlt. Wird die Höhe hier geändert, muss die CSS-Zeilenhöhe von
+// .project-cal-gantt-bar mitziehen.
+export const GANTT_BAR_H = 34
 export const GANTT_LANE_GAP = 2
 export const GANTT_ROW_PAD = 3
+// Ab dieser Lückenbreite (px) zwischen zwei Balken passt das Distanz-Etikett
+// ("→ 4.2 km") dazwischen. Darunter wird es weggelassen statt über die Balken
+// gelegt.
+export const GANTT_DIST_MIN_GAP_PX = 44
 
 // Waagrechter Abstand einer Uhrzeit von der Tages-Rasterkante (startHour).
 export function timeOffsetX(t: string, startHour: number, hourWidth: number): number {

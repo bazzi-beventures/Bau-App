@@ -123,3 +123,72 @@ describe('SendQuoteDialog — Projekt-Fotos', () => {
     await waitFor(() => expect(sendBody().anhang_file_ids).toEqual(['a1']))
   })
 })
+
+// Mehrere Empfänger + CC: die Standard-Adresse bleibt das vorbelegte Pflichtfeld,
+// über «+» kommen weitere Empfänger und CC-Adressen dazu. Ein Mail an alle — die
+// Normalisierung (leer/doppelt) macht der Server, das Frontend schickt nur, was
+// wirklich ausgefüllt ist.
+describe('SendQuoteDialog — mehrere Empfänger und CC', () => {
+  it('schickt ohne «+» nur die Standard-Adresse, Listen leer', async () => {
+    const user = userEvent.setup()
+    mockInfo()
+    renderDialog()
+    await screen.findByText('Prospekt.pdf')
+
+    await user.click(screen.getByRole('button', { name: 'Offerte senden' }))
+    await waitFor(() => {
+      const body = sendBody()
+      expect(body.recipient_email).toBe('kunde@example.ch')
+      expect(body.additional_recipients).toEqual([])
+      expect(body.cc_recipients).toEqual([])
+    })
+  })
+
+  it('fügt über «+ Empfänger» und «+ CC» weitere Adressen hinzu', async () => {
+    const user = userEvent.setup()
+    mockInfo()
+    renderDialog()
+    await screen.findByText('Prospekt.pdf')
+
+    await user.click(screen.getByRole('button', { name: '+ Empfänger' }))
+    await user.type(screen.getByLabelText('Weiterer Empfänger 1'), 'architekt@example.ch')
+    await user.click(screen.getByRole('button', { name: '+ CC' }))
+    await user.type(screen.getByLabelText('CC 1'), 'verwaltung@example.ch')
+
+    await user.click(screen.getByRole('button', { name: 'Offerte senden' }))
+    await waitFor(() => {
+      const body = sendBody()
+      expect(body.recipient_email).toBe('kunde@example.ch')
+      expect(body.additional_recipients).toEqual(['architekt@example.ch'])
+      expect(body.cc_recipients).toEqual(['verwaltung@example.ch'])
+    })
+  })
+
+  it('schickt leer gelassene Zeilen nicht mit', async () => {
+    const user = userEvent.setup()
+    mockInfo()
+    renderDialog()
+    await screen.findByText('Prospekt.pdf')
+
+    await user.click(screen.getByRole('button', { name: '+ Empfänger' }))
+    await user.click(screen.getByRole('button', { name: '+ Empfänger' }))
+    await user.type(screen.getByLabelText('Weiterer Empfänger 2'), 'zweiter@example.ch')
+
+    await user.click(screen.getByRole('button', { name: 'Offerte senden' }))
+    await waitFor(() => expect(sendBody().additional_recipients).toEqual(['zweiter@example.ch']))
+  })
+
+  it('entfernt eine Zeile wieder', async () => {
+    const user = userEvent.setup()
+    mockInfo()
+    renderDialog()
+    await screen.findByText('Prospekt.pdf')
+
+    await user.click(screen.getByRole('button', { name: '+ CC' }))
+    await user.type(screen.getByLabelText('CC 1'), 'weg@example.ch')
+    await user.click(screen.getByRole('button', { name: 'CC 1 entfernen' }))
+
+    await user.click(screen.getByRole('button', { name: 'Offerte senden' }))
+    await waitFor(() => expect(sendBody().cc_recipients).toEqual([]))
+  })
+})

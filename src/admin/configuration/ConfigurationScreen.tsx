@@ -1223,7 +1223,7 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
           checked={config.show_distances !== false}
           onChange={e => setConfig(prev => prev && { ...prev, show_distances: e.target.checked })}
         />
-        Fahrdistanzen zwischen Einsätzen in der Plantafel anzeigen
+        Fahrdistanzen zwischen Einsätzen anzeigen (Plantafel und Tagesplan)
       </label>
 
       <div style={{ fontWeight: 600, marginBottom: 6 }}>Tages-Kapazität</div>
@@ -1255,7 +1255,12 @@ function SchedulingTab({ onToast }: { onToast: (msg: string, type: 'success' | '
         </div>
       )}
 
-      <div style={{ fontWeight: 600, marginBottom: 10 }}>Zusätzliche Felder auf der Kachel</div>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Zusätzliche Felder auf der Kachel</div>
+      <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>
+        Im Tagesplan ist auf dem Balken nur Platz für eine Zusatzzeile: dort zeigt
+        «Adresse (Objekt)» die Ortschaft. Die vollen Angaben stehen in der
+        Info-Karte beim Überfahren mit der Maus.
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
         {SCHEDULING_FIELDS.map(f => (
           <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>

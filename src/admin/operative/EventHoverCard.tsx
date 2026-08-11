@@ -16,7 +16,7 @@ const HOVER_CARD_W = 260
 const HOVER_CARD_MAX_H = 230
 
 export default function EventHoverCard({ hover, staff }: { hover: HoverState; staff: StaffLite[] }) {
-  const { entry: p, rect } = hover
+  const { entry: p, rect, note } = hover
   const rows: [string, string][] = []
   const kunde = projectCustomerName(p)
   const pl = p.projektleiter_id ? staff.find(s => s.id === p.projektleiter_id)?.name : ''
@@ -48,6 +48,7 @@ export default function EventHoverCard({ hover, staff }: { hover: HoverState; st
           <span>{value}</span>
         </div>
       ))}
+      {note && <div className="project-cal-hovercard-note">{note}</div>}
     </div>,
     document.body,
   )

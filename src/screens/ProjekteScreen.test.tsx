@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjekteScreen from './ProjekteScreen'
-import { apiFetch } from '../api/client'
+import { apiFetch, apiFormFetch } from '../api/client'
 
 // Rapport-Sperre in der Mitarbeiter-PWA (Feature rapport_offerten_annahme_pflicht):
 // Das Backend liefert pro Projekt `rapport_blocked`; ist es gesetzt, ist der
@@ -94,6 +94,7 @@ async function openProject(
 
 beforeEach(() => {
   mockFetch.mockReset()
+  vi.mocked(apiFormFetch).mockReset()
 })
 
 describe('ProjekteScreen — Rapport-Sperre', () => {
@@ -243,5 +244,59 @@ describe('ProjekteScreen — Rapporte des Projekts', () => {
     await openProject([project()], vi.fn(), { [REPORTS_PATH]: [report()] })
 
     expect(await screen.findByRole('button', { name: 'Löschen' })).toBeInTheDocument()
+  })
+})
+
+// Lieferscheine: der Teilordner "Lieferschein" aus dem Admin-Reiter
+// Lieferantendokumente steht auch dem Monteur zur Verfügung — als eigene Karte,
+// damit der Lieferschein vom Büro nicht zwischen den Baustellenfotos untergeht.
+// Die übrigen Lieferantendokumente (Angebot, Bestellung, Auftragsbestätigung)
+// filtert der Server aus der Liste (ADMIN_ONLY_FILE_CATEGORIES) — hier kommen sie
+// gar nicht erst an.
+describe('ProjekteScreen — Lieferscheine', () => {
+  const FILES_PATH = '/pwa/projects/p1/files'
+
+  function file(over: Record<string, unknown> = {}) {
+    return {
+      id: 'f1',
+      filename: 'lieferschein.pdf',
+      file_url: null,
+      storage_path: 'tenant/project_files/p1/ls.pdf',
+      mime_type: 'application/pdf',
+      category: 'lieferschein',
+      created_at: '2026-08-05T09:00:00Z',
+      ...over,
+    }
+  }
+
+  it('zeigt den vom Büro abgelegten Lieferschein als Download in eigener Karte', async () => {
+    await openProject([project()], vi.fn(), { [FILES_PATH]: [file()] })
+
+    expect(await screen.findByText('Lieferscheine')).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: 'lieferschein.pdf' })
+    expect(link).toHaveAttribute('href', '/pwa/projects/p1/files/f1/download')
+    // Nicht doppelt: die Sammelliste zeigt nur noch den Rest.
+    expect(screen.getByText('Noch keine Dateien hochgeladen.')).toBeInTheDocument()
+  })
+
+  it('lässt die Sammelliste unberührt und meldet den leeren Lieferschein-Ordner', async () => {
+    await openProject([project()], vi.fn(), {
+      [FILES_PATH]: [file({ id: 'f2', filename: 'baustelle.jpg', category: 'fotos', mime_type: 'image/jpeg' })],
+    })
+
+    expect(await screen.findByText('baustelle.jpg')).toBeInTheDocument()
+    expect(screen.getByText('Noch kein Lieferschein vorhanden.')).toBeInTheDocument()
+  })
+
+  it('lädt über den Lieferschein-Knopf in die Kategorie lieferschein hoch', async () => {
+    const { user } = await openProject([project()], vi.fn(), { [FILES_PATH]: [] })
+
+    const input = await screen.findByLabelText('Lieferschein hochladen')
+    await user.upload(input, new File(['%PDF'], 'ls.pdf', { type: 'application/pdf' }))
+
+    await waitFor(() => expect(apiFormFetch).toHaveBeenCalled())
+    const [path, form] = vi.mocked(apiFormFetch).mock.calls[0] as [string, FormData]
+    expect(path).toBe(FILES_PATH)
+    expect(form.get('category')).toBe('lieferschein')
   })
 })

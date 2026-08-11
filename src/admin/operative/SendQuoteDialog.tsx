@@ -27,6 +27,46 @@ const EMPTY_INFO: SendAttachmentsInfo = {
   projekt_anhaenge: [], vorlagen: [], projekt_fotos: [],
 }
 
+// Eine Adress-Zeile unter dem Standard-Empfänger: Eingabefeld + Entfernen-Knopf.
+// `prefix` markiert CC-Zeilen sichtbar, damit man sie in der Liste nicht mit einem
+// weiteren Haupt-Empfänger verwechselt.
+function EmailRow({ value, label, prefix, disabled, onChange, onRemove }: {
+  value: string
+  label: string
+  prefix?: string
+  disabled: boolean
+  onChange: (v: string) => void
+  onRemove: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      {prefix && (
+        <span style={{ fontSize: 12, color: 'var(--muted)', width: 24, flexShrink: 0 }}>{prefix}</span>
+      )}
+      <input
+        className="admin-form-input"
+        style={{ flex: 1, minWidth: 0 }}
+        type="email"
+        value={value}
+        aria-label={label}
+        placeholder="weitere@example.com"
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className="admin-btn admin-btn-danger admin-btn-sm"
+        title="Entfernen"
+        aria-label={`${label} entfernen`}
+        disabled={disabled}
+        onClick={onRemove}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
 // Gemeinsamer Versand-Dialog für Offerten (Offerten-Liste + Projekt-Detail) mit
 // vier Anhang-Quellen: Projekt-Anhänge (Dokumente → Anhänge), direkt gewählte
 // Dateien (werden beim Senden als Projekt-Anhang hochgeladen), mandantenweite
@@ -34,6 +74,12 @@ const EMPTY_INFO: SendAttachmentsInfo = {
 // Projekt-Fotos (Dokumente → Fotos).
 export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent }: Props) {
   const [email, setEmail] = useState(defaultEmail ?? '')
+  // Weitere Empfänger und CC: eine Offerte geht oft an mehrere Parteien desselben
+  // Vorgangs (Bauherr, Architekt, Verwaltung). Ein Mail an alle — sie sollen einander
+  // sehen, deshalb CC und nicht je ein Einzelversand. Die Standard-Adresse oben bleibt
+  // das Pflichtfeld; diese Listen sind leer, bis jemand auf «+» klickt.
+  const [extraEmails, setExtraEmails] = useState<string[]>([])
+  const [ccEmails, setCcEmails] = useState<string[]>([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState<SendAttachmentsInfo>(EMPTY_INFO)
@@ -125,6 +171,10 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
         body: JSON.stringify({
           quote_id: quoteId,
           recipient_email: email,
+          // Leere Zeilen mitschicken wäre unsauber — wer «+» drückt und nichts
+          // einträgt, hat keinen Empfänger gemeint. Der Server wirft sie ohnehin raus.
+          additional_recipients: extraEmails.map(e => e.trim()).filter(Boolean),
+          cc_recipients: ccEmails.map(e => e.trim()).filter(Boolean),
           anhang_file_ids: [...selectedAnhaenge, ...uploadedIds],
           vorlage_attachment_ids: [...selectedVorlagen],
           foto_file_ids: [...selectedFotos],
@@ -157,6 +207,52 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
             onChange={e => setEmail(e.target.value)}
             placeholder="kunde@example.com"
           />
+
+          {extraEmails.map((v, i) => (
+            <EmailRow
+              key={`to-${i}`}
+              value={v}
+              label={`Weiterer Empfänger ${i + 1}`}
+              disabled={sending}
+              onChange={next => setExtraEmails(prev => prev.map((x, j) => (j === i ? next : x)))}
+              onRemove={() => setExtraEmails(prev => prev.filter((_, j) => j !== i))}
+            />
+          ))}
+          {ccEmails.map((v, i) => (
+            <EmailRow
+              key={`cc-${i}`}
+              value={v}
+              label={`CC ${i + 1}`}
+              prefix="CC"
+              disabled={sending}
+              onChange={next => setCcEmails(prev => prev.map((x, j) => (j === i ? next : x)))}
+              onRemove={() => setCcEmails(prev => prev.filter((_, j) => j !== i))}
+            />
+          ))}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary admin-btn-sm"
+              disabled={sending}
+              onClick={() => setExtraEmails(prev => [...prev, ''])}
+            >
+              + Empfänger
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary admin-btn-sm"
+              disabled={sending}
+              onClick={() => setCcEmails(prev => [...prev, ''])}
+            >
+              + CC
+            </button>
+          </div>
+          {(extraEmails.length > 0 || ccEmails.length > 0) && (
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+              Alle Adressen erhalten dieselbe Mail und sehen einander.
+            </div>
+          )}
         </div>
 
         {info.enabled && info.projekt_anhaenge.length > 0 && (

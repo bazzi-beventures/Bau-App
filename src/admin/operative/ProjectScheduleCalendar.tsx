@@ -1,7 +1,7 @@
 ﻿import { Fragment, useEffect, useRef, useState } from 'react'
 import { Project } from './ProjectsScreen'
 import {
-  SCHEDULING_VIEWS, resolveScheduleDistances,
+  SCHEDULING_VIEWS,
   type SchedulingConfig, type SchedulingViewKey,
 } from '../../api/admin'
 import { useIsMobile } from '../useIsMobile'
@@ -21,8 +21,9 @@ import {
 } from '../utils/ganttGrid'
 import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
-  entryTitle, fmtTime, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
-  projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload, useHoverCard,
+  entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillExtraLines,
+  projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload,
+  useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
@@ -540,20 +541,6 @@ function WeekView({
   )
 }
 
-// ─── Distanz-Paare (Plantafel) ──────────────────────────────────────────────
-
-// Kanonischer Cache-Key für ein Adresspaar — gleiche Normalisierung wie das
-// Backend (getrimmt, lexikografisch sortiert), Trenner ist ein Steuerzeichen,
-// das in Adressen nicht vorkommt. null = leer/identisch → keine Distanz nötig.
-const PAIR_SEP = '\u0001'
-
-function pairKey(a: string | null | undefined, b: string | null | undefined): string | null {
-  const x = (a ?? '').trim()
-  const y = (b ?? '').trim()
-  if (!x || !y || x === y) return null
-  return x <= y ? `${x}${PAIR_SEP}${y}` : `${y}${PAIR_SEP}${x}`
-}
-
 // ─── Plantafel (Monteure als Zeilen × Wochentage) ───────────────────────────
 // Dispositions-Sicht: eine Zeile pro Monteur, Spalten Mo–So. Ein Termin mit
 // mehreren Monteuren erscheint in jeder betroffenen Zeile; Termine ohne
@@ -585,11 +572,6 @@ function PlantafelView({
   const days = getWeekDays(currentDate)
   // Hover-Zelle beim Drag: `${dayISO}|${rowId}` (rowId '' = «Ohne Monteur»).
   const [hoverCell, setHoverCell] = useState<string | null>(null)
-  // Aufgelöste Distanzen (pairKey → km); wächst über Wochenwechsel mit.
-  const [distances, setDistances] = useState<Record<string, number>>({})
-  // Bereits angefragte Paare — verhindert Wiederholungs-Requests für Paare,
-  // die der Server (noch) nicht auflösen konnte.
-  const requestedPairsRef = useRef<Set<string>>(new Set())
   const projById = new Map(projects.map(p => [p.id, p]))
   const staffIds = new Set(staff.map(s => s.id))
 
@@ -610,53 +592,19 @@ function PlantafelView({
   // Aufeinanderfolgende GETAKTETE Einsätze einer Zelle mit verschiedenen
   // Objektadressen — nur zwischen denen ergibt eine Fahrdistanz Sinn
   // (Ganztägige haben keine Reihenfolge, «Ohne Monteur» keine Route).
-  const neededPairs = new Set<string>()
+  const neededPairs: string[] = []
   if (showDistances) {
     for (const s of rowStaff) {
       for (const d of days) {
         const timed = cellEntries(s.id, d).filter(p => p.start_time)
         for (let i = 0; i + 1 < timed.length; i++) {
           const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
-          if (k) neededPairs.add(k)
+          if (k) neededPairs.push(k)
         }
       }
     }
   }
-  const neededSig = [...neededPairs].sort().join('\n')
-
-  // Fehlende Paare gebündelt beim Server anfragen (cache-first, dort gedeckelt).
-  // Deps bewusst nur die Paar-Signatur: erneut versucht wird erst, wenn sich
-  // die sichtbare Tafel ändert — nicht bei jedem Distanz-Merge.
-  useEffect(() => {
-    if (!neededSig) return
-    const missing = neededSig.split('\n').filter(k => !requestedPairsRef.current.has(k))
-    if (missing.length === 0) return
-    missing.forEach(k => requestedPairsRef.current.add(k))
-    let cancelled = false
-    resolveScheduleDistances(missing.map(k => k.split(PAIR_SEP) as [string, string]))
-      .then(res => {
-        if (cancelled || res.distances.length === 0) return
-        setDistances(prev => {
-          const next = { ...prev }
-          for (const d of res.distances) {
-            const k = pairKey(d.a, d.b)
-            if (k) next[k] = d.km
-          }
-          return next
-        })
-      })
-      // Distanz ist reine Zusatzinfo — Fehler still schlucken, nichts anzeigen.
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [neededSig])
-
-  // km zwischen zwei Einsätzen (beide getaktet, Adressen vorhanden/verschieden).
-  function distBetween(a: CalendarEntry, b: CalendarEntry): number | null {
-    if (!a.start_time || !b.start_time) return null
-    const k = pairKey(a.object_address, b.object_address)
-    if (!k) return null
-    return distances[k] ?? null
-  }
+  const distBetween = useScheduleDistances(neededPairs)
 
   // Doppelbuchung: getaktete Einsätze desselben Monteurs am selben Tag, die sich
   // zeitlich überschneiden (ohne Endzeit zählt 1 h). Nur echte Ressourcen-
@@ -1248,6 +1196,7 @@ export default function ProjectScheduleCalendar({
           greyAfter={greyAfter}
           greyUntil={greyUntil}
           dayCapacityHours={schedulingConfig?.day_capacity_hours ?? DAY_CAPACITY_FALLBACK_H}
+          showDistances={schedulingConfig?.show_distances !== false}
         />
       ) : view === 'plantafel' ? (
         <PlantafelView

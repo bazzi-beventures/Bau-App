@@ -61,13 +61,19 @@ export interface ProjectQuoteSummary {
   pdf_url: string | null
 }
 
-export type ProjectKind = 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt' | 'sonstiges'
+export type ProjectKind =
+  | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
+  | 'weiterbildung' | 'reservation' | 'sonstiges'
 
 export const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
   project: 'Projekt',
   teamsitzung: 'Teamsitzung',
   lagerarbeit: 'Lagerarbeit',
   werkstatt: 'Werkstatt',
+  weiterbildung: 'Weiterbildung',
+  // Vormerkung eines Monteurs, ohne dass schon feststeht wofür — belegt
+  // Kapazität wie jeder andere interne Einsatz.
+  reservation: 'Reservation',
   sonstiges: 'Sonstiges',
 }
 

@@ -10,14 +10,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Project } from './ProjectsScreen'
 import {
   CalendarEntry, StaffLite,
-  useHoverCard, entryTitle, fmtTimeRange, kindSymbol, pillBg, pillExtraLines,
-  projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload,
+  addressLocality, crewShortLabels, useHoverCard, entryTitle, fmtTimeRange, kindSymbol,
+  pairKey, pillBg, projectCoversDay, readDragPayload, setDragPayload, useScheduleDistances,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
 import { diffDays, hhmmToMin, isToday, toDateStr } from '../utils/calendarHelpers'
 import { computeWeekHours } from '../utils/weekGrid'
 import {
-  GANTT_BAR_H, GANTT_LANE_GAP, GANTT_ROW_PAD,
+  GANTT_BAR_H, GANTT_DIST_MIN_GAP_PX, GANTT_LANE_GAP, GANTT_ROW_PAD,
   barMetrics, computeGanttLanes, dayWidthPx, ganttDays, laneCount, rowHeightPx,
   plannedMinutes, timeOffsetX, utilizationPct, utilizationTone,
   xToDayIndex, xToSnappedTime,
@@ -56,11 +56,14 @@ interface Props {
   greyUntil?: string
   // Tages-Kapazität in Stunden — Bezugsgrösse des Auslastungsgrads.
   dayCapacityHours: number
+  // Fahrdistanzen zwischen aufeinanderfolgenden Einsätzen anzeigen (Tenant-Config).
+  showDistances?: boolean
 }
 
 export default function ProjectScheduleGantt({
   projects, staff, rowStaff, fields, currentDate, span, hourWidth,
-  onSelect, onOpenProject, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil, dayCapacityHours,
+  onSelect, onOpenProject, onReschedule, onCreateSlot, holidays, greyAfter, greyUntil,
+  dayCapacityHours, showDistances,
 }: Props) {
   const { hover, bind } = useHoverCard()
   // Zeile, über der gerade ein Balken schwebt: rowId ('' = «Ohne Monteur»).
@@ -97,6 +100,23 @@ export default function ProjectScheduleGantt({
   }
 
   const hasUnassigned = days.some(d => cellEntries(null, d).length > 0)
+
+  // Aufeinanderfolgende GETAKTETE Einsätze einer Zeile mit verschiedenen
+  // Objektadressen — nur dazwischen ergibt eine Fahrdistanz Sinn. Wie in der
+  // Plantafel bleibt «Ohne Monteur» aussen vor: das ist niemandes Route.
+  const neededPairs: string[] = []
+  if (showDistances) {
+    for (const s of rowStaff) {
+      for (const d of days) {
+        const timed = cellEntries(s.id, d).filter(p => p.start_time)
+        for (let i = 0; i + 1 < timed.length; i++) {
+          const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
+          if (k) neededPairs.push(k)
+        }
+      }
+    }
+  }
+  const distBetween = useScheduleDistances(neededPairs)
 
   // Rastergrenzen über ALLE sichtbaren Tage — sonst würde jeder Tag eine andere
   // Breite bekommen und die Achse wäre nicht mehr durchgehend lesbar.
@@ -179,7 +199,6 @@ export default function ProjectScheduleGantt({
 
   function renderBar(p: CalendarEntry, dayIndex: number, dayISO: string, rowId: string | null, lane: number, conflict: boolean) {
     const timeLabel = fmtTimeRange(p)
-    const extra = pillExtraLines(p, staff, fields)
     const allDay = !p.start_time
     const geo = allDay
       ? { leftPx: dayIndex * dayW, widthPx: dayW }
@@ -188,6 +207,12 @@ export default function ProjectScheduleGantt({
     // Name: die Uhrzeit steht ohnehin in der Position auf der Achse (und in der
     // Hover-Karte). Eine halb abgeschnittene Uhrzeit wäre schlechter als keine.
     const showTime = geo.widthPx >= TIME_LABEL_MIN_PX
+    // Zweite Zeile: nur die Ortschaft, nicht die ganze Adresse — die Frage am
+    // Tagesplan ist «wohin fährt er als Nächstes», nicht die Hausnummer.
+    // Abschaltbar über dasselbe Tenant-Feld wie die Adresszeile der anderen
+    // Ansichten (scheduling_config.fields.address).
+    const locality = fields?.address !== false ? addressLocality(p.object_address) : ''
+    const crew = crewShortLabels(p, staff)
     return (
       <div
         key={`${p.id}@${dayISO}`}
@@ -212,17 +237,56 @@ export default function ProjectScheduleGantt({
           top: allDay ? 0 : GANTT_ROW_PAD + lane * (GANTT_BAR_H + GANTT_LANE_GAP),
           height: allDay ? '100%' : GANTT_BAR_H,
         }}
-        title={[
-          entryTitle(p), timeLabel || 'ganztägig', projectMonteurNames(p, staff), ...extra,
-          conflict ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Mitarbeiters' : '',
-        ].filter(Boolean).join(' · ')}
-        {...bind(p)}
+        // Leerer title mit Absicht: die Angaben stehen in der Hover-Karte. Ohne
+        // das Attribut würde der Browser den title der Rasterfläche darunter
+        // anzeigen — ein zweiter Tooltip quer über der Karte.
+        title=""
+        {...bind(p, conflict
+          ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Mitarbeiters'
+          : undefined)}
       >
-        {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
-        {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
-        <span className="project-cal-gantt-bar-name">{entryTitle(p)}</span>
-        {timeLabel && showTime && <span className="project-cal-gantt-bar-time">{timeLabel}</span>}
-        {conflict && <span className="project-cal-gantt-bar-warn">⚠</span>}
+        <span className="project-cal-gantt-bar-line">
+          {crew.length > 0 && (
+            <span className="project-cal-gantt-bar-crew">{crew.join(' ')}</span>
+          )}
+          {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
+          {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}
+          <span className="project-cal-gantt-bar-name">{entryTitle(p)}</span>
+          {timeLabel && showTime && <span className="project-cal-gantt-bar-time">{timeLabel}</span>}
+          {conflict && <span className="project-cal-gantt-bar-warn">⚠</span>}
+        </span>
+        {locality && <span className="project-cal-gantt-bar-sub">{locality}</span>}
+      </div>
+    )
+  }
+
+  // Fahrstrecke zwischen zwei aufeinanderfolgenden Balken, in der Lücke
+  // dazwischen. Ohne Lücke (Termine schliessen direkt aneinander an) bliebe nur
+  // ein Etikett quer über den Balken — dann lieber nichts; die Plantafel zeigt
+  // dieselbe Distanz senkrecht und ungedeckelt.
+  function renderDistance(a: CalendarEntry, b: CalendarEntry, dayIndex: number, lane: number) {
+    const km = distBetween(a, b)
+    if (km === null) return null
+    const from = barMetrics(a, dayIndex, startHour, endHour, hourW)
+    const to = barMetrics(b, dayIndex, startHour, endHour, hourW)
+    const left = from.leftPx + from.widthPx
+    const width = to.leftPx - left
+    if (width < GANTT_DIST_MIN_GAP_PX) return null
+    return (
+      <div
+        key={`dist-${a.id}-${b.id}`}
+        className="project-cal-gantt-dist"
+        style={{
+          left,
+          width,
+          top: GANTT_ROW_PAD + lane * (GANTT_BAR_H + GANTT_LANE_GAP),
+          height: GANTT_BAR_H,
+        }}
+        // Kein title: das Etikett liegt über der freien Rasterfläche, auf der
+        // ein Klick einen Einsatz plant (CSS: pointer-events: none).
+        aria-label={`Fahrstrecke ${a.object_address} → ${b.object_address}`}
+      >
+        → {km.toLocaleString('de-CH', { maximumFractionDigits: 1 })} km
       </div>
     )
   }
@@ -306,7 +370,12 @@ export default function ProjectScheduleGantt({
             const entries = perDay[i]
             const conflicts = rowId !== null ? conflictIds(entries) : new Set<string>()
             const lanes = lanesPerDay[i]
-            return entries.map(p => renderBar(p, i, dayISO, rowId, lanes.get(p.id) ?? 0, conflicts.has(p.id)))
+            const timed = rowId !== null && showDistances ? entries.filter(p => p.start_time) : []
+            return [
+              ...entries.map(p => renderBar(p, i, dayISO, rowId, lanes.get(p.id) ?? 0, conflicts.has(p.id))),
+              ...timed.slice(0, -1).map((p, j) =>
+                renderDistance(p, timed[j + 1], i, lanes.get(p.id) ?? 0)),
+            ]
           })}
         </div>
         <div className="project-cal-gantt-util">

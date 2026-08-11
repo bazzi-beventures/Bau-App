@@ -583,6 +583,8 @@ export const SCHEDULING_KINDS = [
   { key: 'teamsitzung', label: 'Teamsitzung' },
   { key: 'lagerarbeit', label: 'Lagerarbeit' },
   { key: 'werkstatt', label: 'Werkstatt' },
+  { key: 'weiterbildung', label: 'Weiterbildung' },
+  { key: 'reservation', label: 'Mitarbeiter-Reservation' },
   { key: 'sonstiges', label: 'Sonstiges' },
 ] as const
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createEvent, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalendar'
-import { type SchedulingConfig } from '../../api/admin'
+import { resolveScheduleDistances, type SchedulingConfig } from '../../api/admin'
 import { toDateStr } from '../utils/calendarHelpers'
 import { GANTT_ZOOM_DEFAULT, GANTT_ZOOM_LEVELS } from '../utils/ganttGrid'
 
@@ -16,7 +16,7 @@ vi.mock('../../api/admin', async (importOriginal) => {
 // Verschieben per Drag&Drop (Uhrzeit + Monteur-Umzuweisung).
 
 const STAFF = [
-  { id: 's1', name: 'Anna Muster' },
+  { id: 's1', name: 'Anna Muster', kuerzel: 'AM' },
   { id: 's2', name: 'Beat Beispiel' },
 ]
 
@@ -225,6 +225,83 @@ describe('Tagesplan (Gantt)', () => {
     expect(localStorage.getItem('schedule-gantt-zoom')).toBe(String(GANTT_ZOOM_DEFAULT + 1))
     // Der Wochen-Zoom bleibt davon unberührt.
     expect(localStorage.getItem('schedule-week-zoom')).toBeNull()
+  })
+
+  it('zeigt Team-Kürzel vorne und die Ortschaft als zweite Zeile', () => {
+    const { container } = renderGantt({
+      entries: [entry({
+        monteur_ids: ['s1', 's2'],
+        object_address: 'Hofstettweg 5, 8405 Winterthur',
+      })],
+    })
+    const bar = container.querySelector('.project-cal-gantt-bar')!
+    // Gepflegtes Kürzel, sonst Initialen.
+    expect(bar.querySelector('.project-cal-gantt-bar-crew')).toHaveTextContent('AM BB')
+    // Zweite Zeile trägt nur die Ortschaft, nicht die ganze Adresse.
+    const sub = bar.querySelector('.project-cal-gantt-bar-sub')!
+    expect(sub).toHaveTextContent('Winterthur')
+    expect(sub).not.toHaveTextContent('Hofstettweg')
+  })
+
+  it('fields.address=false blendet die Ortschaft aus', () => {
+    const { container } = renderGantt({
+      config: { ...CONFIG, fields: { address: false } },
+      entries: [entry({ object_address: 'Hofstettweg 5, 8405 Winterthur' })],
+    })
+    expect(container.querySelector('.project-cal-gantt-bar-sub')).not.toBeInTheDocument()
+  })
+
+  it('trägt keinen title — die Angaben stehen in der Hover-Karte', () => {
+    // Ein title auf dem Balken erschiene zusätzlich zur Hover-Karte und legte
+    // sich quer darüber; der leere title hält auch den title der Rasterfläche
+    // darunter zurück.
+    const { container } = renderGantt({})
+    expect(container.querySelector('.project-cal-gantt-bar')!.getAttribute('title')).toBe('')
+  })
+
+  it('zeigt die Fahrstrecke zum nächsten Einsatz in der Lücke dazwischen', async () => {
+    vi.mocked(resolveScheduleDistances).mockResolvedValue({
+      distances: [{ a: 'Astrasse 1, 8400 Winterthur', b: 'Bstrasse 2, 8472 Seuzach', km: 4.2 }],
+    })
+    const hourWidth = GANTT_ZOOM_LEVELS[GANTT_ZOOM_DEFAULT]
+    const { container } = renderGantt({
+      entries: [
+        entry({ id: 'a1', start_time: '09:00', end_time: '10:00', object_address: 'Astrasse 1, 8400 Winterthur' }),
+        entry({ id: 'a2', name: 'Projekt Beta', start_time: '11:30', end_time: '12:30', object_address: 'Bstrasse 2, 8472 Seuzach' }),
+      ],
+    })
+    expect(await screen.findByText(/4[.,]2 km/)).toBeInTheDocument()
+    // Sitzt in der Lücke: ab Ende des ersten Balkens (10:00) bis 11:30.
+    const dist = container.querySelector('.project-cal-gantt-dist') as HTMLElement
+    expect(dist.style.left).toBe(`${3 * hourWidth}px`)
+    expect(dist.style.width).toBe(`${1.5 * hourWidth}px`)
+  })
+
+  it('lässt die Fahrstrecke weg, wenn die Termine direkt aneinander anschliessen', async () => {
+    vi.mocked(resolveScheduleDistances).mockResolvedValue({
+      distances: [{ a: 'Astrasse 1, 8400 Winterthur', b: 'Bstrasse 2, 8472 Seuzach', km: 4.2 }],
+    })
+    const { container } = renderGantt({
+      entries: [
+        entry({ id: 'a1', start_time: '09:00', end_time: '10:00', object_address: 'Astrasse 1, 8400 Winterthur' }),
+        entry({ id: 'a2', name: 'Projekt Beta', start_time: '10:00', end_time: '11:00', object_address: 'Bstrasse 2, 8472 Seuzach' }),
+      ],
+    })
+    await screen.findByText('Projekt Beta')
+    expect(container.querySelector('.project-cal-gantt-dist')).not.toBeInTheDocument()
+  })
+
+  it('show_distances=false: keine Distanz-Anfrage im Tagesplan', () => {
+    vi.mocked(resolveScheduleDistances).mockClear()
+    const { container } = renderGantt({
+      config: { ...CONFIG, show_distances: false },
+      entries: [
+        entry({ id: 'a1', start_time: '09:00', end_time: '10:00', object_address: 'Astrasse 1, 8400 Winterthur' }),
+        entry({ id: 'a2', name: 'Projekt Beta', start_time: '11:30', end_time: '12:30', object_address: 'Bstrasse 2, 8472 Seuzach' }),
+      ],
+    })
+    expect(vi.mocked(resolveScheduleDistances)).not.toHaveBeenCalled()
+    expect(container.querySelector('.project-cal-gantt-dist')).not.toBeInTheDocument()
   })
 
   it('ganztägige Einsätze liegen als Band über den ganzen Tag', () => {

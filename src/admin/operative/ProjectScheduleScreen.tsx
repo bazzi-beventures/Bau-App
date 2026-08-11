@@ -15,6 +15,8 @@ interface StaffLite {
   id: string
   name: string
   projektleiter: boolean
+  // Personal-Kürzel (z.B. "MW") — steht im Tagesplan vorne auf dem Balken.
+  kuerzel?: string | null
 }
 
 interface CustomerLite {
@@ -174,14 +176,18 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       // realistische Kalender-Navigation ab, ohne Range-State durchzureichen.
       const todayIso = toDateStr(new Date())
       const [proj, appts, st, cust, sched] = await Promise.all([
-        apiFetch('/pwa/admin/projects') as Promise<Project[]>,
+        // /projects/schedule statt /projects: schon server-seitig auf planbare
+        // Projekte gefiltert und ohne Offerten-/Rechnungs-Embeds. Vorher kamen
+        // alle je angelegten Projekte samt beider Beleg-Tabellen über die
+        // Leitung, nur damit die Zeile hier gleich wieder wegfiel.
+        apiFetch('/pwa/admin/projects/schedule') as Promise<Project[]>,
         listAppointments(shiftISO(todayIso, -400), shiftISO(todayIso, 600)).catch(() => [] as ProjectAppointment[]),
         apiFetch('/pwa/admin/staff') as Promise<StaffLite[]>,
         apiFetch('/pwa/admin/customers') as Promise<CustomerLite[]>,
         // Anzeige-Config ist optional — Fehler darf den Kalender nicht blockieren.
         getSchedulingConfig().catch(() => null),
       ])
-      setProjects(proj.filter(p => !p.is_closed && p.status !== 'abgeschlossen'))
+      setProjects(proj)
       setAppointments(appts)
       setStaff(st)
       setCustomers(cust)
@@ -220,6 +226,19 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setTimeout(() => setToast(null), 3000)
   }
 
+  // Nächster (ab heute) Termin eines Projekts als Editor-State; ohne künftigen
+  // Termin der letzte vergangene, ohne Termine null.
+  function nextAppointment(projectId: string): ApptFormState | null {
+    const own = appointments
+      .filter(a => a.project_id === projectId)
+      .slice()
+      .sort((a, b) => (a.start_date + (a.start_time ?? '99'))
+        .localeCompare(b.start_date + (b.start_time ?? '99')))
+    if (own.length === 0) return null
+    const todayIso = toDateStr(new Date())
+    return apptToForm(own.find(a => a.start_date.slice(0, 10) >= todayIso) ?? own[own.length - 1])
+  }
+
   function selectProject(p: Project, appt?: ProjectAppointment) {
     setForm(projectToForm(p))
     // Aus einem aufgezogenen Termin: neuen Termin mit den Zeiten vorbelegen;
@@ -230,7 +249,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     } else if (appt) {
       setApptForm(apptToForm(appt))
     } else {
-      setApptForm(null)
+      // Projekt ohne konkreten Termin gewählt (Picker): den nächsten Termin in
+      // den Editor laden. Sonst bliebe der Termin-Typ (Aufmass/Montage/Service …)
+      // unerreichbar, obwohl er Symbol und Badge im Kalender bestimmt.
+      setApptForm(nextAppointment(p.id))
     }
     setError(null)
     setPickerSearch('')
@@ -411,7 +433,9 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       showToast(form.id ? 'Eintrag aktualisiert.' : 'Eintrag erstellt.', 'success')
       await loadAll()
       if (targetId) {
-        const fresh = (await (apiFetch('/pwa/admin/projects') as Promise<Project[]>)).find(p => p.id === targetId)
+        // Nur das eine gespeicherte Projekt nachladen — die ganze Liste dafür zu
+        // holen war schon vor dem Umbau reine Verschwendung.
+        const fresh = await (apiFetch(`/pwa/admin/projects/${targetId}`) as Promise<Project>).catch(() => null)
         if (fresh) setForm(projectToForm(fresh))
       }
       setApptForm(null)
@@ -473,7 +497,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
 
   const projektleiterOptions = useMemo(() => staff.filter(s => s.projektleiter), [staff])
   const monteurOptions = staff
-  const staffLite = useMemo(() => staff.map(s => ({ id: s.id, name: s.name })), [staff])
+  const staffLite = useMemo(
+    () => staff.map(s => ({ id: s.id, name: s.name, kuerzel: s.kuerzel })),
+    [staff],
+  )
   const projektleiterFilterOptions = useMemo(
     () => projektleiterOptions
       .map(s => ({ id: s.id, name: s.name }))
@@ -775,9 +802,11 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                         Projekt — nur zur Anzeige eines bestehenden Kundenprojekts,
                         nicht als umschaltbare Art für interne Einsätze. */}
                     {form.kind === 'project' && <option value="project">Kundenprojekt</option>}
-                    <option value="teamsitzung">Teamsitzung / Schulung</option>
+                    <option value="teamsitzung">Teamsitzung</option>
+                    <option value="weiterbildung">Weiterbildung / Kurs</option>
                     <option value="lagerarbeit">Lagerarbeit</option>
                     <option value="werkstatt">Werkstatt / Vorbereitung</option>
+                    <option value="reservation">Mitarbeiter-Reservation</option>
                     <option value="sonstiges">Sonstiges</option>
                   </select>
                 </label>

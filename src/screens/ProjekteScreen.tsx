@@ -64,13 +64,17 @@ interface EmbeddedCustomer {
   phone: string | null
 }
 
-type ProjectKind = 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt' | 'sonstiges'
+type ProjectKind =
+  | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
+  | 'weiterbildung' | 'reservation' | 'sonstiges'
 
 const KIND_LABELS: Record<ProjectKind, string> = {
   project: 'Projekt',
   teamsitzung: 'Teamsitzung',
   lagerarbeit: 'Lagerarbeit',
   werkstatt: 'Werkstatt',
+  weiterbildung: 'Weiterbildung',
+  reservation: 'Reservation',
   sonstiges: 'Sonstiges',
 }
 
@@ -79,6 +83,8 @@ const KIND_COLORS: Record<ProjectKind, string> = {
   teamsitzung: '#7c3aed',
   lagerarbeit: '#d97706',
   werkstatt: '#0d9488',
+  weiterbildung: '#db2777',
+  reservation: '#65a30d',
   sonstiges: '#475569',
 }
 
@@ -107,20 +113,30 @@ interface Project {
   projektleiter_name?: string | null
 }
 
-// Kategorien, die ein Mitarbeiter im Feld vergeben darf. Teilmenge der
-// Web-View-Kategorien (siehe admin/operative/projectDetail/tabs.tsx) plus
-// "lieferschein". Bestellungen/Auftragsbestätigung bleiben dem Admin vorbehalten.
+// Kategorien, die ein Mitarbeiter im Feld vergeben darf — Teilmenge der
+// Web-View-Kategorien (siehe admin/operative/projectDetail/tabs.tsx). Aus dem
+// Reiter Lieferantendokumente ist nur "lieferschein" dabei; Angebot Lieferant,
+// Bestellungen und Auftragsbestätigung bleiben dem Admin vorbehalten.
 type FileCategory = 'fotos' | 'masse' | 'lieferschein' | 'rapport' | 'sonstiges'
 
+// Der Lieferschein fehlt hier bewusst: er hat eine eigene Karte mit eigenem
+// Hochladen-Knopf (siehe LIEFERSCHEIN_CATEGORY), analog zum Teilordner
+// "Lieferschein" im Reiter Lieferantendokumente der Admin-Ansicht.
 const FILE_CATEGORIES: { key: FileCategory; label: string }[] = [
   { key: 'fotos', label: 'Fotos' },
   { key: 'masse', label: 'Masse' },
-  { key: 'lieferschein', label: 'Lieferschein' },
   // Ausgefülltes Papier-Rapport-Blatt direkt auf der Baustelle abfotografieren,
   // statt es zurückzutragen. Landet im Rapporte-Tab des Projektleiters.
   { key: 'rapport', label: 'Rapport' },
   { key: 'sonstiges', label: 'Sonstiges' },
 ]
+
+// Einziger Teilordner der Lieferantendokumente, den der Monteur sieht: der
+// Lieferschein. Angebot Lieferant / Bestellungen / Auftragsbestätigung bleiben
+// der Verwaltung vorbehalten (Einkaufspreise) — der Server filtert sie schon aus
+// der Liste (ADMIN_ONLY_FILE_CATEGORIES in agents/routers/_deps.py), diese Karte
+// zeigt also nie mehr, als die API ohnehin liefert.
+const LIEFERSCHEIN_CATEGORY: FileCategory = 'lieferschein'
 
 const CATEGORY_LABELS: Record<string, string> = {
   fotos: 'Fotos',
@@ -242,6 +258,10 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   const [newComment, setNewComment] = useState('')
   const [addingComment, setAddingComment] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Eigener Input für die Lieferschein-Karte: die Kategorie steckt im Aufruf, nicht
+  // im State — ein gemeinsamer Input müsste uploadCategory vor dem Klick umsetzen
+  // und läse beim Change-Event womöglich noch den alten Wert.
+  const lieferscheinInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -353,16 +373,17 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     }
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>, category: FileCategory) {
     if (!selected || !e.target.files?.length) return
     const filesToUpload = Array.from(e.target.files)
+    const input = e.target
     setUploading(true)
     try {
       // Backend nimmt eine Datei pro Request → sequentiell hochladen
       for (const file of filesToUpload) {
         const form = new FormData()
         form.append('file', file)
-        form.append('category', uploadCategory)
+        form.append('category', category)
         await apiFormFetch(`/pwa/projects/${selected.id}/files`, form)
       }
       const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
@@ -371,7 +392,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
       // silently ignore upload errors in user view
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      input.value = ''  // gleiche Datei erneut auswählbar machen
     }
   }
 
@@ -456,6 +477,57 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
 
   // ── Detail-Ansicht ──────────────────────────────────────────
   if (selected) {
+    const projectId = selected.id
+    // Lieferscheine bekommen eine eigene Karte — die Sammelliste zeigt den Rest.
+    const lieferscheine = files.filter(f => f.category === LIEFERSCHEIN_CATEGORY)
+    const otherFiles = files.filter(f => f.category !== LIEFERSCHEIN_CATEGORY)
+
+    // Eine Datei-Zeile (Icon, Download-Link, Kategorie/Datum, Umbenennen) —
+    // identisch in beiden Karten. In der Lieferschein-Karte bleibt die Kategorie
+    // weg: sie stünde unter jeder Zeile derselben Karte.
+    const renderFileRow = (f: ProjectFile, showCategory = true) => (
+      <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
+        <span style={{ fontSize: 16 }}>{projectFileIcon(f.mime_type, f.filename)}</span>
+        {renamingFileId === f.id ? (
+          <span className="projekte-detail-value" style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); void handleRenameFile(f.id) }
+                if (e.key === 'Escape') setRenamingFileId(null)
+              }}
+              style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--card-border, #ddd)', fontSize: 13, background: 'var(--surface, #fff)', color: 'var(--text)' }}
+            />
+            <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => void handleRenameFile(f.id)}>✓</button>
+            <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => setRenamingFileId(null)}>✕</button>
+          </span>
+        ) : (
+          <span className="projekte-detail-value" style={{ flex: 1 }}>
+            {(f.storage_path || f.file_url)
+              ? <a href={apiUrl(`/pwa/projects/${projectId}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
+              : f.filename
+            }
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
+              {showCategory && f.category && CATEGORY_LABELS[f.category] ? `${CATEGORY_LABELS[f.category]} · ` : ''}{formatDateTime(f.created_at)}
+            </span>
+          </span>
+        )}
+        {renamingFileId !== f.id && (
+          <button
+            type="button"
+            className="projekte-kontakt-link-btn"
+            style={{ fontSize: 12 }}
+            title="Umbenennen"
+            onClick={() => { setRenamingFileId(f.id); setRenameValue(f.filename) }}
+          >
+            ✏️
+          </button>
+        )}
+      </div>
+    )
+
     return (
       <div className="app-screen">
         <div className="inner-header">
@@ -801,8 +873,9 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                     type="file"
                     accept={PROJECT_FILE_ACCEPT}
                     multiple
+                    aria-label="Datei hochladen"
                     style={{ display: 'none' }}
-                    onChange={handleUpload}
+                    onChange={e => handleUpload(e, uploadCategory)}
                   />
                   <button
                     type="button"
@@ -815,51 +888,47 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                   </button>
                 </div>
               </div>
-              {files.length === 0 && (
+              {otherFiles.length === 0 && (
                 <div className="projekte-detail-empty">Noch keine Dateien hochgeladen.</div>
               )}
-              {files.map(f => (
-                <div key={f.id} className="projekte-detail-row" style={{ alignItems: 'center' }}>
-                  <span style={{ fontSize: 16 }}>{projectFileIcon(f.mime_type, f.filename)}</span>
-                  {renamingFileId === f.id ? (
-                    <span className="projekte-detail-value" style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <input
-                        autoFocus
-                        value={renameValue}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') { e.preventDefault(); void handleRenameFile(f.id) }
-                          if (e.key === 'Escape') setRenamingFileId(null)
-                        }}
-                        style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--card-border, #ddd)', fontSize: 13, background: 'var(--surface, #fff)', color: 'var(--text)' }}
-                      />
-                      <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => void handleRenameFile(f.id)}>✓</button>
-                      <button type="button" className="projekte-kontakt-link-btn" style={{ fontSize: 12 }} onClick={() => setRenamingFileId(null)}>✕</button>
-                    </span>
-                  ) : (
-                    <span className="projekte-detail-value" style={{ flex: 1 }}>
-                      {(f.storage_path || f.file_url)
-                        ? <a href={apiUrl(`/pwa/projects/${selected.id}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
-                        : f.filename
-                      }
-                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
-                        {f.category && CATEGORY_LABELS[f.category] ? `${CATEGORY_LABELS[f.category]} · ` : ''}{formatDateTime(f.created_at)}
-                      </span>
-                    </span>
-                  )}
-                  {renamingFileId !== f.id && (
-                    <button
-                      type="button"
-                      className="projekte-kontakt-link-btn"
-                      style={{ fontSize: 12 }}
-                      title="Umbenennen"
-                      onClick={() => { setRenamingFileId(f.id); setRenameValue(f.filename) }}
-                    >
-                      ✏️
-                    </button>
-                  )}
+              {otherFiles.map(f => renderFileRow(f))}
+            </div>
+          )}
+
+          {/* Lieferscheine — derselbe Teilordner wie im Reiter Lieferantendokumente
+              der Admin-Ansicht, damit der Monteur den vom Büro abgelegten
+              Lieferschein auf der Baustelle dabeihat (und den eigenen dort ablegt,
+              wo er ihn sucht). Eigene Karte statt einer Zeile in der Sammelliste:
+              sonst verschwindet er zwischen den Baustellenfotos. */}
+          {!loadingDetail && (
+            <div className="projekte-detail-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                <div className="projekte-detail-title" style={{ margin: 0 }}>Lieferscheine</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    ref={lieferscheinInputRef}
+                    type="file"
+                    accept={PROJECT_FILE_ACCEPT}
+                    multiple
+                    aria-label="Lieferschein hochladen"
+                    style={{ display: 'none' }}
+                    onChange={e => handleUpload(e, LIEFERSCHEIN_CATEGORY)}
+                  />
+                  <button
+                    type="button"
+                    className="projekte-kontakt-link-btn"
+                    style={{ fontSize: 12 }}
+                    disabled={uploading}
+                    onClick={() => lieferscheinInputRef.current?.click()}
+                  >
+                    {uploading ? 'Lädt…' : '+ Lieferschein'}
+                  </button>
                 </div>
-              ))}
+              </div>
+              {lieferscheine.length === 0 && (
+                <div className="projekte-detail-empty">Noch kein Lieferschein vorhanden.</div>
+              )}
+              {lieferscheine.map(f => renderFileRow(f, false))}
             </div>
           )}
 

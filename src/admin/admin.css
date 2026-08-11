@@ -2753,6 +2753,16 @@ button.admin-list-item {
   color: var(--text-muted);
 }
 
+/* Warnhinweis (z.B. Doppelbuchung) — steht in der Karte statt in einem zweiten
+   Tooltip, der sich sonst über die Karte legen würde. */
+.project-cal-hovercard-note {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+
 /* Termin-Typ-Badge auf Kalenderblöcken (z.B. "Aufmass") — nur bei
    Nicht-Standard-Terminen gesetzt, damit der Normalfall ruhig bleibt. */
 .project-cal-termin-badge {
@@ -3188,26 +3198,36 @@ button.admin-list-item {
   opacity: 0.45;
 }
 
-/* Einsatz-Balken: Dauer = Breite. */
+/* Einsatz-Balken: Dauer = Breite, zwei Zeilen (Titel / Ortschaft).
+   Die Höhe kommt aus GANTT_BAR_H (utils/ganttGrid.ts) — bleibt sie und die
+   Zeilenhöhen hier nicht im Gleichschritt, rutscht die zweite Zeile heraus. */
 .project-cal-gantt-bar {
   position: absolute;
   border-radius: 4px;
-  padding: 0 6px;
+  padding: 2px 6px;
   color: #fff;
   font-size: 11px;
-  line-height: 24px;
   cursor: grab;
   overflow: hidden;
   white-space: nowrap;
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-direction: column;
+  justify-content: center;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
   z-index: 2;
 }
 
 .project-cal-gantt-bar:active {
   cursor: grabbing;
+}
+
+/* Erste Zeile: Kürzel, Symbol/Badge, Titel, Uhrzeit. */
+.project-cal-gantt-bar-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  line-height: 16px;
 }
 
 /* Der Name hat Vorrang: er darf schrumpfen, die Uhrzeit weicht als Ganzes. */
@@ -3225,14 +3245,32 @@ button.admin-list-item {
   font-size: 10px;
 }
 
+/* Kürzel des Termin-Teams ganz vorne — auf einen Blick, wer draussen ist. */
+.project-cal-gantt-bar-crew {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Zweite Zeile: Ortschaft des Objekts. */
+.project-cal-gantt-bar-sub {
+  font-size: 10px;
+  line-height: 13px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Ganztägiger Einsatz: Band über den ganzen Tag, hinter den getakteten Balken. */
 .project-cal-gantt-bar.allday {
   z-index: 1;
   opacity: 0.45;
   border-radius: 0;
-  line-height: normal;
-  align-items: flex-start;
-  padding-top: 2px;
+  justify-content: flex-start;
 }
 
 .project-cal-gantt-bar.conflict {
@@ -3241,6 +3279,20 @@ button.admin-list-item {
 
 .project-cal-gantt-bar-warn {
   color: #fecaca;
+}
+
+/* Fahrstrecke zum nächsten Einsatz — sitzt in der Lücke zwischen zwei Balken. */
+.project-cal-gantt-dist {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Umschalter Tag / 3 Tage / 5 Tage in der Zoom-Leiste. */
