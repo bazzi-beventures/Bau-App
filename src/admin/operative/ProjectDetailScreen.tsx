@@ -12,6 +12,7 @@ import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './Qu
 import { invoiceWarningHint, sammelrechnungHint } from './InvoicesScreen'
 import { ReportCreateForm } from './ReportCreateForm'
 import { SendQuoteDialog } from './SendQuoteDialog'
+import { SendThankyouDialog } from './SendThankyouDialog'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
@@ -287,10 +288,12 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [savingBeschaffung, setSavingBeschaffung] = useState(false)
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
   const [addingVariantId, setAddingVariantId] = useState<number | null>(null)
-  const [sendingThankyouId, setSendingThankyouId] = useState<number | null>(null)
   const [sendingRejectionId, setSendingRejectionId] = useState<number | null>(null)
   const [useAcceptedQuote, setUseAcceptedQuote] = useState(false)
   const [sendQuote, setSendQuote] = useState<ProjectQuote | null>(null)
+  // Danke-Mail-Dialog (Feature offerte_dank_mail): fragt analog zum Offerten-Versand
+  // zuerst die Empfänger-Adresse ab, vorbelegt mit der Kunden-E-Mail der Offerte.
+  const [thankyouQuote, setThankyouQuote] = useState<ProjectQuote | null>(null)
 
   // Aufgaben (Checkliste)
   const [tasks, setTasks] = useState<ProjectTask[]>([])
@@ -643,19 +646,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       await reloadQuotes()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler')
-    }
-  }
-
-  async function handleSendThankyou(quoteId: number) {
-    setSendingThankyouId(quoteId)
-    try {
-      const res = await apiFetch(`/pwa/admin/quotes/${quoteId}/send-thankyou`, { method: 'POST' }) as { message?: string }
-      showToast(res.message || 'Danke-Mail gesendet')
-      await reloadQuotes()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen')
-    } finally {
-      setSendingThankyouId(null)
     }
   }
 
@@ -1594,7 +1584,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           regeneratingQuoteId={regeneratingQuoteId}
           hasLocalDraft={quoteDraftExists}
           dankEnabled={dankEnabled}
-          sendingThankyouId={sendingThankyouId}
           absageEnabled={absageEnabled}
           sendingRejectionId={sendingRejectionId}
           onShowCreateForm={() => { setResumeQuoteDraft(false); setShowQuoteForm(true) }}
@@ -1602,7 +1591,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={q => setSendQuote(q)}
-          onSendThankyou={handleSendThankyou}
+          onSendThankyou={q => setThankyouQuote(q)}
           onSendRejection={handleSendRejection}
           onEdit={handleEditQuote}
           addingVariantId={addingVariantId}
@@ -2079,6 +2068,20 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             try {
               setFiles(await apiFetch(`/pwa/admin/projects/${project.id}/files`) as ProjectFile[])
             } catch { /* Datei-Liste ist nicht kritisch */ }
+          }}
+        />
+      )}
+
+      {thankyouQuote && (
+        <SendThankyouDialog
+          quoteId={thankyouQuote.id}
+          defaultEmail={thankyouQuote.customer_email || ''}
+          header={<>{thankyouQuote.quote_number}</>}
+          onClose={() => setThankyouQuote(null)}
+          onSent={async msg => {
+            showToast(msg)
+            setThankyouQuote(null)
+            await reloadQuotes()
           }}
         />
       )}

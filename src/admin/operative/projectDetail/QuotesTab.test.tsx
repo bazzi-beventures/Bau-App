@@ -28,7 +28,6 @@ function renderTab(quotes: ProjectQuote[], onUpdateStatus = vi.fn()) {
       regeneratingQuoteId={null}
       hasLocalDraft={false}
       dankEnabled={false}
-      sendingThankyouId={null}
       absageEnabled={false}
       sendingRejectionId={null}
       onShowCreateForm={() => {}}
@@ -91,7 +90,7 @@ describe('QuotesTab — Varianten', () => {
     render(
       <QuotesTab
         quotes={quotes} invoices={[]} regeneratingQuoteId={null} hasLocalDraft={false}
-        dankEnabled={false} sendingThankyouId={null}
+        dankEnabled={false}
         absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
         onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}
@@ -168,7 +167,7 @@ describe('QuotesTab — hochgeladene Offerten', () => {
     render(
       <QuotesTab
         quotes={[makeQuote()]} invoices={[]} regeneratingQuoteId={null} hasLocalDraft={false}
-        dankEnabled={false} sendingThankyouId={null}
+        dankEnabled={false}
         absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
         onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}

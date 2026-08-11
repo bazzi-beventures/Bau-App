@@ -15,6 +15,7 @@ import { SpellcheckTextarea } from './SpellcheckTextarea'
 import { AutoGrowTextarea, RowReorder, useReorder } from './QuoteRowControls'
 import { RichTextField } from '../components/RichTextField'
 import { SendQuoteDialog } from './SendQuoteDialog'
+import { SendThankyouDialog } from './SendThankyouDialog'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
@@ -1628,6 +1629,9 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   // Send quote
   const [sendQuote, setSendQuote] = useState<Quote | null>(null)
+  // Danke-Mail-Dialog (Feature offerte_dank_mail): fragt analog zum Offerten-Versand
+  // zuerst die Empfänger-Adresse ab, vorbelegt mit der Kunden-E-Mail der Offerte.
+  const [thankyouQuote, setThankyouQuote] = useState<Quote | null>(null)
   // Danke-Mail bei Offerten-Annahme (Feature offerte_dank_mail): steuert den
   // „Dankeschön senden"-Knopf bei angenommenen Offerten (Per-Knopfdruck-Modus bzw.
   // Fallback, falls der Auto-Versand ausblieb).
@@ -1654,19 +1658,6 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
       setAbsageEnabled(isFeatureEnabled(me, 'offerte_absage_mail'))
     }).catch(() => {})
   }, [])
-
-  async function handleSendThankyou(id: number) {
-    setActing(id)
-    try {
-      const res = await apiFetch(`/pwa/admin/quotes/${id}/send-thankyou`, { method: 'POST' }) as { message?: string }
-      showToast(res.message || 'Danke-Mail gesendet', 'success')
-      load()
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Danke-Mail fehlgeschlagen', 'error')
-    } finally {
-      setActing(null)
-    }
-  }
 
   async function handleSendRejection(id: number) {
     setActing(id)
@@ -1883,11 +1874,11 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                       {dankEnabled && q.status === 'akzeptiert' && !q.thankyou_sent_at && (
                         <button
                           className="admin-btn admin-btn-secondary admin-btn-sm"
-                          onClick={() => handleSendThankyou(q.id)}
+                          onClick={() => setThankyouQuote(q)}
                           disabled={acting === q.id}
                           title="Dankesmail an den Kunden senden"
                         >
-                          {acting === q.id ? '…' : 'Dankeschön senden'}
+                          Dankeschön senden
                         </button>
                       )}
                       {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (
@@ -1956,6 +1947,17 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
           header={<>{sendQuote.quote_number} · {fmtCHF(sendQuote.total_amount)}<br />Projekt: {sendQuote.project_name}</>}
           onClose={() => setSendQuote(null)}
           onSent={email => { showToast(`Offerte an ${email} gesendet`, 'success'); setSendQuote(null); load() }}
+        />
+      )}
+
+      {/* Dialog: Danke-Mail senden (fragt zuerst die Empfänger-Adresse ab) */}
+      {thankyouQuote && (
+        <SendThankyouDialog
+          quoteId={thankyouQuote.id}
+          defaultEmail={thankyouQuote.customer_email || ''}
+          header={<>{thankyouQuote.quote_number} · {fmtCHF(thankyouQuote.total_amount)}<br />Projekt: {thankyouQuote.project_name}</>}
+          onClose={() => setThankyouQuote(null)}
+          onSent={msg => { showToast(msg, 'success'); setThankyouQuote(null); load() }}
         />
       )}
 

@@ -562,7 +562,6 @@ interface QuotesTabProps {
   // Feature offerte_dank_mail: steuert den „Dankeschön senden"-Knopf bei
   // angenommenen Offerten (Per-Knopfdruck-Modus bzw. Auto-Versand-Fallback).
   dankEnabled: boolean
-  sendingThankyouId: number | null
   // Feature offerte_absage_mail: steuert den „Absage senden"-Knopf bei abgelehnten
   // Offerten (Per-Knopfdruck-Modus bzw. Auto-Versand-Fallback).
   absageEnabled: boolean
@@ -572,7 +571,9 @@ interface QuotesTabProps {
   onUpdateStatus: (quoteId: number, status: string) => void
   onRegenerate: (quoteId: number) => void
   onSend: (quote: ProjectQuote) => void
-  onSendThankyou: (quoteId: number) => void
+  // Öffnet den Danke-Mail-Dialog (Empfänger-Abfrage) — der Versand selbst
+  // passiert im Dialog, deshalb die ganze Offerte statt nur der ID.
+  onSendThankyou: (quote: ProjectQuote) => void
   onSendRejection: (quoteId: number) => void
   onEdit: (quoteId: number) => void
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
@@ -590,7 +591,7 @@ interface QuotesTabProps {
 }
 
 export function QuotesTab({
-  quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled, sendingThankyouId,
+  quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled,
   absageEnabled, sendingRejectionId,
   onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou,
   onSendRejection, onEdit, addingVariantId, onAddVariant,
@@ -763,11 +764,10 @@ export function QuotesTab({
                           {dankEnabled && q.status === 'akzeptiert' && !q.thankyou_sent_at && (
                             <button
                               className="admin-btn admin-btn-secondary admin-btn-sm"
-                              disabled={sendingThankyouId === q.id}
-                              onClick={() => onSendThankyou(q.id)}
+                              onClick={() => onSendThankyou(q)}
                               title="Dankesmail an den Kunden senden"
                             >
-                              {sendingThankyouId === q.id ? '…' : 'Dankeschön senden'}
+                              Dankeschön senden
                             </button>
                           )}
                           {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (
