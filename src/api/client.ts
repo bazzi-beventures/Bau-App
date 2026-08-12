@@ -135,7 +135,13 @@ export function parseDispositionFilename(disposition: string): string | null {
   return mPlain ? mPlain[1] : null
 }
 
-export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename: string }> {
+// `headers` wird mitgegeben, weil manche Downloads Metadaten im Header
+// transportieren (z.B. X-Export-Truncated beim Error-Log-CSV). Cross-Origin
+// sind dort nur Header sichtbar, die in `expose_headers` der CORSMiddleware
+// stehen (agents/app.py).
+export async function apiBlobFetch(
+  path: string,
+): Promise<{ blob: Blob; filename: string; headers: Headers }> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       credentials: 'include',
@@ -152,7 +158,7 @@ export async function apiBlobFetch(path: string): Promise<{ blob: Blob; filename
     const disposition = res.headers.get('Content-Disposition') ?? ''
     const filename = parseDispositionFilename(disposition) ?? 'download.pdf'
 
-    return { blob: await res.blob(), filename }
+    return { blob: await res.blob(), filename, headers: res.headers }
   } catch (e) {
     if (e instanceof ApiError) throw e
     throw new ApiError(0, 'Keine Internetverbindung')

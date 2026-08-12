@@ -531,6 +531,17 @@
     grid-template-columns: 1fr;
     align-items: stretch;
   }
+  /* Gestapelt wuerde der Entfernen-Knopf sonst als breiter roter Balken unter
+     dem Kontakt liegen und wie eine Warnung wirken. */
+  .project-pos-row > .admin-btn-danger {
+    justify-self: start;
+    min-width: 44px;
+  }
+  /* Gestapelt laufen zwei Kontakte sonst ineinander. */
+  .project-pos-row + .project-pos-row {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 14px;
+  }
 
   /* Offerten-Positions-Zeile: Hauptfeld volle Breite, kleine Felder 2-spaltig */
   .quote-row {

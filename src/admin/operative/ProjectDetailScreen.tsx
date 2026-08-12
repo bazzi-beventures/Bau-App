@@ -1319,8 +1319,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           </div>
 
           {/* ── Ansprechpersonen ──────────────────────────────── */}
-          <div className="admin-table-wrap" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div className="admin-table-wrap project-contacts" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
               <div className="admin-section-title" style={{ margin: 0 }}>Ansprechpersonen</div>
               <button type="button" className="admin-btn admin-btn-sm admin-btn-secondary" onClick={addKontakt}>
                 + Kontakt hinzufügen
@@ -1335,7 +1335,11 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               </div>
             )}
             {kontakte.map((k, i) => (
-              <div key={i} className="project-pos-row">
+              // Spaltentitel nur über der ersten Zeile — ab der zweiten wären
+              // NAME/KOMMENTAR/TELEFON/E-MAIL reine Wiederholung und schieben die
+              // Liste unnötig auseinander. Gestapelt (Handy) bleiben sie sichtbar,
+              // dort steht jedes Feld für sich; die aria-labels bleiben immer.
+              <div key={i} className={`project-pos-row${i > 0 ? ' project-pos-row-repeat' : ''}`}>
                 <button
                   type="button"
                   onClick={() => toggleSiteContact(i)}
@@ -1355,19 +1359,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                   <label className="admin-form-label">Name</label>
                   {/* autoComplete mit unbekanntem Token: verhindert, dass Chrome/Edge das leere
                       Feld ungefragt mit dem Browser-Profilnamen (z.B. "Luca Bazzi") befüllt. */}
-                  <input className="admin-form-input" autoComplete="new-kontakt-name" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
+                  <input className="admin-form-input" aria-label="Name" autoComplete="new-kontakt-name" value={k.name} onChange={e => updateKontakt(i, 'name', e.target.value)} />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Kommentar</label>
-                  <input className="admin-form-input" autoComplete="new-kontakt-kommentar" value={k.kommentar} onChange={e => updateKontakt(i, 'kommentar', e.target.value)} placeholder="z.B. Hausabwart" />
+                  <input className="admin-form-input" aria-label="Kommentar" autoComplete="new-kontakt-kommentar" value={k.kommentar} onChange={e => updateKontakt(i, 'kommentar', e.target.value)} placeholder="z.B. Hausabwart" />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">Telefon</label>
-                  <input className="admin-form-input" autoComplete="new-kontakt-telefon" value={k.telefon} onChange={e => updateKontakt(i, 'telefon', e.target.value)} />
+                  <input className="admin-form-input" aria-label="Telefon" autoComplete="new-kontakt-telefon" value={k.telefon} onChange={e => updateKontakt(i, 'telefon', e.target.value)} />
                 </div>
                 <div className="admin-form-group" style={{ margin: 0 }}>
                   <label className="admin-form-label">E-Mail</label>
-                  <input className="admin-form-input" autoComplete="new-kontakt-email" type="email" value={k.email} onChange={e => updateKontakt(i, 'email', e.target.value)} />
+                  <input className="admin-form-input" aria-label="E-Mail" autoComplete="new-kontakt-email" type="email" value={k.email} onChange={e => updateKontakt(i, 'email', e.target.value)} />
                 </div>
                 <button type="button" className="admin-btn admin-btn-sm admin-btn-danger" style={{ marginBottom: 1 }} onClick={() => removeKontakt(i)}>
                   ✕
