@@ -19,6 +19,12 @@ import type { QuoteDetail } from './QuotesScreen'
 // Schmiermaterial-Pauschale, Arbeitsbeschrieb. Ein Rapport ohne Material wird
 // exakt wie in Phase 1 abgeschickt (Material-/Kleinmaterial-/Fixpreis-Keys
 // entfallen dann).
+//
+// Mit `editReportId` wird dieselbe Maske zum BEARBEITEN eines bereits erfassten
+// manuellen Rapports: sie lädt dessen Inhalt nach und schickt ihn per PUT als
+// Vollersetzung zurück. Bewusst dasselbe Formular statt einer zweiten Maske — ein
+// nachgetragener Rapport ist Handarbeit, und die Korrektur muss dieselben Felder
+// anbieten wie die Erfassung, sonst laufen die beiden Masken auseinander.
 
 // Minimal-Shapes: strukturell kompatibel mit Project/StaffMember aus dem
 // ProjectDetailScreen — beide werden von dort als Prop durchgereicht (nicht neu geladen).
@@ -152,19 +158,48 @@ function todayISO(): string {
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10)
 }
 
+// Antwort von GET /pwa/admin/projects/{id}/reports/{reportId} — der gespeicherte
+// Stand eines Rapports, vom Backend bereits nach den drei Material-Erfassungsarten
+// aufgeteilt (db.split_report_material_rows).
+export interface ReportEditPayload {
+  report_date: string
+  description: string | null
+  massaufnahme?: boolean | null
+  beratung?: boolean | null
+  is_warranty?: boolean | null
+  art_der_arbeit?: string[] | null
+  staff: { staff_id: string | null; name: string; hours: number; hour_type: string }[]
+  materials: { art_nr: string; amount: number; item_name?: string; location?: string }[]
+  kleinmaterial: { item_name: string; count: number; amount_chf: number } | null
+  fixed_materials: { item_name: string; amount: number; unit: string; unit_price: number }[]
+  editable?: boolean
+  edit_blocked_reason?: string | null
+}
+
+// Zahl → Feldwert. `0` und Nachkommastellen sollen so erscheinen, wie sie erfasst
+// wurden; String(0.5) = "0.5" reicht dafür, nur null/undefined wird zu ''.
+function numToField(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value)
+}
+
 export function ReportCreateForm({
   project,
   staff,
   quotes,
+  editReportId,
   onDone,
   onCancel,
 }: {
   project: ReportFormProject
   staff: ReportFormStaff[]
   quotes: ProjectQuote[]
+  // Gesetzt = Bearbeiten-Modus: der Inhalt dieses Rapports wird nachgeladen und
+  // beim Speichern per PUT vollständig ersetzt. Nicht gesetzt = Neuerfassung.
+  editReportId?: number
   onDone: () => void
   onCancel: () => void
 }) {
+  const isEdit = editReportId !== undefined
   const defaultQuote = useMemo(() => pickDefaultQuote(quotes), [quotes])
   const projektleiterName = useMemo(
     () => staff.find(s => s.id === project.projektleiter_id)?.name ?? null,
@@ -173,11 +208,19 @@ export function ReportCreateForm({
 
   const [reportDate, setReportDate] = useState(todayISO())
   const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(defaultQuote?.id ?? null)
-  const [description, setDescription] = useState<string>(prefillDescription(defaultQuote))
+  // Im Bearbeiten-Modus startet der Beschrieb leer und wird aus dem gespeicherten
+  // Rapport nachgeladen — der Offerten-Vorschlag würde den erfassten Text sonst
+  // kurz überschreiben, bevor die Antwort da ist.
+  const [description, setDescription] = useState<string>(isEdit ? '' : prefillDescription(defaultQuote))
   // Sobald der Beschrieb von Hand geändert wurde, überschreibt ein Offertenwechsel
   // ihn nicht mehr (sonst verliert man die Eingabe beim Umschalten der Offerte).
-  const [descTouched, setDescTouched] = useState(false)
-  const [rows, setRows] = useState<StaffRow[]>([{ staffId: '', hours: '', hourType: 'standard' }])
+  // Beim Bearbeiten gilt der geladene Text von Anfang an als «von Hand gesetzt».
+  const [descTouched, setDescTouched] = useState(isEdit)
+  // Im Bearbeiten-Modus keine leere Startzeile: sie wird durch die geladenen
+  // Stundenzeilen ersetzt und wirkte bis dahin wie eine vergessene Eingabe.
+  const [rows, setRows] = useState<StaffRow[]>(
+    isEdit ? [] : [{ staffId: '', hours: '', hourType: 'standard' }]
+  )
   // Einsatzart-Flags (reports.massaufnahme/beratung) — bis 2026-08-05 konnte sie nur
   // der Chat-Pfad setzen, ein manuell erfasster Rapport war systematisch ärmer.
   const [massaufnahme, setMassaufnahme] = useState(false)
@@ -210,6 +253,12 @@ export function ReportCreateForm({
   const [quoteMaterialError, setQuoteMaterialError] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Bearbeiten: solange der gespeicherte Stand nicht da ist, darf nicht gespeichert
+  // werden — ein Submit auf dem leeren Formular würde den Rapport leerräumen.
+  const [loadingExisting, setLoadingExisting] = useState(isEdit)
+  // Gesetzt, wenn das Backend die Bearbeitung sperrt (abgerechnet, Chat-Rapport,
+  // unterschrieben). Dann bleibt die Maske lesbar, aber der Speichern-Knopf tot.
+  const [editBlocked, setEditBlocked] = useState<string | null>(null)
 
   const selectedQuote = useMemo(
     () => quotes.find(q => q.id === selectedQuoteId) ?? null,
@@ -250,6 +299,66 @@ export function ReportCreateForm({
       // Formulars funktioniert unverändert.
       .catch(() => {})
   }, [])
+
+  // Bearbeiten: gespeicherten Stand nachladen und ALLE Blöcke damit vorbelegen.
+  // Was hier nicht ankommt, wäre beim Speichern weg — das PUT ersetzt vollständig.
+  useEffect(() => {
+    if (editReportId === undefined) return
+    let cancelled = false
+    setLoadingExisting(true)
+    apiFetch(`/pwa/admin/projects/${project.id}/reports/${editReportId}`)
+      .then(res => {
+        if (cancelled) return
+        const r = res as ReportEditPayload
+        if (r.editable === false) setEditBlocked(r.edit_blocked_reason || 'Dieser Rapport kann nicht bearbeitet werden.')
+        setReportDate(r.report_date ?? todayISO())
+        setDescription(r.description ?? '')
+        setMassaufnahme(!!r.massaufnahme)
+        setBeratung(!!r.beratung)
+        setIsWarranty(!!r.is_warranty)
+        setArtDerArbeit(WORK_TYPES.map(w => w.value).filter(v => (r.art_der_arbeit ?? []).includes(v)))
+        setRows(
+          (r.staff ?? []).map(s => ({
+            // Zeilen aus der Zeit vor der staff_id (oder von gelöschtem Personal)
+            // über den Namen zuordnen — sonst stünde die Zeile auf «wählen…» und
+            // der Projektleiter merkt die stille Änderung erst auf der Rechnung.
+            staffId: s.staff_id ?? (staff.find(x => x.name === s.name)?.id ?? ''),
+            hours: numToField(s.hours),
+            hourType: s.hour_type === 'werkstatt' ? 'werkstatt' : 'standard',
+          })),
+        )
+        const mats = r.materials ?? []
+        setMaterialRows(mats.map(m => ({
+          artNr: m.art_nr, amount: numToField(m.amount), location: m.location ?? '',
+        })))
+        // Der Katalog wird sonst erst beim Klick auf «+ Materialposition» geladen —
+        // ohne ihn zeigte die Combobox der geladenen Zeilen keinen Artikelnamen.
+        if (mats.length > 0) ensureMaterialsLoaded()
+        setFixedRows((r.fixed_materials ?? []).map(f => ({
+          itemName: f.item_name, amount: numToField(f.amount),
+          unit: f.unit || 'Stk', unitPrice: numToField(f.unit_price),
+        })))
+        if (r.kleinmaterial) {
+          setKlein({
+            itemName: r.kleinmaterial.item_name,
+            count: numToField(r.kleinmaterial.count),
+            amount: numToField(r.kleinmaterial.amount_chf),
+          })
+        }
+      })
+      .catch(err => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Rapport konnte nicht geladen werden.')
+        // Ohne geladenen Stand darf nicht gespeichert werden — sonst schriebe ein
+        // Submit das leere Formular über den Rapport.
+        setEditBlocked('Der Rapport konnte nicht geladen werden.')
+      })
+      .finally(() => { if (!cancelled) setLoadingExisting(false) })
+    return () => { cancelled = true }
+    // staff ist beim Öffnen des Popups bereits geladen und ändert sich nicht mehr;
+    // die Abhängigkeit würde das Formular beim Neuladen der Stammdaten zurücksetzen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editReportId, project.id])
 
   // Esc schliesst das Fenster.
   useEffect(() => {
@@ -375,6 +484,7 @@ export function ReportCreateForm({
   }
 
   async function handleSubmit() {
+    if (loadingExisting || editBlocked) return
     const filled = rows.filter(r => r.staffId)
     if (filled.length === 0) {
       setError('Mindestens ein Mitarbeiter mit Stunden erforderlich.')
@@ -526,11 +636,16 @@ export function ReportCreateForm({
           amount_chf: kleinAmount,
         }
       }
-      const res = (await apiFetch(`/pwa/admin/projects/${project.id}/reports`, {
-        method: 'POST',
+      // Bearbeiten schickt dieselbe Nutzlast per PUT — der Server ersetzt Stunden
+      // und Material vollständig durch das, was hier steht.
+      const url = isEdit
+        ? `/pwa/admin/projects/${project.id}/reports/${editReportId}`
+        : `/pwa/admin/projects/${project.id}/reports`
+      const res = (await apiFetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       })) as { report_id?: number; warnings?: unknown } | null
-      // 201 kann Warnungen enthalten (z.B. nicht abgebuchtes Lager, unbekannte
+      // 201/200 kann Warnungen enthalten (z.B. nicht abgebuchtes Lager, unbekannte
       // art_nr). Das ist trotzdem Erfolg — kurz sichtbar machen, dann schliessen.
       const warnings = res && Array.isArray(res.warnings)
         ? (res.warnings as unknown[]).filter((w): w is string => typeof w === 'string')
@@ -562,8 +677,12 @@ export function ReportCreateForm({
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 0 8px' }}>
-        <h3 style={{ margin: 0 }}>Rapport manuell erfassen</h3>
-        <InfoHint text="Der Rapport wird ohne Kundenunterschrift gespeichert und ist sofort verrechenbar." />
+        <h3 style={{ margin: 0 }}>{isEdit ? 'Rapport bearbeiten' : 'Rapport manuell erfassen'}</h3>
+        <InfoHint
+          text={isEdit
+            ? 'Speichern ersetzt Stunden und Material dieses Rapports vollständig durch das, was hier steht. Bereits abgebuchtes Material wird dabei ins Lager zurückgebucht und neu abgebucht; das Rapport-PDF wird neu erzeugt.'
+            : 'Der Rapport wird ohne Kundenunterschrift gespeichert und ist sofort verrechenbar.'}
+        />
       </div>
       <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--muted)' }}>
         Projekt: <strong>{project.name}</strong>
@@ -571,6 +690,14 @@ export function ReportCreateForm({
       </p>
 
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {editBlocked && (
+        <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{editBlocked}</div>
+      )}
+      {loadingExisting && (
+        <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--muted)' }}>
+          Rapport wird geladen…
+        </div>
+      )}
 
       {/* Datum */}
       <div style={{ marginBottom: 20 }}>
@@ -1013,8 +1140,13 @@ export function ReportCreateForm({
         <button type="button" className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>
           Abbrechen
         </button>
-        <button type="button" className="admin-btn admin-btn-primary" onClick={handleSubmit} disabled={saving}>
-          {saving ? 'Wird gespeichert…' : 'Rapport speichern'}
+        <button
+          type="button"
+          className="admin-btn admin-btn-primary"
+          onClick={handleSubmit}
+          disabled={saving || loadingExisting || !!editBlocked}
+        >
+          {saving ? 'Wird gespeichert…' : isEdit ? 'Änderungen speichern' : 'Rapport speichern'}
         </button>
       </div>
     </div>

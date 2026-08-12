@@ -5,6 +5,7 @@ import { fmtCHF, fmtDate, todayISO } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
+import { AutoGrowTextarea } from '../components/AutoGrowTextarea'
 import { useIsMobile } from '../useIsMobile'
 
 interface Invoice {
@@ -609,7 +610,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
       {/* Dialog: Rechnung erstellen */}
       {showGenerate && (
         <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+          {/* maxHeight/overflow: Arbeitsbeschrieb und Bemerkung wachsen mit dem Text —
+              ohne das schöben sie auf kleinen Bildschirmen die Knöpfe aus dem Bild. */}
+          <div className="admin-confirm-box" style={{ maxWidth: 440, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="admin-confirm-title">Rechnung erstellen</div>
             <div style={{ marginBottom: 12 }}>
               <label className="admin-form-label">Projekt</label>
@@ -638,16 +641,15 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 <label className="admin-form-label" htmlFor="gen-work-desc">
                   Ausgeführte Arbeiten
                 </label>
-                <textarea
+                <AutoGrowTextarea
                   id="gen-work-desc"
                   className="admin-form-input"
-                  rows={5}
+                  minRows={5}
                   maxLength={4000}
                   value={genWorkDesc}
                   placeholder={loadingWorkDesc ? 'Wird geladen…' : 'Erscheint auf der Rechnung über den Positionen. Leer lassen, um den Block wegzulassen.'}
                   onChange={e => setGenWorkDesc(e.target.value)}
                   disabled={loadingWorkDesc || generating}
-                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
                 />
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                   Vorschlag aus den Rapporten dieses Projekts — vor dem Erstellen anpassen,
@@ -660,16 +662,15 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 <label className="admin-form-label" htmlFor="gen-remark">
                   Bemerkung
                 </label>
-                <textarea
+                <AutoGrowTextarea
                   id="gen-remark"
                   className="admin-form-input"
-                  rows={2}
+                  minRows={2}
                   maxLength={1000}
                   value={genRemark}
                   placeholder="z.B. Referenz oder Projekt-Nr. des Kunden. Leer lassen, um den Block wegzulassen."
                   onChange={e => setGenRemark(e.target.value)}
                   disabled={generating}
-                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
                 />
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                   Erscheint als eigener Block «Bemerkung» auf der Rechnung, über den Positionen.

@@ -3245,15 +3245,21 @@ button.admin-list-item {
   font-size: 10px;
 }
 
-/* Kürzel des Termin-Teams ganz vorne — auf einen Blick, wer draussen ist. */
+/* Kürzel des Termin-Teams ganz vorne — auf einen Blick, wer draussen ist.
+   Deckender Chip mit roter Schrift statt des früheren durchscheinenden Weiss:
+   das lag als heller Schleier auf dem Balken und war vom Projektnamen daneben
+   kaum zu unterscheiden. Weil der Chip selbst deckend ist, trägt der Kontrast
+   über ALLE Balkenfarben (Blau, Lila, Bernstein, Türkis, Magenta, Limette,
+   Slate) — eine farbige Chip-Fläche müsste gegen jede einzeln bestehen. */
 .project-cal-gantt-bar-crew {
   flex: 0 0 auto;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.3px;
   padding: 0 4px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--cal-crew-bg, #ffffff);
+  color: var(--cal-crew-fg, #dc2626);
 }
 
 /* Zweite Zeile: Ortschaft des Objekts. */

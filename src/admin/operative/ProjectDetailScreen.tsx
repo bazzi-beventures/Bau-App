@@ -262,6 +262,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   // Popup zum manuellen Erfassen eines Rapports (analog showQuoteForm).
   const [showReportForm, setShowReportForm] = useState(false)
+  // Gesetzt = dasselbe Popup im Bearbeiten-Modus für genau diesen Rapport.
+  // Bewusst dieselbe Maske: die Korrektur muss dieselben Felder anbieten wie die
+  // Erfassung (siehe ReportCreateForm).
+  const [editReportId, setEditReportId] = useState<number | null>(null)
   // Lokaler, noch nicht abgeschickter Offert-Entwurf für dieses Projekt vorhanden?
   // Steuert den «Entwurf fortsetzen»-Button. resumeQuoteDraft = Form gezielt zum
   // Fortsetzen geöffnet (übernimmt den Entwurf automatisch statt nur per Banner).
@@ -1610,6 +1614,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           reports={reports}
           onShowCreateForm={() => setShowReportForm(true)}
           onDelete={handleDeleteReport}
+          onEdit={setEditReportId}
           paperRapportUrl={project ? apiUrl(`/pwa/admin/projects/${project.id}/paper-rapport.pdf`) : undefined}
           files={files}
           uploading={uploading}
@@ -1737,19 +1742,24 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         </div>
       )}
 
-      {/* ── Dialog: Rapport manuell erfassen ─────────────────── */}
-      {showReportForm && project && (
+      {/* ── Dialog: Rapport manuell erfassen / bearbeiten ─────── */}
+      {(showReportForm || editReportId !== null) && project && (
         <div className="admin-confirm-overlay">
           {/* Gleiche Breite wie die Offerten-Maske: die Material-/Fixpreis-Zeilen
               haben bis zu fünf Felder pro Zeile — bei 640 px blieb je Feld so wenig
               Platz, dass Artikelnamen und Preise abgeschnitten wurden. */}
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <ReportCreateForm
+              // key: beim Wechsel Erfassen ↔ Bearbeiten (und zwischen zwei Rapporten)
+              // muss React die Maske neu aufbauen, sonst bliebe der State der
+              // vorherigen stehen.
+              key={editReportId ?? 'new'}
               project={project}
               staff={staff}
               quotes={quotes}
-              onDone={() => { setShowReportForm(false); reloadReports() }}
-              onCancel={() => setShowReportForm(false)}
+              editReportId={editReportId ?? undefined}
+              onDone={() => { setShowReportForm(false); setEditReportId(null); reloadReports() }}
+              onCancel={() => { setShowReportForm(false); setEditReportId(null) }}
             />
           </div>
         </div>

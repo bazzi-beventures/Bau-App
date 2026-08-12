@@ -153,3 +153,37 @@ describe('ReportsTab — Papier-Rapport', () => {
     expect(screen.queryByRole('link', { name: 'Papier-Rapport (PDF)' })).not.toBeInTheDocument()
   })
 })
+
+describe('ReportsTab — Bearbeiten', () => {
+  it('zeigt Bearbeiten für einen manuellen, unverrechneten Rapport', async () => {
+    const onEdit = vi.fn()
+    render(<ReportsTab reports={[makeReport({ id: 9, source: 'admin_manual' })]} onEdit={onEdit} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    expect(onEdit).toHaveBeenCalledWith(9)
+  })
+
+  it('zeigt Bearbeiten nicht am Chat-Rapport', () => {
+    // Was der Monteur diktiert hat, schreibt der Projektleiter nicht um — für ihn
+    // bleibt es beim Löschen und Neuerfassen.
+    render(<ReportsTab reports={[makeReport({ source: 'chat' })]} onEdit={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt Bearbeiten nicht am abgerechneten Rapport', () => {
+    render(<ReportsTab reports={[makeReport({ source: 'admin_manual', invoice_id: 7 })]} onEdit={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt Bearbeiten nicht am unterschriebenen Rapport', () => {
+    render(<ReportsTab
+      reports={[makeReport({ source: 'admin_manual', signature_timestamp: '2026-07-21T12:00:00Z' })]}
+      onEdit={vi.fn()}
+    />)
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht ohne onEdit-Prop', () => {
+    render(<ReportsTab reports={[makeReport({ source: 'admin_manual' })]} />)
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+  })
+})

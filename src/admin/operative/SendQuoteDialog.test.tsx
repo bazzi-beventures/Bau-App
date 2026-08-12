@@ -178,6 +178,19 @@ describe('SendQuoteDialog — mehrere Empfänger und CC', () => {
     await waitFor(() => expect(sendBody().additional_recipients).toEqual(['zweiter@example.ch']))
   })
 
+  it('sagt beim CC-Feld, dass die Kopie nicht angenommen werden kann', async () => {
+    // Der Unterschied zwischen «weiterer Empfänger» und «CC» ist im Dialog sonst
+    // unsichtbar — und er entscheidet, wer die Offerte verbindlich annehmen kann.
+    const user = userEvent.setup()
+    mockInfo()
+    renderDialog()
+    await screen.findByText('Prospekt.pdf')
+
+    expect(screen.queryByText(/ohne Annehmen\/Ablehnen/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '+ CC' }))
+    expect(screen.getByText(/ohne Annehmen\/Ablehnen/)).toBeInTheDocument()
+  })
+
   it('entfernt eine Zeile wieder', async () => {
     const user = userEvent.setup()
     mockInfo()

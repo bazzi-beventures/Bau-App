@@ -75,9 +75,12 @@ function EmailRow({ value, label, prefix, disabled, onChange, onRemove }: {
 export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent }: Props) {
   const [email, setEmail] = useState(defaultEmail ?? '')
   // Weitere Empfänger und CC: eine Offerte geht oft an mehrere Parteien desselben
-  // Vorgangs (Bauherr, Architekt, Verwaltung). Ein Mail an alle — sie sollen einander
-  // sehen, deshalb CC und nicht je ein Einzelversand. Die Standard-Adresse oben bleibt
-  // das Pflichtfeld; diese Listen sind leer, bis jemand auf «+» klickt.
+  // Vorgangs (Bauherr, Architekt, Verwaltung). Weitere Empfänger stehen dem Kunden
+  // gleich — ein Mail an alle, sie sehen einander. CC-Adressen sind Mitleser: der
+  // Server schickt ihnen eine eigene Kopie mit der Offerte im Anhang, aber ohne
+  // Annehmen/Ablehnen — annehmen darf nur, wer die Offerte auch bekommen hat.
+  // Die Standard-Adresse oben bleibt das Pflichtfeld; diese Listen sind leer, bis
+  // jemand auf «+» klickt.
   const [extraEmails, setExtraEmails] = useState<string[]>([])
   const [ccEmails, setCcEmails] = useState<string[]>([])
   const [sending, setSending] = useState(false)
@@ -250,7 +253,14 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
           </div>
           {(extraEmails.length > 0 || ccEmails.length > 0) && (
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
-              Alle Adressen erhalten dieselbe Mail und sehen einander.
+              {extraEmails.length > 0 && (
+                <div>Empfänger erhalten dieselbe Mail mit Annehmen/Ablehnen und sehen einander.</div>
+              )}
+              {ccEmails.length > 0 && (
+                <div style={{ marginTop: extraEmails.length > 0 ? 4 : 0 }}>
+                  CC erhält eine separate Kopie mit der Offerte im Anhang — ohne Annehmen/Ablehnen.
+                </div>
+              )}
             </div>
           )}
         </div>

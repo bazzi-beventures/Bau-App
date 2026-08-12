@@ -4,6 +4,7 @@ import { fmtCHF, fmtDate, todayISO } from '../../utils/format'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE, INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/statuses'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ActionRow } from '../../components/ActionRow'
+import { AutoGrowTextarea } from '../../components/AutoGrowTextarea'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../../../shared/projectFileTypes'
 import { BeschaffungStep, daysSince } from '../../constants/beschaffungSteps'
 
@@ -854,6 +855,11 @@ interface ReportsTabProps {
   // Optional: löscht einen Rapport (inkl. Stunden/Material). Fehlt der Prop, wird
   // kein Löschen-Knopf gezeigt (Abwärtskompatibilität).
   onDelete?: (reportId: number) => Promise<void>
+  // Optional: öffnet die Bearbeiten-Maske. Der Knopf erscheint nur an manuell
+  // erfassten, noch nicht abgerechneten Rapporten — ein Chat-Rapport ist die
+  // Aufnahme des Monteurs und wird nicht umgeschrieben (Server prüft dieselbe
+  // Regel nochmals, db.report_edit_blocker).
+  onEdit?: (reportId: number) => void
   // Optional: Datei-Sektion für hochgeladene Rapporte (Papier-Blatt, Fremdsystem).
   // Nur gezeigt, wenn die Upload-Props gesetzt sind — gleiche Handler wie der
   // Dokumente-Tab, die Sektion bestimmt die Kategorie ('rapport') implizit.
@@ -866,7 +872,7 @@ interface ReportsTabProps {
 }
 
 export function ReportsTab({
-  reports, onShowCreateForm, paperRapportUrl, onDelete,
+  reports, onShowCreateForm, paperRapportUrl, onDelete, onEdit,
   files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
 }: ReportsTabProps) {
   const [confirmDelete, setConfirmDelete] = useState<ProjectReport | null>(null)
@@ -962,6 +968,16 @@ export function ReportsTab({
                   </a>
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
+                )}
+                {onEdit && manual && !billed && !signed && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    onClick={() => onEdit(r.id)}
+                    title="Datum, Stunden, Material und Beschrieb dieses Rapports korrigieren"
+                  >
+                    Bearbeiten
+                  </button>
                 )}
                 {onDelete && !billed && (
                   <button
@@ -1249,7 +1265,9 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
       {/* Dialog: Rechnung generieren (Bemerkung + ggf. Hinweis "ohne Rapport") */}
       {showGenerate && (
         <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+          {/* maxHeight/overflow: die Bemerkung wächst mit dem Text bis ~10 Zeilen —
+              ohne das schöbe sie auf kleinen Bildschirmen die Knöpfe aus dem Bild. */}
+          <div className="admin-confirm-box" style={{ maxWidth: 440, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="admin-confirm-title">Rechnung generieren</div>
             {!hasSignedReport && (
               <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
@@ -1261,16 +1279,15 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
               <label className="admin-form-label" htmlFor="proj-gen-remark">
                 Bemerkung
               </label>
-              <textarea
+              <AutoGrowTextarea
                 id="proj-gen-remark"
                 className="admin-form-input"
-                rows={2}
+                minRows={2}
                 maxLength={1000}
                 value={genRemark}
                 placeholder="z.B. Referenz oder Projekt-Nr. des Kunden. Leer lassen, um den Block wegzulassen."
                 onChange={e => setGenRemark(e.target.value)}
                 disabled={generatingInvoice}
-                style={{ resize: 'vertical', fontFamily: 'inherit' }}
               />
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                 Erscheint als eigener Block «Bemerkung» auf der Rechnung, über den Positionen.
