@@ -543,7 +543,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       form.append('file', file)
       const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
       if (!result.products || result.products.length === 0) {
-        setPdfError('Keine Produkte in der PDF erkannt. Erkannt werden Offerten von Griesser und Stobag — bitte prüfen, ob es sich um eine solche PDF handelt.')
+        setPdfError('Keine Produkte in der PDF erkannt. Am zuverlässigsten sind Offerten von Griesser und Stobag; andere Lieferanten werden erkannt, wenn sie eine durchnummerierte Positionsliste (Pos/Bezeichnung/Menge/Preis) enthalten.')
         return
       }
       // Quelle-PDF merken, bis der Admin das Review bestätigt oder abbricht.
@@ -1213,7 +1213,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       form.append('file', file)
       const result = await apiFormFetch('/pwa/admin/quotes/extract-pdf', form) as PdfExtractionResponse
       if (!result.products || result.products.length === 0) {
-        setPdfError('Keine Produkte in der PDF erkannt. Erkannt werden Offerten von Griesser und Stobag — bitte prüfen, ob es sich um eine solche PDF handelt.')
+        setPdfError('Keine Produkte in der PDF erkannt. Am zuverlässigsten sind Offerten von Griesser und Stobag; andere Lieferanten werden erkannt, wenn sie eine durchnummerierte Positionsliste (Pos/Bezeichnung/Menge/Preis) enthalten.')
         return
       }
       pendingPdfFile.current = file
