@@ -4,6 +4,7 @@ import { deleteOwnRapport, downloadRapportPdf, fetchProjectReports, ProjectRepor
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
+import { sortProjectsChronologically } from './projekte/sortProjects'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 import { mapsUrl } from '../shared/mapsLink'
 
@@ -1063,6 +1064,10 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
               if (b === noDateKey) return -1
               return a.localeCompare(b)
             })
+            // Innerhalb des Tages nach Startzeit — der Monteur arbeitet die
+            // Liste von oben nach unten ab.
+            .map(([dateKey, groupProjects]) =>
+              [dateKey, sortProjectsChronologically(groupProjects)] as const)
 
           return (
             <div className="projekte-grouped">
@@ -1088,26 +1093,29 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                               <path d="M9 22V12h6v10"/>
                             </svg>
                           </div>
-                          <div className="projekte-tile-name">{p.name}</div>
-                          <div className="projekte-tile-sub" style={isInternal ? { color: tileColor, fontWeight: 600 } : undefined}>
-                            {isInternal
-                              ? KIND_LABELS[kind]
-                              : (p.art_der_arbeit?.length ? p.art_der_arbeit.join(', ') : (p.customer?.billing_name || p.customer?.name || '—'))}
+                          {/* Eigener Textblock: die Kachel ist eine Zeile über die
+                              volle Breite (Icon | Text | Pfeil), nicht mehr eine
+                              von zwei Spalten. */}
+                          <div className="projekte-tile-body">
+                            <div className="projekte-tile-name">{p.name}</div>
+                            <div className="projekte-tile-sub" style={isInternal ? { color: tileColor, fontWeight: 600 } : undefined}>
+                              {isInternal
+                                ? KIND_LABELS[kind]
+                                : (p.art_der_arbeit?.length ? p.art_der_arbeit.join(', ') : (p.customer?.billing_name || p.customer?.name || '—'))}
+                            </div>
+                            {p.bemerkung && (
+                              <div className="projekte-tile-hinweis">⚠ {p.bemerkung}</div>
+                            )}
+                            {p.start_date && (
+                              <div className="projekte-tile-termin">
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <rect x="1" y="3" width="14" height="12" rx="2"/>
+                                  <path d="M5 1v3M11 1v3M1 7h14"/>
+                                </svg>
+                                {timeLabel || formatDate(p.start_date)}
+                              </div>
+                            )}
                           </div>
-                          {p.bemerkung && (
-                            <div style={{ fontSize: 11, color: '#c53030', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              ⚠ {p.bemerkung}
-                            </div>
-                          )}
-                          {p.start_date && (
-                            <div className="projekte-tile-termin">
-                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                <rect x="1" y="3" width="14" height="12" rx="2"/>
-                                <path d="M5 1v3M11 1v3M1 7h14"/>
-                              </svg>
-                              {timeLabel || formatDate(p.start_date)}
-                            </div>
-                          )}
                           <div className="projekte-tile-arrow">
                             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M3 8h10M9 4l4 4-4 4"/>

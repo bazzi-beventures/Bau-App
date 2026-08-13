@@ -1,8 +1,11 @@
+import { compareProjectsChronologically } from './sortProjects'
+
 interface TimelineProject {
   id: string
   name: string
   start_date: string | null
   end_date: string | null
+  start_time?: string | null
 }
 
 interface TimelineInfo {
@@ -75,12 +78,9 @@ function buildTimeline<P extends TimelineProject>(projects: P[]): {
     return { project: p, startDate: start, endDate: end, startOffset, length }
   })
 
-  spans.sort((a, b) => {
-    if (!a.startDate && !b.startDate) return a.project.name.localeCompare(b.project.name)
-    if (!a.startDate) return 1
-    if (!b.startDate) return -1
-    return a.startDate.localeCompare(b.startDate)
-  })
+  // Gleiche Reihenfolge wie die Kachel-Ansicht: Datum, dann Startzeit, dann Name.
+  // Zwei Einsätze am selben Tag standen sonst in Server-Reihenfolge untereinander.
+  spans.sort((a, b) => compareProjectsChronologically(a.project, b.project))
 
   return { info: { start: startISO, days, todayIndex }, spans }
 }

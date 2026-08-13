@@ -915,7 +915,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
             + Manuell erfassen
           </button>
           <label className="admin-btn admin-btn-secondary admin-btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {uploading ? 'Wird extrahiert…' : 'PDF hochladen'}
+            {uploading ? 'Wird extrahiert…' : 'Lieferanten-PDF hochladen'}
             <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={uploading} />
           </label>
         </div>
@@ -1155,7 +1155,8 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   // beim Bau einer Variante Katalog-Material zu picken und Lieferanten-PDFs einzulesen —
   // vorher gab es hier nur Freitext-Material.
   const [materials, setMaterials] = useState<Material[]>([])
-  const [materialSupplierFilter] = useState('')
+  const [materialSupplierFilter, setMaterialSupplierFilter] = useState('')
+  const [materialCategoryFilter, setMaterialCategoryFilter] = useState('')
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
   const [pdfReview, setPdfReview] = useState<PdfExtractionResponse | null>(null)
@@ -1166,7 +1167,16 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingPdfFile = useRef<File | null>(null)
   const [supplierDocsToFile, setSupplierDocsToFile] = useState<File[]>([])
+  // Lieferanten-Lookup + Kategorien für die optionalen Material-Filter — identisch
+  // zum Erstell-Formular, damit die Katalog-Auswahl auch beim Bearbeiten eingrenzbar
+  // ist (Materialstamm hat je nach Mandant mehrere tausend Artikel).
   const supplierMap = useMemo(() => Object.fromEntries(suppliers.map(s => [s.id, s.name])), [suppliers])
+  const usedSupplierIds = useMemo(() => new Set(materials.map(m => m.supplier_id).filter(Boolean)), [materials])
+  const supplierOptions = useMemo(() => suppliers.filter(s => usedSupplierIds.has(s.id)), [suppliers, usedSupplierIds])
+  const categories = useMemo(
+    () => [...new Set(materials.map(m => m.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
+    [materials],
+  )
 
   useEffect(() => {
     Promise.all([
@@ -1413,16 +1423,39 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setMaterialRows(r => [...r, { description: '', quantity: '', unit: 'Stk', unit_price: '' }])}>+ Materialposition</button>
           {/* Aus dem Katalog wählen: fügt Name + VK als Zeile hinzu (art_nr wird beim
-              Bearbeiten nicht gespeichert, daher client-seitig aufgelöst). */}
-          <div style={{ flex: 1, minWidth: 220, maxWidth: 380 }}>
-            <MaterialCombobox
-              materials={materials}
-              supplierMap={supplierMap}
-              supplierFilter={materialSupplierFilter}
-              categoryFilter=""
-              value=""
-              onChange={artNr => { if (artNr) addCatalogMaterial(artNr) }}
-            />
+              Bearbeiten nicht gespeichert, daher client-seitig aufgelöst). Die beiden
+              optionalen Filter grenzen die Katalog-Auswahl ein (wie im Erstellen-Formular). */}
+          <div style={{ flex: 1, minWidth: 220, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <select
+              className="admin-form-select"
+              style={{ flex: 1, minWidth: 160 }}
+              aria-label="Lieferant filtern"
+              value={materialSupplierFilter}
+              onChange={e => setMaterialSupplierFilter(e.target.value)}
+            >
+              <option value="">Alle Lieferanten</option>
+              {supplierOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select
+              className="admin-form-select"
+              style={{ flex: 1, minWidth: 160 }}
+              aria-label="Artikelgruppe filtern"
+              value={materialCategoryFilter}
+              onChange={e => setMaterialCategoryFilter(e.target.value)}
+            >
+              <option value="">Alle Artikelgruppen</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <div style={{ flexBasis: '100%', minWidth: 220 }}>
+              <MaterialCombobox
+                materials={materials}
+                supplierMap={supplierMap}
+                supplierFilter={materialSupplierFilter}
+                categoryFilter={materialCategoryFilter}
+                value=""
+                onChange={artNr => { if (artNr) addCatalogMaterial(artNr) }}
+              />
+            </div>
           </div>
         </div>
       </fieldset>
@@ -1463,7 +1496,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
               landen nach dem Review als Zeilen hier. */}
           <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={uploading} />
           <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
-            {uploading ? 'Lese PDF…' : '📄 Lieferanten-PDF importieren'}
+            {uploading ? 'Wird extrahiert…' : 'Lieferanten-PDF hochladen'}
           </button>
         </div>
         {pdfError && (

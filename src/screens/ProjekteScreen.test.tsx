@@ -128,6 +128,44 @@ describe('ProjekteScreen — Rapport-Sperre', () => {
   })
 })
 
+// Die Kachelliste ist der Tagesablauf des Monteurs: von oben nach unten
+// abzuarbeiten. Sie übernahm bisher die Server-Reihenfolge, in der die Einsätze
+// eines Tages nach Namen standen (11:00 vor 09:00 vor 16:00).
+describe('ProjekteScreen — chronologische Reihenfolge', () => {
+  function tileNames(container: HTMLElement): (string | null)[] {
+    return Array.from(container.querySelectorAll('.projekte-tile-name')).map(el => el.textContent)
+  }
+
+  it('ordnet die Einsätze eines Tages nach Startzeit', async () => {
+    routeFetch([
+      project({ id: 'a', name: 'Müller Kleinandelfingen', start_date: '2026-08-13', start_time: '11:00:00' }),
+      project({ id: 'b', name: 'Siegrist Wiesendangen', start_date: '2026-08-13', start_time: '09:00:00' }),
+      project({ id: 'c', name: 'Walch Seuzach', start_date: '2026-08-13', start_time: '16:00:00' }),
+    ])
+    const { container } = render(<ProjekteScreen {...NOOP} onStartRapport={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Walch Seuzach')).toBeInTheDocument())
+    expect(tileNames(container)).toEqual([
+      'Siegrist Wiesendangen', 'Müller Kleinandelfingen', 'Walch Seuzach',
+    ])
+  })
+
+  it('gruppiert nach Tag und hängt Projekte ohne Termin ans Ende', async () => {
+    routeFetch([
+      project({ id: 'a', name: 'Noch nicht disponiert', start_date: null, start_time: null }),
+      project({ id: 'b', name: 'Morgen früh', start_date: '2026-08-14', start_time: '07:00:00' }),
+      project({ id: 'c', name: 'Heute spät', start_date: '2026-08-13', start_time: '17:00:00' }),
+    ])
+    const { container } = render(<ProjekteScreen {...NOOP} onStartRapport={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Noch nicht disponiert')).toBeInTheDocument())
+    expect(tileNames(container)).toEqual(['Heute spät', 'Morgen früh', 'Noch nicht disponiert'])
+    expect(screen.getByText('13.08.2026')).toBeInTheDocument()
+    expect(screen.getByText('14.08.2026')).toBeInTheDocument()
+    expect(screen.getByText('Ohne Termin')).toBeInTheDocument()
+  })
+})
+
 // Der Fallback selbst liegt im Backend (db.project_contacts_with_customer_fallback) —
 // hier zählt nur, dass der abgeleitete Eintrag als solcher gekennzeichnet wird und der
 // Monteur nicht denkt, jemand habe diese Person für die Baustelle benannt.

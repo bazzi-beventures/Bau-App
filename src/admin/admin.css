@@ -3300,20 +3300,24 @@ button.admin-list-item {
 }
 
 /* Kürzel des Termin-Teams ganz vorne — auf einen Blick, wer draussen ist.
-   Deckender Chip mit roter Schrift statt des früheren durchscheinenden Weiss:
-   das lag als heller Schleier auf dem Balken und war vom Projektnamen daneben
-   kaum zu unterscheiden. Weil der Chip selbst deckend ist, trägt der Kontrast
-   über ALLE Balkenfarben (Blau, Lila, Bernstein, Türkis, Magenta, Limette,
-   Slate) — eine farbige Chip-Fläche müsste gegen jede einzeln bestehen. */
+   Deckende rote Pille mit weisser Schrift: deckend, damit der Kontrast über
+   ALLE Balkenfarben trägt (Blau, Lila, Bernstein, Türkis, Magenta, Limette,
+   Slate) — ein durchscheinender Chip läge als heller Schleier auf dem Balken
+   und wäre vom Projektnamen daneben kaum zu unterscheiden. Rot kommt in keiner
+   Balkenfarbe vor; einzig gegen Magenta (#db2777) liegen die Töne nah
+   beieinander, dagegen der dünne weisse Ring als Kante.
+   Vertikal ohne Padding: die Chip-Höhe kommt aus der line-height der Zeile
+   (16px) — Padding würde die Zeile über GANTT_BAR_H hinaus wachsen lassen. */
 .project-cal-gantt-bar-crew {
   flex: 0 0 auto;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--cal-crew-bg, #ffffff);
-  color: var(--cal-crew-fg, #dc2626);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--cal-crew-bg, #dc2626);
+  color: var(--cal-crew-fg, #ffffff);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
 /* Zweite Zeile: Ortschaft des Objekts. */
