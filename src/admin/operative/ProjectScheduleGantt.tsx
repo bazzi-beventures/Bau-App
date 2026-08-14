@@ -11,7 +11,7 @@ import { Project } from './ProjectsScreen'
 import {
   CalendarEntry, StaffLite,
   addressLocality, crewShortLabels, useHoverCard, entryTitle, fmtTimeRange, kindSymbol,
-  pairKey, pillBg, projectCoversDay, readDragPayload, setDragPayload, useScheduleDistances,
+  pairKey, pillBg, pillClass, projectCoversDay, readDragPayload, setDragPayload, useScheduleDistances,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
 import { diffDays, hhmmToMin, isToday, toDateStr } from '../utils/calendarHelpers'
@@ -218,7 +218,7 @@ export default function ProjectScheduleGantt({
         key={`${p.id}@${dayISO}`}
         className={
           `project-cal-gantt-bar${allDay ? ' allday' : ''}` +
-          `${conflict ? ' conflict' : ''}`
+          `${conflict ? ' conflict' : ''}${pillClass(p)}`
         }
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '', 'x')}

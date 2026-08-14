@@ -67,7 +67,7 @@ interface EmbeddedCustomer {
 
 type ProjectKind =
   | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
-  | 'weiterbildung' | 'reservation' | 'sonstiges'
+  | 'weiterbildung' | 'reservation' | 'blocker' | 'sonstiges'
 
 const KIND_LABELS: Record<ProjectKind, string> = {
   project: 'Projekt',
@@ -76,6 +76,7 @@ const KIND_LABELS: Record<ProjectKind, string> = {
   werkstatt: 'Werkstatt',
   weiterbildung: 'Weiterbildung',
   reservation: 'Reservation',
+  blocker: 'Blocker',
   sonstiges: 'Sonstiges',
 }
 
@@ -86,6 +87,7 @@ const KIND_COLORS: Record<ProjectKind, string> = {
   werkstatt: '#0d9488',
   weiterbildung: '#db2777',
   reservation: '#65a30d',
+  blocker: '#94a3b8',
   sonstiges: '#475569',
 }
 
@@ -514,6 +516,24 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
               {showCategory && f.category && CATEGORY_LABELS[f.category] ? `${CATEGORY_LABELS[f.category]} · ` : ''}{formatDateTime(f.created_at)}
             </span>
           </span>
+        )}
+        {/* Der Dateiname öffnet nur — Fotos/PDFs liefert der Proxy `inline` aus.
+            Zum Speichern braucht es `?download=1` (erzwingt `attachment`). */}
+        {renamingFileId !== f.id && (f.storage_path || f.file_url) && (
+          <a
+            href={apiUrl(`/pwa/projects/${projectId}/files/${f.id}/download?download=1`)}
+            download={f.filename}
+            className="projekte-kontakt-link-btn"
+            style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+            title="Herunterladen"
+            aria-label={`${f.filename} herunterladen`}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'block' }}>
+              <path d="M12 3v12" />
+              <path d="m7 11 5 5 5-5" />
+              <path d="M4 20h16" />
+            </svg>
+          </a>
         )}
         {renamingFileId !== f.id && (
           <button

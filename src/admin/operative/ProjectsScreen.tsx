@@ -63,7 +63,7 @@ export interface ProjectQuoteSummary {
 
 export type ProjectKind =
   | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
-  | 'weiterbildung' | 'reservation' | 'sonstiges'
+  | 'weiterbildung' | 'reservation' | 'blocker' | 'sonstiges'
 
 export const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
   project: 'Projekt',
@@ -74,6 +74,9 @@ export const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
   // Vormerkung eines Monteurs, ohne dass schon feststeht wofür — belegt
   // Kapazität wie jeder andere interne Einsatz.
   reservation: 'Reservation',
+  // Provisorisch geplante Arbeit, deren Projektzuordnung noch offen ist
+  // ("evtl. Baustelle Müller"). Belegt Zeit, wird aber schraffiert gezeichnet.
+  blocker: 'Blocker',
   sonstiges: 'Sonstiges',
 }
 

@@ -24,7 +24,7 @@ const DEFAULTS = {
   colors: {
     project: '#3081ab', teamsitzung: '#7c3aed', lagerarbeit: '#d97706',
     werkstatt: '#0d9488', weiterbildung: '#db2777', reservation: '#65a30d',
-    sonstiges: '#475569',
+    blocker: '#94a3b8', sonstiges: '#475569',
   },
   views: { month: true, week: true, staff: true, plantafel: true, gantt: true },
   grey_after: '',

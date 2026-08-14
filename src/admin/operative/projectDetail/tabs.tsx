@@ -227,6 +227,28 @@ interface FileSectionProps {
   onRename: (fileId: string, filename: string) => Promise<void>
 }
 
+// Kleines Download-Symbol (Pfeil auf die Ablage) für den Knopf neben jeder Datei.
+function DownloadIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ display: 'block' }}
+    >
+      <path d="M12 3v12" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 20h16" />
+    </svg>
+  )
+}
+
 // Eine Datei-Sektion (z.B. "Fotos") mit Drag-&-Drop-Feld + Hochladen-Button.
 // Sowohl Ablegen per Drag-&-Drop als auch Auswahl über den Button laden direkt
 // in DIESE Kategorie hoch — die Sektion bestimmt die Kategorie implizit.
@@ -392,6 +414,20 @@ function FileSection({ section, items, uploading, isUploadingHere, onUpload, onD
                     }
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formatDateTime(f.created_at)}</div>
                   </div>
+                  {/* Der Dateiname öffnet nur (Fotos/PDFs liefert der Proxy `inline`
+                      aus). Für "wirklich als Datei speichern" braucht es den
+                      eigenen Knopf mit `?download=1` — siehe drive_proxy.py. */}
+                  {(f.storage_path || f.file_url) && (
+                    <a
+                      href={apiUrl(`/pwa/admin/project-files/${f.id}/download?download=1`)}
+                      download={f.filename}
+                      className="admin-btn admin-btn-sm admin-btn-secondary"
+                      title="Herunterladen"
+                      aria-label={`${f.filename} herunterladen`}
+                    >
+                      <DownloadIcon />
+                    </a>
+                  )}
                   <button
                     type="button"
                     className="admin-btn admin-btn-sm admin-btn-secondary"

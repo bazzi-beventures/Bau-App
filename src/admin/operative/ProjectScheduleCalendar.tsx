@@ -21,12 +21,13 @@ import {
 } from '../utils/ganttGrid'
 import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
-  crewMembers, entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillExtraLines,
-  projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload,
+  crewMembers, entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillClass, pillExtraLines,
+  projectCoversDay, projectMonteurNames, readDragPayload, scheduledDayIsoSet, setDragPayload,
   useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
+import MiniMonthPicker from './MiniMonthPicker'
 
 export type { CalendarEntry }
 
@@ -90,7 +91,7 @@ function CalendarLegend({ canton }: { canton: string }) {
         Feiertag {canton.toUpperCase()}
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
-        📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt
+        📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt · 🚧 Blocker (schraffiert = provisorisch)
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
         Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen. Mit der Maus auf einem Einsatz stehen bleiben zeigt alle Angaben, <strong>Doppelklick</strong> öffnet das Projekt.
@@ -170,7 +171,7 @@ function MonthView({
                 return (
                   <div
                     key={j}
-                    className={`absence-cal-pill project-cal-pill${extra.length ? ' has-extra' : ''}`}
+                    className={`absence-cal-pill project-cal-pill${extra.length ? ' has-extra' : ''}${pillClass(p)}`}
                     draggable
                     onDragStart={e => setDragPayload(e, p.id, dayISO)}
                     style={{ background: pillBg(p) }}
@@ -389,7 +390,7 @@ function WeekView({
         <div
           key={p.id}
           {...common}
-          className={`project-cal-week-event allday${extra.length ? ' has-extra' : ''}`}
+          className={`project-cal-week-event allday${extra.length ? ' has-extra' : ''}${pillClass(p)}`}
           style={{ background: pillBg(p) }}
         >
           <div className="project-cal-week-event-name">
@@ -415,7 +416,7 @@ function WeekView({
         {...common}
         className={
           `project-cal-week-event${layout.inline ? ' tight' : ''}` +
-          `${(lane?.total ?? 1) > 1 ? ' stacked' : ''}`
+          `${(lane?.total ?? 1) > 1 ? ' stacked' : ''}${pillClass(p)}`
         }
         style={{
           background: pillBg(p),
@@ -656,7 +657,7 @@ function PlantafelView({
     return (
       <div
         key={p.id}
-        className={`project-cal-board-chip${conflict ? ' conflict' : ''}${isLead ? ' lead' : ''}`}
+        className={`project-cal-board-chip${conflict ? ' conflict' : ''}${isLead ? ' lead' : ''}${pillClass(p)}`}
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '')}
         onClick={() => onSelect(p)}
@@ -803,7 +804,7 @@ function AgendaView({
               return (
                 <div
                   key={p.id}
-                  className="project-cal-agenda-event"
+                  className={`project-cal-agenda-event${pillClass(p)}`}
                   style={{ background: pillBg(p) }}
                   onClick={() => onSelect(p)}
                   {...openBinding(p, onOpenProject)}
@@ -976,6 +977,11 @@ export default function ProjectScheduleCalendar({
     return p.monteur_ids.some(id => staffIds.has(id) && !hiddenStaff.has(id))
   })
 
+  // Tage mit Einsätzen für die Punkte im Mini-Monatskalender — bewusst aus den
+  // SICHTBAREN Einsätzen, damit der Punkt zeigt, was man nach dem Sprung auch
+  // wirklich sieht (Monteur-Filter, Mitarbeiteransicht).
+  const eventDays = scheduledDayIsoSet(visibleProjects)
+
   const year = currentDate.getFullYear()
   const holidays = new Map<string, string>([
     ...getSwissHolidays(year - 1, canton),
@@ -1058,7 +1064,17 @@ export default function ProjectScheduleCalendar({
           )}
         </div>
 
-        <div className="absence-cal-title">{title}</div>
+        {/* Titel = Auslöser des Mini-Monatskalenders: ein Klick auf einen Tag
+            springt die aktive Ansicht dorthin, statt sich tageweise vorzuklicken. */}
+        <div className="absence-cal-title">
+          <MiniMonthPicker
+            label={title}
+            value={currentDate}
+            onPick={setCurrentDate}
+            eventDays={eventDays}
+            holidays={holidays}
+          />
+        </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={handlePrev}>←</button>

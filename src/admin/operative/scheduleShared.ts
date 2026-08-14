@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { resolveScheduleDistances } from '../../api/admin'
 import { Project, projectCustomerName } from './ProjectsScreen'
-import { parseDateStr, toDateStr } from '../utils/calendarHelpers'
+import { diffDays, parseDateStr, shiftISO, toDateStr } from '../utils/calendarHelpers'
 
 export interface StaffLite {
   id: string
@@ -36,6 +36,28 @@ export function projectCoversDay(p: Project, day: Date): boolean {
 
 export function fmtTime(t: string | null | undefined): string {
   return t ? t.slice(0, 5) : ''
+}
+
+// Alle ISO-Tage, an denen mindestens ein Einsatz liegt — Punkte im
+// Mini-Monatskalender. Mehrtägige Einsätze zählen an jedem Tag.
+//
+// Der Deckel je Eintrag ist Absicht: der Kalender lädt ein Fenster von rund drei
+// Jahren, ein einzelner Datenfehler (end_date im Jahr 9999) würde die Schleife
+// sonst endlos drehen. MAX_SPAN_DAYS deckt jedes reale Bauprojekt ab.
+const MAX_SPAN_DAYS = 400
+
+export function scheduledDayIsoSet(projects: Project[]): Set<string> {
+  const out = new Set<string>()
+  for (const p of projects) {
+    if (!p.start_date) continue
+    const startISO = p.start_date.slice(0, 10)
+    const endISO = (p.end_date ?? p.start_date).slice(0, 10)
+    out.add(startISO)
+    if (endISO <= startISO) continue
+    const span = Math.min(diffDays(startISO, endISO), MAX_SPAN_DAYS)
+    for (let i = 1; i <= span; i++) out.add(shiftISO(startISO, i))
+  }
+  return out
 }
 
 // Anzeigename einer Kalenderkachel: Projektnummer vor dem Namen.
@@ -154,11 +176,21 @@ export const KIND_COLORS: Record<string, string> = {
   werkstatt:   'var(--kind-werkstatt, #0d9488)',    // Türkis
   weiterbildung: 'var(--kind-weiterbildung, #db2777)',  // Magenta
   reservation: 'var(--kind-reservation, #65a30d)',  // Limette
+  blocker:     'var(--kind-blocker, #94a3b8)',      // Grau-Blau
   sonstiges:   'var(--kind-sonstiges, #475569)',    // Slate
 }
 
 export function pillBg(p: Project): string {
   return KIND_COLORS[p.kind || 'project'] ?? KIND_COLORS.project
+}
+
+// Zusatz-Klasse für die Kachel eines Einsatzes. Ein Blocker ist provisorische
+// Planung — er wird schraffiert gezeichnet (CSS .provisional), damit man fest
+// Geplantes und Vorgemerktes im Raster nie verwechselt. Die Klasse kommt zur
+// Inline-Hintergrundfarbe dazu, statt sie zu ersetzen: die Farbe bleibt pro
+// Mandant konfigurierbar, die Schraffur ist fix.
+export function pillClass(p: Project): string {
+  return p.kind === 'blocker' ? ' provisional' : ''
 }
 
 // Kleines Typ-Symbol je Aufgaben-Art: Kundenprojekte nach Termin-Typ
@@ -175,6 +207,7 @@ const KIND_SYMBOLS: Record<string, string> = {
   werkstatt: '⚙️',
   weiterbildung: '🎓',
   reservation: '🔒',
+  blocker: '🚧',
   sonstiges: '📌',
 }
 

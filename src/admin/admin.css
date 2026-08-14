@@ -3048,6 +3048,202 @@ button.admin-list-item {
   white-space: nowrap;
 }
 
+/* ─── Blocker: provisorisch geplant (schraffierte Kachel) ──── */
+
+/* Die Kacheln tragen ihre Farbe als INLINE-Style (background-Kurzform, pro
+   Mandant konfigurierbar). Ein background-image aus dem Stylesheet würde davon
+   überschrieben — die Schraffur liegt deshalb als ::after-Overlay darüber statt
+   als zweiter Hintergrund. Kein !important nötig. */
+.project-cal-pill.provisional::after,
+.project-cal-week-event.provisional::after,
+.project-cal-board-chip.provisional::after,
+.project-cal-gantt-bar.provisional::after,
+.project-cal-agenda-event.provisional::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.34) 0 5px,
+    rgba(255, 255, 255, 0) 5px 10px
+  );
+}
+
+/* position: relative NUR für die im Fluss stehenden Kacheln — Wochenraster und
+   Tagesplan positionieren ihre Blöcke absolut, dort würde ein relative die
+   Platzierung im Raster zerstören. */
+.project-cal-pill.provisional,
+.project-cal-board-chip.provisional,
+.project-cal-agenda-event.provisional {
+  position: relative;
+}
+
+.project-cal-pill.provisional,
+.project-cal-week-event.provisional,
+.project-cal-board-chip.provisional,
+.project-cal-gantt-bar.provisional,
+.project-cal-agenda-event.provisional {
+  overflow: hidden;
+}
+
+/* ─── Mini-Monatskalender (Datumssprung aus der Toolbar) ───── */
+
+.project-cal-datepicker {
+  position: relative;
+  display: inline-block;
+}
+
+.project-cal-datepicker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.project-cal-datepicker-trigger:hover,
+.project-cal-datepicker-trigger[aria-expanded='true'] {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.project-cal-datepicker-caret {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Zentriert unter dem Auslöser. z-index über den Kalenderkacheln, sonst
+   verschwindet das Popover hinter den sticky Kopfzeilen der Plantafel. */
+.project-cal-datepicker-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: 244px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  cursor: default;
+}
+
+.project-cal-datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.project-cal-datepicker-month {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.project-cal-datepicker-nav {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.project-cal-datepicker-nav:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.project-cal-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.project-cal-datepicker-dow {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-bottom: 2px;
+}
+
+.project-cal-datepicker-blank {
+  height: 28px;
+}
+
+/* position: relative trägt den Einsatz-Punkt am unteren Rand. */
+.project-cal-datepicker-day {
+  position: relative;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.project-cal-datepicker-day:hover {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.project-cal-datepicker-day.holiday {
+  color: var(--danger);
+}
+
+.project-cal-datepicker-day.today {
+  font-weight: 700;
+  border-color: var(--primary);
+}
+
+/* Nach .today, damit die Auswahl den Heute-Rahmen überschreibt. */
+.project-cal-datepicker-day.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.project-cal-datepicker-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.project-cal-datepicker-day.selected .project-cal-datepicker-dot {
+  background: #fff;
+}
+
+.project-cal-datepicker-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* ─── Plantafel (Monteure als Zeilen × Wochentage) ─────────── */
 
 /* overflow: clip statt hidden — clip erzeugt keinen Scroll-Container, dadurch

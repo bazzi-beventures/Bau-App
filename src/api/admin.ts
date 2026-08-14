@@ -408,7 +408,30 @@ export interface ProjectAppointment {
   label: string | null
   // Team dieses Termins; null/leer = Projekt-Team gilt.
   monteur_ids: string[] | null
+  // Klammer über die Termine einer Serie; null = Einzeltermin. Die Termine einer
+  // Serie sind echte Zeilen (siehe Migration 20260814b) — jeder lässt sich
+  // einzeln verschieben; nur Löschen/Ändern fragt nach «nur dieser / ganze Serie».
+  series_id?: string | null
 }
+
+// ─── Serientermine ──────────────────────────────────────────
+// Eine Serie MUSS ein Ende haben (count oder until) — das Backend legt beim
+// Speichern je Wiederholung eine Zeile an, «bis auf Weiteres» gibt es nicht.
+
+export type RecurrenceFreq = 'daily' | 'workdays' | 'weekly' | 'monthly'
+
+export interface AppointmentRecurrence {
+  freq: RecurrenceFreq
+  // Abstand in Einheiten von `freq` (2 + 'weekly' = alle zwei Wochen).
+  interval?: number
+  // Anzahl Termine INKLUSIVE dem ersten.
+  count?: number | null
+  // Letztes zulässiges Startdatum 'YYYY-MM-DD'.
+  until?: string | null
+}
+
+// Anwendungsbereich einer Änderung an einem Serientermin.
+export type AppointmentScope = 'single' | 'series'
 
 export async function listAppointments(dateFrom: string, dateTo: string): Promise<ProjectAppointment[]> {
   return apiFetch(
@@ -426,20 +449,31 @@ export async function getProjectAppointments(projectId: string): Promise<Project
 // Partial-PATCH-Semantik: fehlendes Feld = unverändert; '' bei end_date/
 // start_time/end_time = Wert löschen (Backend normalisiert '' → NULL);
 // monteur_ids [] = Termin-Team löschen (→ Projekt-Team gilt).
-export async function createAppointment(projectId: string, data: Partial<ProjectAppointment>): Promise<ProjectAppointment> {
+// Mit `recurrence` entsteht eine Serie statt eines Einzeltermins; zurück kommt
+// der ERSTE Termin, `series_count` sagt, wie viele daraus wurden.
+export async function createAppointment(
+  projectId: string,
+  data: Partial<ProjectAppointment> & { recurrence?: AppointmentRecurrence | null },
+): Promise<ProjectAppointment & { series_count?: number }> {
   return apiFetch(`/pwa/admin/projects/${projectId}/appointments`, {
     method: 'POST', body: JSON.stringify(data),
-  }) as Promise<ProjectAppointment>
+  }) as Promise<ProjectAppointment & { series_count?: number }>
 }
 
-export async function updateAppointment(id: string, data: Partial<ProjectAppointment>): Promise<ProjectAppointment> {
+// scope 'series' zieht Zeiten, Typ, Bezeichnung und Team auf alle Termine der
+// Serie nach. Die DATEN bleiben immer am einzelnen Termin — sie sind je
+// Wiederholung verschieden, ein gemeinsames Datum liesse die Serie auf einen
+// Tag zusammenfallen.
+export async function updateAppointment(
+  id: string, data: Partial<ProjectAppointment>, scope: AppointmentScope = 'single',
+): Promise<ProjectAppointment> {
   return apiFetch(`/pwa/admin/appointments/${id}`, {
-    method: 'PATCH', body: JSON.stringify(data),
+    method: 'PATCH', body: JSON.stringify({ ...data, scope }),
   }) as Promise<ProjectAppointment>
 }
 
-export async function deleteAppointment(id: string): Promise<void> {
-  await apiFetch(`/pwa/admin/appointments/${id}`, { method: 'DELETE' })
+export async function deleteAppointment(id: string, scope: AppointmentScope = 'single'): Promise<void> {
+  await apiFetch(`/pwa/admin/appointments/${id}?scope=${scope}`, { method: 'DELETE' })
 }
 
 // ─── Invoices ──────────────────────────────────────────────
@@ -592,6 +626,7 @@ export const SCHEDULING_KINDS = [
   { key: 'werkstatt', label: 'Werkstatt' },
   { key: 'weiterbildung', label: 'Weiterbildung' },
   { key: 'reservation', label: 'Mitarbeiter-Reservation' },
+  { key: 'blocker', label: 'Blocker (provisorisch)' },
   { key: 'sonstiges', label: 'Sonstiges' },
 ] as const
 

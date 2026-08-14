@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiBlobFetch, apiFetch } from '../../api/client'
 import {
   upsertProject, getSchedulingConfig, SchedulingConfig,
-  ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS,
+  ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS, AppointmentRecurrence,
   listAppointments, createAppointment, updateAppointment, deleteAppointment,
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
@@ -37,6 +37,34 @@ interface FormState {
   bemerkung: string
 }
 
+// ─── Serientermine ──────────────────────────────────────────────────────────
+// Die Auswahl im Editor ist bewusst eine flache Liste gängiger Muster statt
+// «alle N Tage/Wochen/Monate» mit eigenem Zahlenfeld — die fünf decken ab, was
+// in der Disposition vorkommt (Sitzung, Werkstatt-Tag, Monatsrapport), und
+// ersparen zwei Eingabefelder. Umgesetzt wird jedes Muster als freq+interval.
+
+type RepeatPreset = '' | 'daily' | 'workdays' | 'weekly' | 'biweekly' | 'monthly'
+
+const REPEAT_LABELS: Record<Exclude<RepeatPreset, ''>, string> = {
+  daily: 'Täglich',
+  workdays: 'Werktags (Mo–Fr)',
+  weekly: 'Wöchentlich',
+  biweekly: 'Alle 2 Wochen',
+  monthly: 'Monatlich (gleicher Tag)',
+}
+
+function repeatToRecurrence(preset: RepeatPreset, until: string): AppointmentRecurrence | null {
+  if (!preset) return null
+  const map: Record<Exclude<RepeatPreset, ''>, AppointmentRecurrence> = {
+    daily:    { freq: 'daily', interval: 1 },
+    workdays: { freq: 'workdays', interval: 1 },
+    weekly:   { freq: 'weekly', interval: 1 },
+    biweekly: { freq: 'weekly', interval: 2 },
+    monthly:  { freq: 'monthly', interval: 1 },
+  }
+  return { ...map[preset], until }
+}
+
 // Editor für EINEN Termin (id = null → neuer Termin).
 interface ApptFormState {
   id: string | null
@@ -51,6 +79,23 @@ interface ApptFormState {
   monteurIds: string[]
   // Beim Aufziehen eines neuen Termins gesetzt: mind. ein Monteur ist Pflicht.
   requireMonteur?: boolean
+  // Serie, zu der dieser Termin gehört (null = Einzeltermin). Nur bei einem
+  // BESTEHENDEN Termin gesetzt — beim Anlegen entsteht sie erst serverseitig.
+  seriesId: string | null
+  // Änderung auf alle Termine der Serie übertragen (Zeiten/Typ/Team, keine Daten).
+  applyToSeries: boolean
+  // Wiederholung eines NEUEN Termins ('' = Einzeltermin). Eine Serie braucht ein
+  // Ende — repeatUntil ist Pflicht, sobald ein Muster gewählt ist.
+  repeat: RepeatPreset
+  repeatUntil: string
+}
+
+// Serien-Felder in ihrem Ausgangszustand — an drei Stellen gebraucht
+// (bestehender Termin laden, leerer Termin, aufgezogener Slot).
+const EMPTY_SERIES_FIELDS = {
+  applyToSeries: false,
+  repeat: '' as RepeatPreset,
+  repeatUntil: '',
 }
 
 // Ein per Drag im Kalender aufgezogener, noch nicht zugeordneter Termin. Wird
@@ -86,6 +131,8 @@ function apptToForm(a: ProjectAppointment): ApptFormState {
     label: a.label ?? '',
     ownTeam: !!(a.monteur_ids && a.monteur_ids.length),
     monteurIds: a.monteur_ids ?? [],
+    seriesId: a.series_id ?? null,
+    ...EMPTY_SERIES_FIELDS,
   }
 }
 
@@ -93,6 +140,7 @@ function emptyApptForm(kind: AppointmentKind = 'montage'): ApptFormState {
   return {
     id: null, startDate: '', endDate: '', startTime: '', endTime: '',
     kind, label: '', ownTeam: false, monteurIds: [],
+    seriesId: null, ...EMPTY_SERIES_FIELDS,
   }
 }
 
@@ -108,6 +156,8 @@ function slotToApptForm(slot: PendingSlot, kind: AppointmentKind = 'montage'): A
     ownTeam: slot.monteurIds.length > 0,
     monteurIds: [...slot.monteurIds],
     requireMonteur: true,
+    seriesId: null,
+    ...EMPTY_SERIES_FIELDS,
   }
 }
 
@@ -159,6 +209,8 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null)
+  // Offene Rückfrage «nur dieser Termin oder ganze Serie?» beim Löschen.
+  const [seriesDeletePrompt, setSeriesDeletePrompt] = useState<ProjectAppointment | null>(null)
   const [visibleWeekIso, setVisibleWeekIso] = useState<string>('')
   const [visibleStaffIds, setVisibleStaffIds] = useState<string[] | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -225,6 +277,16 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [pickerOpen])
+
+  // Escape schliesst die Serien-Rückfrage (wie bei ConfirmDialog).
+  useEffect(() => {
+    if (!seriesDeletePrompt) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSeriesDeletePrompt(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [seriesDeletePrompt])
 
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
@@ -403,9 +465,21 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       if (apptForm.requireMonteur && effectiveTeam.length === 0) {
         setError('Mindestens ein Mitarbeiter ist erforderlich.'); return
       }
+      // Eine Serie wird beim Speichern in echte Termine aufgelöst — ohne Ende
+      // wüsste der Server nicht, wie viele. Deshalb hier hart verlangt statt
+      // still gedeckelt.
+      if (!apptForm.id && apptForm.repeat) {
+        if (!apptForm.repeatUntil) {
+          setError('Serientermin: bitte ein Enddatum der Serie angeben.'); return
+        }
+        if (apptForm.repeatUntil < apptForm.startDate) {
+          setError('Das Serien-Ende liegt vor dem ersten Termin.'); return
+        }
+      }
     }
     setSaving(true)
     const isInternal = form.kind !== 'project'
+    let savedMsg = form.id ? 'Eintrag aktualisiert.' : 'Eintrag erstellt.'
     try {
       // Projekt-Stammdaten OHNE Terminfelder — Termine laufen über die
       // appointment-Endpunkte (der Server spiegelt den Ersttermin selbst).
@@ -432,10 +506,22 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           // Eigenes Team aus → [] (löscht ein evtl. gesetztes Termin-Team).
           monteur_ids: apptForm.ownTeam ? apptForm.monteurIds : [],
         }
-        if (apptForm.id) await updateAppointment(apptForm.id, payload)
-        else await createAppointment(targetId, payload)
+        if (apptForm.id) {
+          await updateAppointment(
+            apptForm.id, payload,
+            apptForm.seriesId && apptForm.applyToSeries ? 'series' : 'single',
+          )
+        } else {
+          const created = await createAppointment(targetId, {
+            ...payload,
+            recurrence: repeatToRecurrence(apptForm.repeat, apptForm.repeatUntil),
+          })
+          // Wie viele Termine aus der Serie wurden, weiss erst der Server
+          // (ausgefallene Monatstage, Deckel) — deshalb aus der Antwort melden.
+          if ((created.series_count ?? 1) > 1) savedMsg = `Serie mit ${created.series_count} Terminen angelegt.`
+        }
       }
-      showToast(form.id ? 'Eintrag aktualisiert.' : 'Eintrag erstellt.', 'success')
+      showToast(savedMsg, 'success')
       await loadAll()
       if (targetId) {
         // Nur das eine gespeicherte Projekt nachladen — die ganze Liste dafür zu
@@ -462,13 +548,24 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setError(null)
   }
 
-  async function handleDeleteAppt(a: ProjectAppointment) {
+  // Löschen eines Serientermins ist mehrdeutig — «nur dieser» und «ganze Serie»
+  // sind beide plausibel und die Serie ist nicht wiederherstellbar. Deshalb eine
+  // Rückfrage statt einer Annahme. Einzeltermine löschen wie bisher direkt.
+  function requestDeleteAppt(a: ProjectAppointment) {
+    if (a.series_id) setSeriesDeletePrompt(a)
+    else void handleDeleteAppt(a)
+  }
+
+  async function handleDeleteAppt(a: ProjectAppointment, scope: 'single' | 'series' = 'single') {
+    setSeriesDeletePrompt(null)
     setSaving(true)
     try {
-      await deleteAppointment(a.id)
-      setAppointments(prev => prev.filter(x => x.id !== a.id))
+      await deleteAppointment(a.id, scope)
+      setAppointments(prev => scope === 'series' && a.series_id
+        ? prev.filter(x => x.series_id !== a.series_id)
+        : prev.filter(x => x.id !== a.id))
       if (apptForm?.id === a.id) setApptForm(null)
-      showToast('Termin entfernt.', 'success')
+      showToast(scope === 'series' ? 'Serie entfernt.' : 'Termin entfernt.', 'success')
     } catch {
       showToast('Entfernen fehlgeschlagen.', 'error')
     } finally {
@@ -656,6 +753,13 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             <>
               <button
                 className="admin-btn admin-btn-secondary"
+                onClick={() => handleNewInternal('blocker')}
+                title="Zeit provisorisch blocken — die Projektzuordnung bleibt vorerst offen"
+              >
+                + Blocker
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
                 onClick={() => handleNewInternal('lagerarbeit')}
                 title="Internen Einsatz (Lagerarbeit, Teamsitzung, …) anlegen"
               >
@@ -769,15 +873,26 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
             </button>
 
             {pendingSlot && (
-              <button
-                type="button"
-                className="admin-btn admin-btn-secondary"
-                onClick={() => handleNewInternal('sonstiges')}
-                style={{ width: '100%' }}
-                title="Internen Einsatz (Lagerarbeit, Teamsitzung, …) mit diesen Zeiten anlegen"
-              >
-                + Interner Einsatz
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => handleNewInternal('blocker')}
+                  style={{ width: '100%' }}
+                  title="Diesen Zeitraum provisorisch blocken — Projektzuordnung bleibt offen"
+                >
+                  + Blocker (provisorisch)
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => handleNewInternal('sonstiges')}
+                  style={{ width: '100%' }}
+                  title="Internen Einsatz (Lagerarbeit, Teamsitzung, …) mit diesen Zeiten anlegen"
+                >
+                  + Interner Einsatz
+                </button>
+              </>
             )}
 
             {form && (
@@ -812,6 +927,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                     <option value="lagerarbeit">Lagerarbeit</option>
                     <option value="werkstatt">Werkstatt / Vorbereitung</option>
                     <option value="reservation">Mitarbeiter-Reservation</option>
+                    <option value="blocker">Blocker (provisorisch)</option>
                     <option value="sonstiges">Sonstiges</option>
                   </select>
                 </label>
@@ -923,14 +1039,17 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                         onClick={() => { setApptForm(apptToForm(a)); setError(null) }}
                       >
                         <span className="project-schedule-appt-kind">
+                          {a.series_id && (
+                            <span title="Teil einer Serie" aria-label="Serientermin">🔁 </span>
+                          )}
                           {a.kind === 'sonstiges' && a.label ? a.label : APPOINTMENT_KIND_LABELS[a.kind]}
                         </span>
                         <span className="project-schedule-appt-when">{fmtApptRow(a)}</span>
                         <button
                           type="button"
                           className="admin-btn-icon danger"
-                          title="Termin entfernen"
-                          onClick={e => { e.stopPropagation(); void handleDeleteAppt(a) }}
+                          title={a.series_id ? 'Termin oder Serie entfernen' : 'Termin entfernen'}
+                          onClick={e => { e.stopPropagation(); requestDeleteAppt(a) }}
                         >
                           ✕
                         </button>
@@ -1019,6 +1138,59 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                       </label>
                     </div>
 
+                    {/* Wiederholung: nur beim ANLEGEN. Ein bestehender Serientermin
+                        ist eine echte Zeile — sein Muster nachträglich zu ändern
+                        hiesse, die ganze Serie neu zu bauen. Dafür: löschen und
+                        neu anlegen. */}
+                    {!apptForm.id && (
+                      <div className="project-schedule-row">
+                        <label className="project-schedule-field">
+                          <span>Wiederholung</span>
+                          <select
+                            className="admin-input"
+                            value={apptForm.repeat}
+                            onChange={e => setApptForm(a => a && ({ ...a, repeat: e.target.value as RepeatPreset }))}
+                          >
+                            <option value="">Einmalig</option>
+                            {(Object.keys(REPEAT_LABELS) as Exclude<RepeatPreset, ''>[]).map(k => (
+                              <option key={k} value={k}>{REPEAT_LABELS[k]}</option>
+                            ))}
+                          </select>
+                        </label>
+                        {apptForm.repeat && (
+                          <label className="project-schedule-field">
+                            <span>Serie bis<span className="project-schedule-req"> *</span></span>
+                            <input
+                              type="date"
+                              className="admin-input"
+                              value={apptForm.repeatUntil}
+                              min={apptForm.startDate || undefined}
+                              onChange={e => setApptForm(a => a && ({ ...a, repeatUntil: e.target.value }))}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bestehender Serientermin: Umfang der Änderung wählen. Die
+                        Daten bleiben immer am einzelnen Termin (siehe api/admin.ts). */}
+                    {apptForm.id && apptForm.seriesId && (
+                      <div className="project-schedule-field">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={apptForm.applyToSeries}
+                            onChange={e => setApptForm(a => a && ({ ...a, applyToSeries: e.target.checked }))}
+                          />
+                          🔁 Änderung auf die ganze Serie anwenden
+                        </label>
+                        <div className="project-schedule-lead-hint">
+                          Betrifft Uhrzeit, Termin-Typ, Bezeichnung und Team. Datum und
+                          Enddatum bleiben immer nur an diesem Termin.
+                        </div>
+                      </div>
+                    )}
+
                     {showApptExtras && (
                       <div className="project-schedule-field">
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
@@ -1091,6 +1263,48 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         </aside>
         )}
       </div>
+
+      {/* Drei Möglichkeiten (dieser / Serie / abbrechen) — ConfirmDialog kennt nur
+          zwei, deshalb hier direkt mit dessen Klassen aufgebaut statt die
+          gemeinsame Komponente für einen Einzelfall aufzubohren. */}
+      {seriesDeletePrompt && (
+        <div
+          className="admin-confirm-overlay"
+          onClick={() => { if (!saving) setSeriesDeletePrompt(null) }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Serientermin entfernen"
+        >
+          <div className="admin-confirm-box" onClick={e => e.stopPropagation()}>
+            <div className="admin-confirm-title">Serientermin entfernen</div>
+            <div className="admin-confirm-text">
+              <strong>{fmtApptRow(seriesDeletePrompt)}</strong> gehört zu einer Serie.
+              Soll nur dieser Termin entfernt werden oder die ganze Serie?
+            </div>
+            <div className="admin-confirm-warning">
+              «Ganze Serie» entfernt auch die bereits vergangenen Termine der Serie
+              und lässt sich nicht rückgängig machen.
+            </div>
+            <div className="admin-confirm-actions">
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => setSeriesDeletePrompt(null)}
+                disabled={saving}
+              >Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => void handleDeleteAppt(seriesDeletePrompt, 'single')}
+                disabled={saving}
+              >Nur dieser Termin</button>
+              <button
+                className="admin-btn admin-btn-danger"
+                onClick={() => void handleDeleteAppt(seriesDeletePrompt, 'series')}
+                disabled={saving}
+              >Ganze Serie</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="admin-toast-container">
