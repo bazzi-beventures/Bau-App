@@ -60,11 +60,27 @@ export function DescPriceFieldset<T extends DescPriceRow>({
 interface DiscountsFieldsetProps {
   laborDiscount: string
   materialDiscount: string
+  fixedPrice: string
   onLaborChange: (v: string) => void
   onMaterialChange: (v: string) => void
+  onFixedPriceChange: (v: string) => void
 }
 
-export function DiscountsFieldset({ laborDiscount, materialDiscount, onLaborChange, onMaterialChange }: DiscountsFieldsetProps) {
+/** Ist ein brauchbarer Fixpreis eingetippt? Bestimmt, ob das Material-%-Feld gesperrt
+ *  wird — bewusst dieselbe Regel wie im Backend (`_normalize_fixed_price`): alles,
+ *  was nicht als Zahl > 0 lesbar ist, heisst "kein Fixpreis". Sonst sperrte ein
+ *  halb getippter Wert das Prozentfeld, ohne dass der Fixpreis je wirkt. */
+export function hasFixedPrice(raw: string): boolean {
+  return parseFloat(raw.replace(',', '.')) > 0
+}
+
+export function DiscountsFieldset({
+  laborDiscount, materialDiscount, fixedPrice,
+  onLaborChange, onMaterialChange, onFixedPriceChange,
+}: DiscountsFieldsetProps) {
+  // Fixpreis ersetzt den Material-Rabattsatz (das Backend ignoriert ihn dann) —
+  // das Feld wird gesperrt statt still übergangen zu werden.
+  const fixed = hasFixedPrice(fixedPrice)
   return (
     <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
       <legend style={{ fontWeight: 600, padding: '0 8px' }}>Rabatte</legend>
@@ -75,9 +91,20 @@ export function DiscountsFieldset({ laborDiscount, materialDiscount, onLaborChan
         </div>
         <div style={{ flex: 1 }}>
           <label className="admin-form-label" title="Gilt auf Materialpositionen sowie auf Weitere Produkte / Freie Positionen (inkl. per PDF eingelesene Materialien)">Rabatt auf Material &amp; Produkte (%)</label>
-          <input className="admin-form-input" placeholder="0" value={materialDiscount} onChange={e => onMaterialChange(e.target.value)} />
+          <input className="admin-form-input" placeholder="0" value={materialDiscount} disabled={fixed}
+            title={fixed ? 'Deaktiviert, solange ein Fixpreis gesetzt ist' : undefined}
+            onChange={e => onMaterialChange(e.target.value)} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="admin-form-label" title="Endbetrag inkl. MwSt, den der Kunde zahlen soll. Die Differenz zur Kalkulation wird als Rabatt auf Material & Produkte abgezogen.">Fixpreis (CHF, inkl. MwSt)</label>
+          <input className="admin-form-input" placeholder="z.B. 5500" value={fixedPrice} onChange={e => onFixedPriceChange(e.target.value)} />
         </div>
       </div>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted, #888)', margin: '8px 8px 0' }}>
+        {fixed
+          ? 'Der Fixpreis ist das gedruckte Total. Die Differenz zur Kalkulation erscheint als Rabatt auf Material & Produkte; der Material-Rabatt in Prozent ist deshalb deaktiviert. Liegt der Fixpreis über der Kalkulation oder unter Lohn + Fahrt, wird er nicht erreicht — das Total auf der Offerte zeigt dann den tatsächlichen Betrag.'
+          : 'Fixpreis leer lassen, um mit Rabatt-Prozenten zu rechnen.'}
+      </p>
     </fieldset>
   )
 }

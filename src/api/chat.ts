@@ -13,6 +13,9 @@ export interface SummaryItem {
   amount: number
   unit?: string
   art_nr?: string
+  // Einbauort im Gebäude (material_usage.location). Nur bei Mandanten mit
+  // Feature-Flag `material_standort` und nur, wenn der Monteur ihn genannt hat.
+  location?: string
 }
 
 /**
@@ -116,7 +119,7 @@ export async function getCorrectionStatus(correctionId: string): Promise<{ statu
 export interface ConfirmExtras {
   // Vor dem Speichern im Chat gesammelte Zusatz-Positionen.
   kleinmaterial?: { amount_chf: number | null; count: number; scope: string } | null
-  ersatzteile?: { art_nr: string; amount: number }[]
+  ersatzteile?: { art_nr: string; amount: number; location?: string }[]
   // Angekreuzte Leistungsart (reports.art_der_arbeit). undefined = nichts gesagt,
   // dann bleibt die Vorbelegung aus dem Projekt stehen; [] heisst "keine".
   art_der_arbeit?: string[]

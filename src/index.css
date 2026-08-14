@@ -850,6 +850,20 @@ input, textarea { font-family: var(--font); color: var(--text); }
 .ersatzteil-unit { font-size: 12px; color: var(--muted); }
 .ersatzteil-foto-btn { align-self: stretch; }
 
+/* Einbauort je gewählter Zeile (Feature `material_standort`). Das Feld bekommt
+   eine eigene Zeile unter Auswahl + Stepper — deshalb wrapt .ersatzteil-row.
+   Auf dem Handy tippt der Monteur hier «Wohnzimmer Süd»; freiwillig, leer bleibt leer. */
+.ersatzteil-row { flex-wrap: wrap; }
+.ersatzteil-location {
+  flex: 1 1 100%; min-width: 0;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: transparent;
+  color: inherit; font-size: 14px;
+}
+.ersatzteil-location::placeholder { color: var(--muted); }
+/* Erfasster Ort in der Rapport-Übersicht — Zusatz zur Bezeichnung, nicht gleichrangig. */
+.ersatzteil-location-tag { color: var(--muted); font-size: 12px; margin-left: 6px; }
+
 /* Foto-Material-Picker (Popup, Rapport-Abschluss) — durch alle Artikel mit Bild
    scrollen, mehrfach mit Menge wählen. Über Portal an document.body gerendert. */
 .photo-picker-overlay {

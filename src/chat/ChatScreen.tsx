@@ -313,7 +313,12 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     try {
       const res = await confirmReport({
         kleinmaterial: collectedKlein,
-        ersatzteile: collectedErsatz.map(it => ({ art_nr: it.art_nr, amount: it.amount })),
+        ersatzteile: collectedErsatz.map(it => ({
+          art_nr: it.art_nr, amount: it.amount,
+          // Einbauort nur mitschicken, wenn erfasst — das Backend behandelt
+          // undefined und '' gleich, undefined ist die ehrlichere Aussage.
+          ...(it.location ? { location: it.location } : {}),
+        })),
         art_der_arbeit: collectedWorkTypes,
       })
       addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
@@ -494,6 +499,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
         {/* Vor dem Speichern: Ersatzteil-Schritt (nach Kleinmaterial, Feature aktiv) */}
         {ersatzStepPending && !loading && (
           <ErsatzteilPrompt
+            showLocation={isFeatureEnabled(user, 'material_standort')}
             onSubmit={(items) => { setCollectedErsatz(items); setErsatzCollected(true) }}
           />
         )}
@@ -534,6 +540,8 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                     <div key={`main-${i}`} className="ersatzteil-row">
                       <span className="ersatzteil-name">
                         {it.art_nr ? <span className="ersatzteil-artnr">{it.art_nr}</span> : null} {it.name}
+                        {/* Einbauort nur zeigen, wenn erfasst — er ist freiwillig. */}
+                        {it.location ? <span className="ersatzteil-location-tag">{it.location}</span> : null}
                       </span>
                       <span>{it.amount} {it.unit ?? ''}</span>
                     </div>
@@ -548,6 +556,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                     <div key={it.art_nr} className="ersatzteil-row">
                       <span className="ersatzteil-name">
                         <span className="ersatzteil-artnr">{it.art_nr}</span> {it.name}
+                        {it.location ? <span className="ersatzteil-location-tag">{it.location}</span> : null}
                       </span>
                       <span>{it.amount} {it.unit}</span>
                     </div>

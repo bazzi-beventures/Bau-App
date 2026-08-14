@@ -122,6 +122,8 @@ export interface QuoteDetail {
   material_discount_pct: number
   skonto_pct: number | null
   skonto_days: number | null
+  // Fixpreis brutto inkl. MwSt (Migration 20260813). null = kein Fixpreis.
+  fixed_price: number | null
   notes: string | null
   product_description: string | null
 }
@@ -219,6 +221,7 @@ interface QuoteDraft {
   specialRows: SpecialRow[]
   laborDiscount: string
   materialDiscount: string
+  fixedPrice: string
   skontoPct: string
   skontoDays: string
   notes: string
@@ -240,6 +243,7 @@ function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
     !!d.productDescription.trim() ||
     !!d.laborDiscount.trim() ||
     !!d.materialDiscount.trim() ||
+    !!d.fixedPrice?.trim() ||
     !!d.skontoPct?.trim() ||
     !!d.skontoDays?.trim() ||
     (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
@@ -248,7 +252,7 @@ function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
 
 // ─── Create Form ────────────────────────────────────────────
 
-export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId, autoRestoreDraft }: { onDone: () => void; onCancel: () => void; lockedProjectName?: string; lockedProjectId?: string; autoRestoreDraft?: boolean }) {
+export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId, autoRestoreDraft }: { onDone: (warning?: string) => void; onCancel: () => void; lockedProjectName?: string; lockedProjectId?: string; autoRestoreDraft?: boolean }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
@@ -280,6 +284,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   const [specialRows, setSpecialRows] = useState<SpecialRow[]>([])
   const [laborDiscount, setLaborDiscount] = useState('')
   const [materialDiscount, setMaterialDiscount] = useState('')
+  // Fixpreis (brutto inkl. MwSt): der Endbetrag, den der Kunde zahlen soll. Gesetzt
+  // ersetzt er den Material-Rabattsatz — das Backend leitet den Rabatt daraus ab.
+  const [fixedPrice, setFixedPrice] = useState('')
   // Skonto = Abzug bei früher Zahlung; nur Hinweistext auf der Offerte (Total bleibt gleich).
   const [skontoPct, setSkontoPct] = useState('')
   const [skontoDays, setSkontoDays] = useState('')
@@ -367,7 +374,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     return {
       projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, skontoPct, skontoDays, notes, productDescription, useStandardNotes,
+      materialDiscount, fixedPrice, skontoPct, skontoDays, notes, productDescription,
+      useStandardNotes,
     }
   }
 
@@ -388,6 +396,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     setSpecialRows(d.specialRows ?? [])
     setLaborDiscount(d.laborDiscount ?? '')
     setMaterialDiscount(d.materialDiscount ?? '')
+    setFixedPrice(d.fixedPrice ?? '')
     setSkontoPct(d.skontoPct ?? '')
     setSkontoDays(d.skontoDays ?? '')
     if (d.notes != null) setNotes(d.notes)
@@ -424,7 +433,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey, projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, skontoPct, skontoDays, notes, productDescription, useStandardNotes, stdNotes])
+      materialDiscount, fixedPrice, skontoPct, skontoDays, notes, productDescription,
+      useStandardNotes, stdNotes])
 
   // Esc schliesst das Fenster — ist das PDF-Review-Modal offen, zuerst dieses.
   useEffect(() => {
@@ -663,13 +673,19 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
+        // Leeres Feld => null, damit ein bestehender Fixpreis beim Bearbeiten auch
+        // wieder entfernt werden kann (0 wäre für das Backend dasselbe, null ist
+        // die ehrlichere Aussage "keiner").
+        fixed_price: fixedPrice.trim() ? parseNum(fixedPrice) : null,
         skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
         skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
         product_description: productDescription.trim() || null,
         quote_type: quoteType,
       }
-      await apiFetch('/pwa/admin/quotes', { method: 'POST', body: JSON.stringify(payload) })
+      const created = await apiFetch('/pwa/admin/quotes', {
+        method: 'POST', body: JSON.stringify(payload),
+      }) as { total_amount?: number; fixed_price_missed?: boolean }
       // Quelle-PDF(s) der OCR-Extraktion ins Projekt ablegen (Lieferantendokumente >
       // Bestellungen). Erst NACH erfolgreichem Speichern und best-effort — eine
       // fehlgeschlagene Ablage darf die bereits gespeicherte Offerte nicht kippen.
@@ -678,7 +694,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         setSupplierDocsToFile([])
       }
       try { localStorage.removeItem(draftKey) } catch { /* egal */ }
-      onDone()
+      // Fixpreis nicht aufgegangen (über der Kalkulation oder unter Lohn + Fahrt):
+      // die Offerte IST gespeichert, aber ihr Total ist nicht der eingegebene
+      // Betrag — das muss der Anwender sehen, bevor sie zum Kunden geht.
+      onDone(created.fixed_price_missed ? `Gespeichert — aber der Fixpreis geht nicht auf: Total der Offerte ist CHF ${fmtCHF(created.total_amount ?? 0)}, nicht der eingegebene Fixpreis. Bitte prüfen.` : undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Erstellen')
     } finally {
@@ -1020,8 +1039,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       <DiscountsFieldset
         laborDiscount={laborDiscount}
         materialDiscount={materialDiscount}
+        fixedPrice={fixedPrice}
         onLaborChange={setLaborDiscount}
         onMaterialChange={setMaterialDiscount}
+        onFixedPriceChange={setFixedPrice}
       />
 
       <SkontoFieldset
@@ -1085,7 +1106,7 @@ type EditExtraRow = EditFreeRow & {
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
 
-export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: () => void; onCancel: () => void }) {
+export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: (warning?: string) => void; onCancel: () => void }) {
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [laborRows, setLaborRows] = useState<EditLaborRow[]>(() =>
     quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price), hidden: !!i.hidden }))
@@ -1140,6 +1161,8 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
   )
   const [laborDiscount, setLaborDiscount] = useState(String(quote.labor_discount_pct || ''))
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
+  // Fixpreis (brutto inkl. MwSt). Leer = keiner; gesetzt ersetzt er den Material-Rabattsatz.
+  const [fixedPrice, setFixedPrice] = useState(quote.fixed_price != null ? String(quote.fixed_price) : '')
   const [skontoPct, setSkontoPct] = useState(quote.skonto_pct != null ? String(quote.skonto_pct) : '')
   const [skontoDays, setSkontoDays] = useState(quote.skonto_days != null ? String(quote.skonto_days) : '')
   const [notes, setNotes] = useState(quote.notes || '')
@@ -1299,6 +1322,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         special_items: specialRows.filter(specialRowValid).map(buildSpecialItem),
         labor_discount_pct: parseNum(laborDiscount),
         material_discount_pct: parseNum(materialDiscount),
+        // Leeres Feld => null, damit ein bestehender Fixpreis beim Bearbeiten auch
+        // wieder entfernt werden kann (0 wäre für das Backend dasselbe, null ist
+        // die ehrlichere Aussage "keiner").
+        fixed_price: fixedPrice.trim() ? parseNum(fixedPrice) : null,
         skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
         skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
@@ -1307,7 +1334,9 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
         // fasst Kunde und PDF nur bei echter Änderung an. '' = Zuordnung aufheben.
         customer_id: customerId,
       }
-      await apiFetch(`/pwa/admin/quotes/${quote.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      const updated = await apiFetch(`/pwa/admin/quotes/${quote.id}`, {
+        method: 'PATCH', body: JSON.stringify(payload),
+      }) as { total_amount?: number; fixed_price_missed?: boolean }
       // Per OCR eingelesene Lieferanten-PDFs als Projekt-Datei ablegen (Kategorie
       // 'bestellungen'). Best-effort — die Offerte ist zu diesem Zeitpunkt gespeichert.
       if (quote.project_id && supplierDocsToFile.length > 0) {
@@ -1322,7 +1351,7 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
           }
         }
       }
-      onDone()
+      onDone(updated.fixed_price_missed ? `Gespeichert — aber der Fixpreis geht nicht auf: Total der Offerte ist CHF ${fmtCHF(updated.total_amount ?? 0)}, nicht der eingegebene Fixpreis. Bitte prüfen.` : undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
     } finally {
@@ -1589,8 +1618,10 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
       <DiscountsFieldset
         laborDiscount={laborDiscount}
         materialDiscount={materialDiscount}
+        fixedPrice={fixedPrice}
         onLaborChange={setLaborDiscount}
         onMaterialChange={setMaterialDiscount}
+        onFixedPriceChange={setFixedPrice}
       />
 
       <SkontoFieldset
@@ -1765,7 +1796,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     return (
       <div className="admin-page">
         <QuoteCreateForm
-          onDone={() => { setShowCreate(false); load(); showToast('Offerte erstellt', 'success') }}
+          onDone={warning => { setShowCreate(false); load(); showToast(warning ?? 'Offerte erstellt', warning ? 'error' : 'success') }}
           onCancel={() => setShowCreate(false)}
         />
       </div>
@@ -1777,7 +1808,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
       <div className="admin-page">
         <QuoteEditForm
           quote={editQuote}
-          onDone={() => { setEditQuote(null); load(); showToast('Offerte gespeichert', 'success') }}
+          onDone={warning => { setEditQuote(null); load(); showToast(warning ?? 'Offerte gespeichert', warning ? 'error' : 'success') }}
           onCancel={() => setEditQuote(null)}
         />
       </div>

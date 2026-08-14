@@ -1739,7 +1739,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
               lockedProjectName={project.name}
               lockedProjectId={project.id}
               autoRestoreDraft={resumeQuoteDraft}
-              onDone={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes() }}
+              onDone={warning => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes(); if (warning) showToast(warning) }}
               onCancel={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)) }}
             />
           </div>
@@ -1785,7 +1785,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteEditForm
               quote={editQuote}
-              onDone={() => { setEditQuote(null); reloadQuotes() }}
+              onDone={warning => { setEditQuote(null); reloadQuotes(); if (warning) showToast(warning) }}
               onCancel={() => setEditQuote(null)}
             />
           </div>
