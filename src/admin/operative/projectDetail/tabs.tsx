@@ -1053,7 +1053,10 @@ interface InvoicesTabProps {
   // Erzeugt die Rechnung; `remark` ist die Bemerkung fuers PDF (leer = kein Block).
   // Liefert true bei Erfolg — der Dialog schliesst nur dann.
   onGenerateInvoice: (remark: string) => Promise<boolean>
-  onMarkPaid: (invoiceId: number) => void
+  // Bezahlt-Markierung; `paidDate` ist der Tag des Zahlungseingangs (ISO),
+  // nachtragbar statt automatisch «heute». Liefert true bei Erfolg — der Dialog
+  // schliesst nur dann.
+  onMarkPaid: (invoiceId: number, paidDate: string) => Promise<boolean>
   onUnmarkPaid: (invoiceId: number) => Promise<void>
   onArchive: (invoiceId: number) => Promise<void>
   onSendInvoice: (invoiceId: number, recipientEmail: string) => Promise<boolean>
@@ -1068,6 +1071,8 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
   const [sending, setSending] = useState(false)
   const [confirmPostal, setConfirmPostal] = useState<ProjectInvoice | null>(null)
   const [postalDate, setPostalDate] = useState('')
+  const [confirmPaid, setConfirmPaid] = useState<ProjectInvoice | null>(null)
+  const [paidDate, setPaidDate] = useState('')
   // Generieren-Dialog: traegt das Bemerkungs-Feld und (ohne unterschriebenen
   // Rapport) den frueheren Bestaetigungs-Hinweis — ein Dialog statt zwei.
   const [showGenerate, setShowGenerate] = useState(false)
@@ -1103,6 +1108,21 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
   function openPostal(inv: ProjectInvoice) {
     setPostalDate(todayISO())
     setConfirmPostal(inv)
+  }
+
+  function openPaid(inv: ProjectInvoice) {
+    setPaidDate(todayISO())
+    setConfirmPaid(inv)
+  }
+
+  async function handlePaidConfirm() {
+    if (!confirmPaid || !paidDate) return
+    setActing(true)
+    const ok = await onMarkPaid(confirmPaid.id, paidDate)
+    setActing(false)
+    // Nur bei Erfolg schliessen — sonst wäre die Fehlermeldung des Backends
+    // (400 «Datum vor Rechnungsdatum») weg, bevor sie jemand liest.
+    if (ok) setConfirmPaid(null)
   }
 
   async function handlePostalConfirm() {
@@ -1198,7 +1218,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
                             Per Post versendet
                           </button>
                         )}
-                        <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => onMarkPaid(inv.id)}>Bezahlt</button>
+                        <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => openPaid(inv)}>Bezahlt</button>
                       </>
                     )}
                     {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
@@ -1332,6 +1352,42 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
       )}
 
       {/* Dialog: Postversand — Wortlaut wie in der Rechnungsübersicht */}
+      {/* Dialog: Rechnung bezahlt (mit nachtragbarem Zahlungsdatum) */}
+      {confirmPaid && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+            <div className="admin-confirm-title">Rechnung als bezahlt markieren?</div>
+            <div className="admin-confirm-text">
+              {confirmPaid.invoice_number} · {fmtCHF(confirmPaid.total_amount)}
+            </div>
+            <div style={{ margin: '12px 0' }}>
+              <label className="admin-form-label" htmlFor="proj-invoice-paid-date">Zahlungsdatum</label>
+              <input
+                id="proj-invoice-paid-date"
+                className="admin-form-input"
+                type="date"
+                value={paidDate}
+                max={todayISO()}
+                onChange={e => setPaidDate(e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                Tag des Zahlungseingangs — nachtragbar, vorbelegt mit heute.
+              </div>
+            </div>
+            <div className="admin-confirm-actions">
+              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPaid(null)} disabled={acting}>Abbrechen</button>
+              <button
+                className="admin-btn admin-btn-success"
+                onClick={() => void handlePaidConfirm()}
+                disabled={acting || !paidDate}
+              >
+                {acting ? 'Wird markiert…' : 'Ja, bezahlt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmPostal && (
         <div className="admin-confirm-overlay">
           <div className="admin-confirm-box" style={{ maxWidth: 440 }}>

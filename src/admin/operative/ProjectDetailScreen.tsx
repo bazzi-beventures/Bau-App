@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
-import { getFeature, isFeatureEnabled } from '../../api/modules'
-import { setProjectBeschaffung } from '../../api/admin'
+import { getFeature, hasModule, isFeatureEnabled } from '../../api/modules'
+import {
+  createAppointment, deleteAppointment, getProjectAppointments, setProjectBeschaffung, updateAppointment,
+} from '../../api/admin'
+import {
+  AppointmentDraft, apptToDraft, diffAppointments, draftPayload, normalizeDrafts, validateDrafts,
+} from './projectAppointments'
+import AppointmentsCard from './projectDetail/AppointmentsCard'
 import { BeschaffungStep, beschaffungStep, daysSince, enabledBeschaffungSteps } from '../constants/beschaffungSteps'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
 import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
@@ -64,10 +70,15 @@ export interface ProjectFormValues {
   geruestfach: string
   projektleiterId: string
   monteurIds: string[]
-  startDate: string
-  endDate: string
-  startTime: string
-  endTime: string
+  /**
+   * Termine des Projekts (project_appointments) als Entwürfe — mehrere je
+   * Projekt, jeder mit eigenem Typ und optionalem eigenem Team. Sie liegen NICHT
+   * auf der projects-Zeile: `initialProjectForm` startet deshalb leer, die
+   * geladenen Termine ziehen den Ausgangsstand nach (siehe useEffect unten).
+   * Die Legacy-Spalten start_date/end_date/start_time/end_time spiegelt der
+   * Server aus dem Ersttermin — die Maske schreibt sie nicht mehr selbst.
+   */
+  appointments: AppointmentDraft[]
   kontakte: Kontakt[]
   eigentuemer: Eigentuemer
   disposal: DisposalDetails
@@ -90,10 +101,7 @@ export function initialProjectForm(project: Project | null): ProjectFormValues {
     geruestfach: project?.geruestfach?.toString() ?? '',
     projektleiterId: project?.projektleiter_id ?? '',
     monteurIds: project?.monteur_ids ?? [],
-    startDate: project?.start_date?.slice(0, 10) ?? '',
-    endDate: project?.end_date?.slice(0, 10) ?? '',
-    startTime: project?.start_time?.slice(0, 5) ?? '',
-    endTime: project?.end_time?.slice(0, 5) ?? '',
+    appointments: [],
     kontakte: project?.kontakte ?? [],
     eigentuemer: project?.eigentuemer ?? EMPTY_EIGENTUEMER,
     disposal: project?.disposal_details ?? EMPTY_DISPOSAL,
@@ -107,11 +115,12 @@ export function initialProjectForm(project: Project | null): ProjectFormValues {
 // Mehrfachauswahlen und aufgefüllte Optionalfelder. Ohne das gälte die Maske
 // schon als geändert, wenn ein Monteur ab- und wieder angewählt wird oder eine
 // vom Server ohne `is_site_contact` gelieferte Zeile einmal angefasst wurde.
-function normalizeForm(v: ProjectFormValues): ProjectFormValues {
+function normalizeForm(v: ProjectFormValues) {
   return {
     ...v,
     artDerArbeit: [...v.artDerArbeit].sort(),
     monteurIds: [...v.monteurIds].sort(),
+    appointments: normalizeDrafts(v.appointments),
     kontakte: v.kontakte.map(k => ({
       name: k.name ?? '',
       kommentar: k.kommentar ?? '',
@@ -198,11 +207,15 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [showGeruestfach, setShowGeruestfach] = useState(false)
   const [projektleiterId, setProjektleiterId] = useState(baseline.projektleiterId)
   const [monteurIds, setMonteurIds] = useState<string[]>(baseline.monteurIds)
-  // Einsatzplanung (Termin) – dieselben Felder wie im Kalender (ProjectScheduleScreen)
-  const [startDate, setStartDate] = useState(baseline.startDate)
-  const [endDate, setEndDate] = useState(baseline.endDate)
-  const [startTime, setStartTime] = useState(baseline.startTime)
-  const [endTime, setEndTime] = useState(baseline.endTime)
+  // Termine des Projekts (project_appointments) — mehrere je Projekt, gespeichert
+  // erst beim Absenden der Maske (Diff gegen baseline.appointments in persist()).
+  const [appointments, setAppointments] = useState<AppointmentDraft[]>(baseline.appointments)
+  // Wurde die Terminliste im Formular angefasst? Dann darf das (asynchrone)
+  // Nachladen vom Server die Eingaben nicht mehr überschreiben.
+  const appointmentsTouched = useRef(false)
+  // Termine gehören zum Modul «scheduling» (Endpunkte sind darauf gegated).
+  // Ohne das Modul zeigt die Maske die Kachel nicht — geplant wird dann nirgends.
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false)
   const [kontakte, setKontakte] = useState<Kontakt[]>(baseline.kontakte)
   // Eigentümer des Objekts — eigene Rolle, kein Kontakt. Kann pro Projekt ein Dritter sein.
   const [eigentuemer, setEigentuemer] = useState<Eigentuemer>(baseline.eigentuemer)
@@ -227,6 +240,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [settingStatus, setSettingStatus] = useState(false)
   const [error, setError] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
+  // Dieselbe Aktion wie confirmClose, aber ausgelöst durch eine bezahlte Rechnung —
+  // eigener State, damit der Dialog den Anlass benennt.
+  const [confirmCloseAfterPaid, setConfirmCloseAfterPaid] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [confirmReactivate, setConfirmReactivate] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -335,10 +351,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     geruestfach,
     projektleiterId,
     monteurIds,
-    startDate,
-    endDate,
-    startTime,
-    endTime,
+    appointments,
     kontakte,
     eigentuemer,
     disposal,
@@ -374,6 +387,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }).catch(() => {})
     getMe().then(me => {
       setCurrentUserId(me.authorized_user_id)
+      setSchedulingEnabled(hasModule(me, 'scheduling'))
       setShowGeruestfach(isFeatureEnabled(me, 'geruestfach'))
       setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
       setAbsageEnabled(isFeatureEnabled(me, 'offerte_absage_mail'))
@@ -384,6 +398,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )
     }).catch(() => {})
   }, [])
+
+  // Termine nachladen und zum Ausgangsstand machen — sonst gälte die Maske
+  // sofort als geändert. Fehler bleiben still: ohne Modul «scheduling»
+  // antwortet der Endpunkt 403, die Kachel wird dann ohnehin nicht gezeigt.
+  useEffect(() => {
+    if (!project) return
+    getProjectAppointments(project.id).then(rows => {
+      if (appointmentsTouched.current) return
+      const drafts = rows.map(apptToDraft)
+      setAppointments(drafts)
+      setBaseline(b => ({ ...b, appointments: drafts }))
+    }).catch(() => {})
+  }, [project?.id])
 
   useEffect(() => {
     if (!project) return
@@ -666,12 +693,22 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     }
   }
 
-  async function handleMarkInvoicePaid(invoiceId: number) {
+  // `paidDate` = Tag des Zahlungseingangs (ISO), nachtragbar statt automatisch
+  // «heute». Danach die Anschlussfrage «Projekt abschliessen?» — die bezahlte
+  // Rechnung ist meist der letzte Schritt eines Auftrags.
+  async function handleMarkInvoicePaid(invoiceId: number, paidDate: string): Promise<boolean> {
     try {
-      await apiFetch(`/pwa/admin/invoices/${invoiceId}/mark-paid`, { method: 'POST' })
+      await apiFetch(`/pwa/admin/invoices/${invoiceId}/mark-paid`, {
+        method: 'POST',
+        body: JSON.stringify({ paid_at: paidDate }),
+      })
       await reloadInvoices()
+      // Frage statt Automatik: eine Teilrechnung schliesst das Projekt nicht.
+      if (!isClosed && !isArchived) setConfirmCloseAfterPaid(true)
+      return true
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler')
+      return false
     }
   }
 
@@ -791,6 +828,24 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     setMonteurIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  function handleAppointmentsChange(next: AppointmentDraft[]) {
+    appointmentsTouched.current = true
+    setAppointments(next)
+  }
+
+  /**
+   * Schreibt die Terminliste: erst löschen, dann ändern, dann anlegen. Sequenziell,
+   * weil jede Mutation serverseitig den Ersttermin-Spiegel auf projects nachzieht.
+   * Wirft bei jedem fehlgeschlagenen Schritt — der Aufrufer lädt danach den
+   * echten Serverstand nach, statt auf dem halben Formularstand weiterzurechnen.
+   */
+  async function syncAppointments(projectId: string, saved: AppointmentDraft[], current: AppointmentDraft[]) {
+    const diff = diffAppointments(saved, current)
+    for (const id of diff.removeIds) await deleteAppointment(id)
+    for (const d of diff.update) await updateAppointment(d.id!, draftPayload(d))
+    for (const d of diff.create) await createAppointment(projectId, draftPayload(d))
+  }
+
   /**
    * Speichert die Maske und liefert bei einem NEU angelegten Projekt die frisch
    * erzeugte Zeile zurück (sonst null). `false` = fehlgeschlagen; der Aufrufer
@@ -805,10 +860,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     const fail = (message: string) => { setError(message); setActiveTab('details'); return false as const }
 
     if (!name.trim()) return fail('Projektname ist erforderlich.')
-    if (startDate && endDate && endDate < startDate) return fail('Enddatum muss nach Startdatum liegen.')
-    if (startTime && endTime && startDate === endDate && endTime < startTime) {
-      return fail('Endzeit muss nach Startzeit liegen.')
-    }
+    const apptError = validateDrafts(appointments)
+    if (apptError) return fail(apptError)
     setError('')
     setSaving(true)
     try {
@@ -830,10 +883,10 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           geruestfach: geruestfach.trim() ? parseInt(geruestfach, 10) : null,
           projektleiter_id: projektleiterId || null,
           monteur_ids: monteurIds,
-          start_date: startDate || null,
-          end_date: endDate || null,
-          start_time: startTime || null,
-          end_time: endTime || null,
+          // Terminfelder (start_date/end_date/start_time/end_time) sendet die
+          // Maske bewusst NICHT mehr: Termine laufen über die appointment-
+          // Endpunkte, der Server spiegelt daraus den Ersttermin auf projects.
+          // Beides zu schreiben würde den Ersttermin doppelt bewegen.
           kontakte,
           // Immer mitschicken (auch leer), damit ein geleertes Feld auch persistiert
           // wird — das Backend filtert null-Werte weg (kein Clear möglich).
@@ -844,10 +897,50 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           wartung_next_due_at: wartungNextDueAt || null,
         }),
       }) as { project?: Project | null } | null   // POST liefert die neu angelegte Zeile mit
+
+      // Termine (eigene Tabelle, eigene Endpunkte) nachziehen. Erst jetzt, weil
+      // ein neu angelegtes Projekt vorher keine id hat, an der Termine hängen.
+      const created = isNew ? (res?.project ?? null) : null
+      const targetId = created?.id ?? project?.id ?? null
+      let apptSyncError = ''
+      let savedAppointments = appointments
+      if (targetId && schedulingEnabled) {
+        try {
+          await syncAppointments(targetId, baseline.appointments, appointments)
+        } catch (err: unknown) {
+          apptSyncError = err instanceof Error && err.message
+            ? `Projektdaten gespeichert — Termine nicht vollständig: ${err.message}`
+            : 'Projektdaten gespeichert, aber die Termine konnten nicht übernommen werden.'
+        }
+        // Serverstand nachladen: nach einem Teilfehler ist er die einzige
+        // verlässliche Grundlage für den nächsten Diff.
+        const rows = await getProjectAppointments(targetId).catch(() => null)
+        if (rows) {
+          savedAppointments = rows.map(apptToDraft)
+          setAppointments(savedAppointments)
+          appointmentsTouched.current = false
+        }
+      } else if (!targetId && appointments.length > 0) {
+        // Projekt-POST ohne zurückgelieferte Zeile: es gibt keine id, an die sich
+        // die Termine hängen liessen. Lieber melden als still verschlucken.
+        apptSyncError = 'Projekt gespeichert, die Termine konnten aber nicht zugeordnet werden. Bitte im Projekt erneut erfassen.'
+      }
+
       // Ab hier gilt der aktuelle Stand als gespeichert — sonst würde die
       // „ungespeicherte Änderungen"-Abfrage direkt nochmal zuschlagen.
-      setBaseline(currentForm)
-      return isNew ? (res?.project ?? null) : null
+      setBaseline({ ...currentForm, appointments: savedAppointments })
+      if (apptSyncError) {
+        setError(apptSyncError)
+        setActiveTab('details')
+        // Beim BESTEHENDEN Projekt offen bleiben, damit die Meldung sichtbar ist
+        // und der Anwender es erneut versuchen kann. Beim frisch ANGELEGTEN
+        // Projekt trotzdem durchreichen: 'false' liesse die Neu-Maske offen, und
+        // der nächste Speicherversuch legte ein zweites Projekt an. Der Anwender
+        // landet stattdessen im gespeicherten Projekt und sieht dort den echten
+        // (nachgeladenen) Terminstand.
+        if (!created) return false
+      }
+      return created
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
       return false
@@ -1481,7 +1574,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             </div>
           </div>
 
-          {/* ── Einsatzplanung (Zuständigkeiten + Termin) ─────── */}
+          {/* ── Einsatzplanung (Zuständigkeiten) ──────────────── */}
           <div className="admin-table-wrap" style={{ padding: 24 }}>
             <div className="admin-section-title">Einsatzplanung</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1514,37 +1607,23 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 </div>
               </div>
 
-              {/* ── Termin (wie im Einsatz-Kalender) ───────────── */}
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 2 }}>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
-                  Termin festlegen, damit das Projekt im Einsatz-Kalender erscheint. Leer lassen = kein Termin.
+              {schedulingEnabled && (
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  Standard-Team für alle Termine — je Termin lässt sich unten davon abweichen.
                 </div>
-                <div className="admin-form-row">
-                  <div className="admin-form-group" style={{ margin: 0 }}>
-                    <label className="admin-form-label">Start (Datum)</label>
-                    <input className="admin-form-input" type="date" value={startDate} onChange={e => {
-                      const v = e.target.value
-                      setStartDate(v)
-                      // Enddatum vorbelegen bzw. nachziehen: leer oder vor dem Start → gleicher Tag.
-                      setEndDate(prev => (v && (!prev || prev < v)) ? v : prev)
-                    }} />
-                  </div>
-                  <div className="admin-form-group" style={{ margin: 0 }}>
-                    <label className="admin-form-label">Ende (Datum)</label>
-                    <input className="admin-form-input" type="date" value={endDate} min={startDate || undefined} onChange={e => setEndDate(e.target.value)} />
-                  </div>
-                  <div className="admin-form-group" style={{ margin: 0 }}>
-                    <label className="admin-form-label">Startzeit</label>
-                    <input className="admin-form-input" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
-                  </div>
-                  <div className="admin-form-group" style={{ margin: 0 }}>
-                    <label className="admin-form-label">Endzeit</label>
-                    <input className="admin-form-input" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
+
+          {/* ── Termine (mehrere je Projekt, project_appointments) ─── */}
+          {schedulingEnabled && (
+            <AppointmentsCard
+              appointments={appointments}
+              onChange={handleAppointmentsChange}
+              staff={staff}
+              projectTeam={monteurIds}
+            />
+          )}
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button type="button" className="admin-btn admin-btn-secondary" onClick={requestClose}>Abbrechen</button>
@@ -1987,6 +2066,19 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           busy={settingStatus}
           variant="danger"
           onCancel={() => setConfirmClose(false)}
+          onConfirm={handleClose}
+        />
+      )}
+
+      {confirmCloseAfterPaid && (
+        <ConfirmDialog
+          title="Projekt abschliessen?"
+          message={<>Die Rechnung ist bezahlt. «{project?.name}» wird beim Abschliessen für Mitarbeiter ausgeblendet; Rapporte und Dokumente bleiben erhalten.</>}
+          cancelLabel="Offen lassen"
+          confirmLabel="Ja, abschliessen"
+          busyLabel="Schliessen…"
+          busy={settingStatus}
+          onCancel={() => setConfirmCloseAfterPaid(false)}
           onConfirm={handleClose}
         />
       )}

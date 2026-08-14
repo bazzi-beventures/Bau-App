@@ -21,7 +21,11 @@ function makeInvoice(over: Partial<ProjectInvoice> = {}): ProjectInvoice {
   }
 }
 
-function renderTab(invoices: ProjectInvoice[], onMarkSentByPost = vi.fn().mockResolvedValue(true)) {
+function renderTab(
+  invoices: ProjectInvoice[],
+  onMarkSentByPost = vi.fn().mockResolvedValue(true),
+  onMarkPaid = vi.fn().mockResolvedValue(true),
+) {
   render(
     <InvoicesTab
       invoices={invoices}
@@ -31,7 +35,7 @@ function renderTab(invoices: ProjectInvoice[], onMarkSentByPost = vi.fn().mockRe
       hasSignedReport={true}
       onUseAcceptedQuoteChange={vi.fn()}
       onGenerateInvoice={vi.fn().mockResolvedValue(true)}
-      onMarkPaid={vi.fn()}
+      onMarkPaid={onMarkPaid}
       onUnmarkPaid={vi.fn().mockResolvedValue(undefined)}
       onArchive={vi.fn().mockResolvedValue(undefined)}
       onSendInvoice={vi.fn().mockResolvedValue(true)}
@@ -105,5 +109,52 @@ describe('InvoicesTab — Postversand', () => {
       makeInvoice({ id: 1, version: 1, parent_id: 1 }),
     ])
     expect(screen.getAllByRole('button', { name: 'Per Post versendet' })).toHaveLength(1)
+  })
+})
+
+describe('InvoicesTab — bezahlt markieren', () => {
+  it('fragt vor dem Markieren nach und schlägt heute als Zahlungsdatum vor', async () => {
+    const onMarkPaid = vi.fn().mockResolvedValue(true)
+    renderTab([makeInvoice({ id: 42 })], undefined, onMarkPaid)
+    await userEvent.click(screen.getByRole('button', { name: 'Bezahlt' }))
+
+    // Vorher wurde ohne Rückfrage sofort mit dem Klick-Zeitpunkt gebucht.
+    expect(onMarkPaid).not.toHaveBeenCalled()
+    expect(screen.getByText('Rechnung als bezahlt markieren?')).toBeInTheDocument()
+    expect((screen.getByLabelText('Zahlungsdatum') as HTMLInputElement).value).toBe(todayISO())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ja, bezahlt' }))
+    expect(onMarkPaid).toHaveBeenCalledWith(42, todayISO())
+  })
+
+  it('reicht ein nachgetragenes Zahlungsdatum durch', async () => {
+    const onMarkPaid = vi.fn().mockResolvedValue(true)
+    renderTab([makeInvoice({ id: 7 })], undefined, onMarkPaid)
+    await userEvent.click(screen.getByRole('button', { name: 'Bezahlt' }))
+
+    const dateInput = screen.getByLabelText('Zahlungsdatum')
+    await userEvent.clear(dateInput)
+    await userEvent.type(dateInput, '2026-08-11')
+    await userEvent.click(screen.getByRole('button', { name: 'Ja, bezahlt' }))
+
+    expect(onMarkPaid).toHaveBeenCalledWith(7, '2026-08-11')
+  })
+
+  it('lässt den Dialog offen, wenn das Backend das Datum ablehnt', async () => {
+    renderTab([makeInvoice()], undefined, vi.fn().mockResolvedValue(false))
+    await userEvent.click(screen.getByRole('button', { name: 'Bezahlt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ja, bezahlt' }))
+
+    expect(screen.getByText('Rechnung als bezahlt markieren?')).toBeInTheDocument()
+  })
+
+  it('bricht ohne Markierung ab', async () => {
+    const onMarkPaid = vi.fn().mockResolvedValue(true)
+    renderTab([makeInvoice()], undefined, onMarkPaid)
+    await userEvent.click(screen.getByRole('button', { name: 'Bezahlt' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(onMarkPaid).not.toHaveBeenCalled()
+    expect(screen.queryByText('Rechnung als bezahlt markieren?')).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { initialProjectForm, isProjectFormDirty } from './ProjectDetailScreen'
+import { emptyDraft } from './projectAppointments'
 import type { Project } from './ProjectsScreen'
 
 // Basis für die „ungespeicherte Änderungen"-Abfrage: nur echte Änderungen an den
@@ -108,20 +109,33 @@ describe('isProjectFormDirty', () => {
     })).toBe(true)
   })
 
-  it('erkennt geänderte Terminfelder', () => {
+  it('erkennt einen hinzugefügten Termin', () => {
     const base = initialProjectForm(makeProject())
-    expect(isProjectFormDirty(base, { ...base, endDate: '2026-08-10' })).toBe(true)
+    const neu = { ...emptyDraft('aufmass'), startDate: '2026-08-10' }
+    expect(isProjectFormDirty(base, { ...base, appointments: [neu] })).toBe(true)
+  })
+
+  it('erkennt einen geänderten Termin', () => {
+    const termin = { ...emptyDraft(), key: 'a-1', id: 'a-1', startDate: '2026-08-03' }
+    const base = { ...initialProjectForm(makeProject()), appointments: [termin] }
+    expect(isProjectFormDirty(base, {
+      ...base,
+      appointments: [{ ...termin, startTime: '07:30' }],
+    })).toBe(true)
+  })
+
+  it('ist unabhängig von der Reihenfolge der Termine im Formular', () => {
+    const a = { ...emptyDraft(), key: 'a-1', id: 'a-1', startDate: '2026-08-03' }
+    const b = { ...emptyDraft(), key: 'a-2', id: 'a-2', startDate: '2026-08-20' }
+    const base = { ...initialProjectForm(makeProject()), appointments: [a, b] }
+    expect(isProjectFormDirty(base, { ...base, appointments: [b, a] })).toBe(false)
   })
 })
 
 describe('initialProjectForm', () => {
-  it('kürzt Datums-/Zeitwerte auf die Formularformate', () => {
-    const form = initialProjectForm(makeProject({
-      start_date: '2026-08-03T00:00:00Z',
-      start_time: '07:30:00',
-    }))
-    expect(form.startDate).toBe('2026-08-03')
-    expect(form.startTime).toBe('07:30')
+  it('startet ohne Termine — die lädt die Maske separat nach', () => {
+    // Termine liegen in project_appointments, nicht auf der projects-Zeile.
+    expect(initialProjectForm(makeProject()).appointments).toEqual([])
   })
 
   it('liefert für ein neues Projekt durchgehend leere Werte', () => {

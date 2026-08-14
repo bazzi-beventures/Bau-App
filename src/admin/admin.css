@@ -2145,6 +2145,110 @@ button.admin-list-item {
   white-space: nowrap;
 }
 
+/* ── Kachel «Termine» in der Projektübersicht ────────────────────────────
+   Eigene Klassen statt der .project-schedule-*-Regeln oben: die stehen im
+   schmalen Planungs-Panel, die Kachel hier in der breiten Projektmaske. */
+.project-appt-next {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.project-appt-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.project-appt-item.open {
+  border-color: var(--primary);
+}
+
+.project-appt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+/* Zusammenfassung = Aufklapp-Fläche. Als <button> für Tastatur/Screenreader,
+   optisch aber eine Textzeile. */
+.project-appt-summary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.project-appt-kind {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.project-appt-when {
+  color: var(--text-muted);
+}
+
+.project-appt-team {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-appt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.project-appt-own-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.project-appt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.project-appt-chip {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.project-appt-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 .project-cal-filter {
   margin: 0 0 12px;
   padding: 10px 12px;

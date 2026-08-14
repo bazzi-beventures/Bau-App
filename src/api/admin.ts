@@ -416,6 +416,13 @@ export async function listAppointments(dateFrom: string, dateTo: string): Promis
   ) as Promise<ProjectAppointment[]>
 }
 
+// Alle Termine EINES Projekts, chronologisch — Terminliste in der
+// Projektübersicht (ProjectDetailScreen). Der Kalender lädt stattdessen
+// listAppointments() über ein Zeitfenster.
+export async function getProjectAppointments(projectId: string): Promise<ProjectAppointment[]> {
+  return apiFetch(`/pwa/admin/projects/${projectId}/appointments`) as Promise<ProjectAppointment[]>
+}
+
 // Partial-PATCH-Semantik: fehlendes Feld = unverändert; '' bei end_date/
 // start_time/end_time = Wert löschen (Backend normalisiert '' → NULL);
 // monteur_ids [] = Termin-Team löschen (→ Projekt-Team gilt).

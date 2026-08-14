@@ -20,6 +20,11 @@ interface Invoice {
   storage_path?: string | null
   customer_email?: string | null
   projektleiter_id: string | null
+  // Projektbezug: nach dem Bezahlen fragt die Übersicht, ob das Projekt
+  // abgeschlossen werden soll — bei einem längst geschlossenen Projekt nicht.
+  project_id: string | null
+  project_status?: string | null
+  project_is_closed?: boolean | null
 }
 
 interface ProjektleiterOption {
@@ -70,6 +75,13 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   const [acting, setActing] = useState<number | null>(null)
   const isMobile = useIsMobile()
   const [confirmPaid, setConfirmPaid] = useState<Invoice | null>(null)
+  // Zahlungsdatum: vorbelegt mit heute, nachtragbar — der Eingang wird oft erst
+  // Tage später im Dashboard erfasst (Umsatzmonat + Aftersales-Frist hängen dran).
+  const [paidDate, setPaidDate] = useState('')
+  // Nach dem Bezahlen: «Projekt abschliessen?» — die Rechnung ist meist der
+  // letzte Schritt eines Auftrags, das Schliessen ging bisher nur im Projekt.
+  const [confirmCloseProject, setConfirmCloseProject] = useState<Invoice | null>(null)
+  const [closingProject, setClosingProject] = useState(false)
   const [confirmUnpay, setConfirmUnpay] = useState<Invoice | null>(null)
   const [confirmArchive, setConfirmArchive] = useState<Invoice | null>(null)
   // Postversand: Rechnung als versendet markieren, ohne sie zu mailen.
@@ -231,18 +243,53 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setTimeout(() => setToast(null), 3000)
   }
 
-  async function handleMarkPaid(id: number) {
-    setActing(id)
+  function openPaid(inv: Invoice) {
+    setPaidDate(todayISO())
+    setConfirmPaid(inv)
+  }
+
+  // Offen = noch nicht abgeschlossen/archiviert. Nur dann lohnt die Rückfrage.
+  function projectStillOpen(inv: Invoice): boolean {
+    if (!inv.project_id) return false
+    if (inv.project_status) return inv.project_status === 'offen'
+    return !inv.project_is_closed
+  }
+
+  async function handleMarkPaid(inv: Invoice) {
+    setActing(inv.id)
     try {
-      await apiFetch(`/pwa/admin/invoices/${id}/mark-paid`, { method: 'POST' })
+      await apiFetch(`/pwa/admin/invoices/${inv.id}/mark-paid`, {
+        method: 'POST',
+        body: JSON.stringify({ paid_at: paidDate }),
+      })
       showToast('Rechnung als bezahlt markiert', 'success')
       setConfirmPaid(null)
       load()
       onBadgeChange?.()
-    } catch {
-      showToast('Fehler', 'error')
+      // Anschlussfrage statt Automatik: eine Teilrechnung schliesst das Projekt nicht.
+      if (projectStillOpen(inv)) setConfirmCloseProject(inv)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler', 'error')
     } finally {
       setActing(null)
+    }
+  }
+
+  async function handleCloseProject(inv: Invoice) {
+    if (!inv.project_id) return
+    setClosingProject(true)
+    try {
+      await apiFetch(`/pwa/admin/projects/${inv.project_id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'abgeschlossen' }),
+      })
+      showToast('Projekt abgeschlossen', 'success')
+      setConfirmCloseProject(null)
+      load()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Fehler beim Abschliessen', 'error')
+    } finally {
+      setClosingProject(false)
     }
   }
 
@@ -386,7 +433,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                   )}
                   {(inv.status === 'ausstehend' || inv.status === 'offen' || inv.status === 'gesendet') && (
                     <>
-                      <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => setConfirmPaid(inv)} disabled={acting === inv.id}>
+                      <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => openPaid(inv)} disabled={acting === inv.id}>
                         Als bezahlt markieren
                       </button>
                       <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setConfirmArchive(inv)} disabled={acting === inv.id}>
@@ -465,7 +512,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                         <>
                           <button
                             className="admin-btn admin-btn-success admin-btn-sm"
-                            onClick={() => setConfirmPaid(inv)}
+                            onClick={() => openPaid(inv)}
                             disabled={acting === inv.id}
                           >
                             Als bezahlt markieren
@@ -506,14 +553,58 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
               {confirmPaid.invoice_number} · {fmtCHF(confirmPaid.total_amount)}<br />
               Projekt: {confirmPaid.project_name}
             </div>
+            <div style={{ margin: '12px 0' }}>
+              <label className="admin-form-label" htmlFor="invoice-paid-date">Zahlungsdatum</label>
+              <input
+                id="invoice-paid-date"
+                className="admin-form-input"
+                type="date"
+                value={paidDate}
+                max={todayISO()}
+                onChange={e => setPaidDate(e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                Tag des Zahlungseingangs — nachtragbar, vorbelegt mit heute.
+              </div>
+            </div>
             <div className="admin-confirm-actions">
               <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPaid(null)}>Abbrechen</button>
               <button
                 className="admin-btn admin-btn-success"
-                onClick={() => handleMarkPaid(confirmPaid.id)}
-                disabled={acting === confirmPaid.id}
+                onClick={() => handleMarkPaid(confirmPaid)}
+                disabled={acting === confirmPaid.id || !paidDate}
               >
                 {acting === confirmPaid.id ? '…' : 'Ja, bezahlt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Anschlussfrage nach dem Bezahlen: Projekt abschliessen? */}
+      {confirmCloseProject && (
+        <div className="admin-confirm-overlay">
+          <div className="admin-confirm-box">
+            <div className="admin-confirm-title">Projekt abschliessen?</div>
+            <div className="admin-confirm-text">
+              Rechnung {confirmCloseProject.invoice_number} ist bezahlt.<br />
+              «{confirmCloseProject.project_name}» wird beim Abschliessen für Mitarbeiter
+              ausgeblendet. Rapporte und Dokumente bleiben erhalten.
+            </div>
+            <div className="admin-confirm-actions">
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => setConfirmCloseProject(null)}
+                disabled={closingProject}
+              >
+                Offen lassen
+              </button>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => handleCloseProject(confirmCloseProject)}
+                disabled={closingProject}
+              >
+                {closingProject ? 'Schliessen…' : 'Ja, abschliessen'}
               </button>
             </div>
           </div>
