@@ -21,7 +21,7 @@ import {
 } from '../utils/ganttGrid'
 import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
-  entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillExtraLines,
+  crewMembers, entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillExtraLines,
   projectCoversDay, projectMonteurNames, readDragPayload, setDragPayload,
   useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
@@ -650,10 +650,13 @@ function PlantafelView({
     const extra = pillExtraLines(p, staff, fields)
     const monteurs = projectMonteurNames(p, staff)
     const symbol = kindSymbol(p)
+    // In der Plantafel steht jeder Monteur in seiner eigenen Zeile — der Lead
+    // bekommt deshalb keine eigene Pille, sondern seine Kachel eine rote Kante.
+    const isLead = !!rowId && crewMembers(p, staff)[0]?.id === rowId
     return (
       <div
         key={p.id}
-        className={`project-cal-board-chip${conflict ? ' conflict' : ''}`}
+        className={`project-cal-board-chip${conflict ? ' conflict' : ''}${isLead ? ' lead' : ''}`}
         draggable
         onDragStart={e => setDragPayload(e, p.id, dayISO, rowId ?? '')}
         onClick={() => onSelect(p)}
@@ -661,6 +664,7 @@ function PlantafelView({
         style={{ background: pillBg(p) }}
         title={[
           entryTitle(p), timeLabel, monteurs, ...extra,
+          isLead ? 'Lead-Monteur' : '',
           conflict ? '⚠ Zeitliche Überschneidung mit einem anderen Einsatz dieses Monteurs' : '',
         ].filter(Boolean).join(' · ')}
       >
@@ -795,7 +799,7 @@ function AgendaView({
               <div className="project-cal-agenda-empty">–</div>
             ) : dayProjects.map(p => {
               const extra = pillExtraLines(p, staff, fields)
-              const monteurs = projectMonteurNames(p, staff)
+              const crew = crewMembers(p, staff)
               return (
                 <div
                   key={p.id}
@@ -806,7 +810,16 @@ function AgendaView({
                 >
                   <span className="project-cal-agenda-event-time">{fmtTimeRange(p) || 'Ganztägig'}</span>
                   <strong>{kindSymbol(p) ? `${kindSymbol(p)} ` : ''}{p.termin_badge ? `${p.termin_badge} · ` : ''}{entryTitle(p)}</strong>
-                  {monteurs && <span className="project-cal-agenda-event-sub">{monteurs}</span>}
+                  {crew.length > 0 && (
+                    <span className="project-cal-agenda-event-sub">
+                      {crew.map((m, k) => (
+                        <span key={m.id}>
+                          {k > 0 && ', '}
+                          <span className={m.lead ? 'schedule-lead-chip' : undefined}>{m.name}</span>
+                        </span>
+                      ))}
+                    </span>
+                  )}
                   {extra.map((line, j) => <span key={j} className="project-cal-agenda-event-sub">{line}</span>)}
                 </div>
               )

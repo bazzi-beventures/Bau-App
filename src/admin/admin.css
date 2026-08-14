@@ -701,6 +701,22 @@ select.admin-input {
   margin-bottom: 24px;
 }
 
+/* Nicht blockierender Warnhinweis im Bestätigungsdialog (z.B. «noch 2 Rechnungen
+   offen» beim Projektabschluss). Bewusst --warning statt --danger: die Aktion
+   bleibt erlaubt, sie soll nur nicht aus Versehen passieren. Der negative
+   Abstand nach oben zieht ihn an den Dialogtext heran, dessen 24px-Abstand
+   sonst vor den Buttons stünde. */
+.admin-confirm-warning {
+  margin: -14px 0 20px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
 .admin-confirm-actions {
   display: flex;
   gap: 10px;
@@ -2042,6 +2058,20 @@ button.admin-list-item {
   border-color: var(--primary);
 }
 
+/* Lead-Monteur = der zuerst angewählte. Die Regel steht NACH .active, damit sie
+   den Blau-Ton des aktiven Chips überschreibt (gleiche Spezifität). */
+.project-schedule-chip.lead {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.project-schedule-lead-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .project-schedule-actions {
   display: flex;
   gap: 8px;
@@ -3126,6 +3156,14 @@ button.admin-list-item {
   box-shadow: 0 0 0 2px var(--danger, #dc2626);
 }
 
+/* Lead-Monteur: die Kachel in SEINER Zeile bekommt eine rote Kante. Bewusst
+   eine Kante statt eines Rings — der Ring ist schon die Doppelbuchungs-Warnung,
+   zwei rote Ringe wären nicht auseinanderzuhalten. */
+.project-cal-board-chip.lead {
+  border-left: 3px solid #dc2626;
+  padding-left: 3px;
+}
+
 .project-cal-board-chip-warn {
   margin-left: 4px;
   color: #fecaca;
@@ -3404,24 +3442,53 @@ button.admin-list-item {
 }
 
 /* Kürzel des Termin-Teams ganz vorne — auf einen Blick, wer draussen ist.
-   Deckende rote Pille mit weisser Schrift: deckend, damit der Kontrast über
-   ALLE Balkenfarben trägt (Blau, Lila, Bernstein, Türkis, Magenta, Limette,
-   Slate) — ein durchscheinender Chip läge als heller Schleier auf dem Balken
-   und wäre vom Projektnamen daneben kaum zu unterscheiden. Rot kommt in keiner
-   Balkenfarbe vor; einzig gegen Magenta (#db2777) liegen die Töne nah
-   beieinander, dagegen der dünne weisse Ring als Kante.
+   Ein Chip je Monteur (früher eine gemeinsame Pille): seit der Lead-Monteur
+   markiert wird, MUSS Rot eine Bedeutung tragen. Rot = Lead, Weiss = übriges
+   Team. Beide Chips sind deckend, damit der Kontrast über ALLE Balkenfarben
+   trägt (Blau, Lila, Bernstein, Türkis, Magenta, Limette, Slate) — ein
+   durchscheinender Chip läge als heller Schleier auf dem Balken und wäre vom
+   Projektnamen daneben kaum zu unterscheiden. Rot kommt in keiner Balkenfarbe
+   vor; einzig gegen Magenta (#db2777) liegen die Töne nah beieinander, dagegen
+   der dünne weisse Ring als Kante.
    Vertikal ohne Padding: die Chip-Höhe kommt aus der line-height der Zeile
    (16px) — Padding würde die Zeile über GANTT_BAR_H hinaus wachsen lassen. */
 .project-cal-gantt-bar-crew {
   flex: 0 0 auto;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.schedule-crew-chip {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
   padding: 0 6px;
   border-radius: 999px;
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+.schedule-crew-chip.lead {
   background: var(--cal-crew-bg, #dc2626);
   color: var(--cal-crew-fg, #ffffff);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+/* Lead-Monteur ausserhalb der Kürzel-Chips.
+   Auf farbigem Grund (Agenda-Karte) braucht es die deckende Pille — roter Text
+   auf blauem Balken wäre unlesbar. Auf hellem Grund (Hover-Karte, Auswahl-Chips)
+   genügt die rote Schrift. */
+.schedule-lead-chip {
+  background: #dc2626;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 4px;
+}
+
+.schedule-lead-name {
+  color: #dc2626;
+  font-weight: 700;
 }
 
 /* Zweite Zeile: Ortschaft des Objekts. */

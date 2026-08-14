@@ -22,6 +22,7 @@ import { SendThankyouDialog } from './SendThankyouDialog'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
 import { fmtDate } from '../utils/format'
+import { countOpenInvoices, openInvoicesHint } from '../utils/openInvoices'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UnsavedChangesDialog } from '../components/UnsavedChangesDialog'
@@ -983,7 +984,9 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (!project) return
     setSettingStatus(true)
     try {
-      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
+      // Über die id, nicht den Namen: Projektnamen dürfen doppelt vorkommen, der
+      // Namens-Pfad antwortet dann mit 409 und das Projekt liesse sich nie schliessen.
+      await apiFetch(`/pwa/admin/projects/${project.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'abgeschlossen' }),
       })
@@ -1001,7 +1004,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (!project) return
     setSettingStatus(true)
     try {
-      await apiFetch(`/pwa/admin/projects/${encodeURIComponent(project.name)}/status`, {
+      await apiFetch(`/pwa/admin/projects/${project.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'archiviert' }),
       })
@@ -2061,6 +2064,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <ConfirmDialog
           title="Projekt abschliessen?"
           message={<>«{project?.name}» wird für Mitarbeiter ausgeblendet. Berichte bleiben erhalten.</>}
+          warning={openInvoicesHint(countOpenInvoices(invoices))}
           confirmLabel="Ja, abschliessen"
           busyLabel="Schliessen…"
           busy={settingStatus}
@@ -2074,6 +2078,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <ConfirmDialog
           title="Projekt abschliessen?"
           message={<>Die Rechnung ist bezahlt. «{project?.name}» wird beim Abschliessen für Mitarbeiter ausgeblendet; Rapporte und Dokumente bleiben erhalten.</>}
+          warning={openInvoicesHint(countOpenInvoices(invoices))}
           cancelLabel="Offen lassen"
           confirmLabel="Ja, abschliessen"
           busyLabel="Schliessen…"

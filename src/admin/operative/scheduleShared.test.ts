@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { addressLocality, crewShortLabels, pairKey, staffShortLabel } from './scheduleShared'
+import { addressLocality, crewMembers, crewShortLabels, pairKey, staffShortLabel } from './scheduleShared'
 import type { Project } from './ProjectsScreen'
 
 // Reine Formatier-Helfer der Einsatzplanung — ohne DOM testbar.
@@ -51,17 +51,46 @@ describe('crewShortLabels', () => {
   ]
   const entry = (ids: string[]) => ({ monteur_ids: ids } as unknown as Project)
 
-  it('liefert die Kürzel des Termin-Teams in Reihenfolge', () => {
-    expect(crewShortLabels(entry(['s2', 's1']), staff)).toEqual(['KA', 'MW'])
+  it('liefert die Kürzel des Termin-Teams in Reihenfolge, der erste ist Lead', () => {
+    expect(crewShortLabels(entry(['s2', 's1']), staff)).toEqual([
+      { label: 'KA', lead: true },
+      { label: 'MW', lead: false },
+    ])
   })
 
-  it('deckelt lange Teams mit +n', () => {
-    expect(crewShortLabels(entry(['s1', 's2', 's3', 's4']), staff)).toEqual(['MW', 'KA', 'BW', '+1'])
+  it('deckelt lange Teams mit +n (der Deckel ist nie Lead)', () => {
+    expect(crewShortLabels(entry(['s1', 's2', 's3', 's4']), staff)).toEqual([
+      { label: 'MW', lead: true },
+      { label: 'KA', lead: false },
+      { label: 'BW', lead: false },
+      { label: '+1', lead: false },
+    ])
   })
 
   it('ignoriert unbekannte und fehlende Monteure', () => {
-    expect(crewShortLabels(entry(['weg', 's1']), staff)).toEqual(['MW'])
+    // Steht eine Karteileiche vorne, rückt der erste bekannte Monteur als Lead nach —
+    // sonst hätte der Einsatz gar keinen sichtbaren Lead.
+    expect(crewShortLabels(entry(['weg', 's1']), staff)).toEqual([{ label: 'MW', lead: true }])
     expect(crewShortLabels(entry([]), staff)).toEqual([])
+  })
+})
+
+describe('crewMembers', () => {
+  const staff = [
+    { id: 's1', name: 'Marvin Walser', kuerzel: 'MW' },
+    { id: 's2', name: 'Kevin Almeida', kuerzel: 'KA' },
+  ]
+  const entry = (ids: string[]) => ({ monteur_ids: ids } as unknown as Project)
+
+  it('markiert genau den zuerst gewählten Monteur als Lead', () => {
+    expect(crewMembers(entry(['s2', 's1']), staff)).toEqual([
+      { id: 's2', name: 'Kevin Almeida', short: 'KA', lead: true },
+      { id: 's1', name: 'Marvin Walser', short: 'MW', lead: false },
+    ])
+  })
+
+  it('liefert für einen Einsatz ohne Team eine leere Liste', () => {
+    expect(crewMembers({} as unknown as Project, staff)).toEqual([])
   })
 })
 

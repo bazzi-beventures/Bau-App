@@ -90,6 +90,21 @@ describe('Plantafel', () => {
     expect(rows[1]).not.toHaveTextContent('Projekt Alpha')
   })
 
+  it('markiert die Kachel des Lead-Monteurs (zuerst gewählt) rot', async () => {
+    const user = userEvent.setup()
+    const { container } = renderCal({
+      // s2 steht vorne → Beat ist Lead, nicht Anna.
+      entries: [entry({ id: 'a2', name: 'Projekt Beta', monteur_ids: ['s2', 's1'] })],
+    })
+    await user.click(screen.getByRole('button', { name: 'Plantafel' }))
+
+    const rows = boardRows(container)
+    expect(rows[0].querySelector('.project-cal-board-chip')).not.toHaveClass('lead')  // Anna
+    const leadChip = rows[1].querySelector('.project-cal-board-chip')!                 // Beat
+    expect(leadChip).toHaveClass('lead')
+    expect(leadChip).toHaveAttribute('title', expect.stringContaining('Lead-Monteur'))
+  })
+
   it('sammelt Einsätze ohne Monteur in der Zeile «Ohne Monteur»', async () => {
     const user = userEvent.setup()
     const { container } = renderCal({

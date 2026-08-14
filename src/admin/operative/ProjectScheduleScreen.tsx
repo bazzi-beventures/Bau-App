@@ -185,6 +185,9 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         apiFetch('/pwa/admin/staff') as Promise<StaffLite[]>,
         apiFetch('/pwa/admin/customers') as Promise<CustomerLite[]>,
         // Anzeige-Config ist optional — Fehler darf den Kalender nicht blockieren.
+        // Aber nicht stumm: ohne sie gelten die System-Defaults (alle Ansichten,
+        // keine Sperrstunde), der Planer sähe also klammheimlich einen anderen
+        // Plan als der Rest des Mandanten.
         getSchedulingConfig().catch(() => null),
       ])
       setProjects(proj)
@@ -201,6 +204,8 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
           grey_until: sched.config.grey_until ?? sched.defaults.grey_until ?? '',
           day_capacity_hours: sched.config.day_capacity_hours ?? sched.defaults.day_capacity_hours,
         })
+      } else {
+        showToast('Anzeige-Einstellungen nicht geladen — Standardansicht aktiv.', 'error')
       }
     } catch {
       showToast('Daten konnten nicht geladen werden.', 'error')
@@ -872,18 +877,25 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                     )}
                     {monteurOptions.map(s => {
                       const active = form.monteurIds.includes(s.id)
+                      const lead = form.monteurIds[0] === s.id
                       return (
                         <button
                           key={s.id}
                           type="button"
-                          className={`project-schedule-chip${active ? ' active' : ''}`}
+                          className={`project-schedule-chip${active ? ' active' : ''}${lead ? ' lead' : ''}`}
                           onClick={() => toggleMonteur(s.id)}
+                          title={lead ? 'Lead-Monteur (zuerst gewählt)' : undefined}
                         >
                           {s.name}
                         </button>
                       )
                     })}
                   </div>
+                  {form.monteurIds.length > 1 && (
+                    <div className="project-schedule-lead-hint">
+                      Rot = Lead-Monteur (der zuerst gewählte). Abwählen und neu wählen ändert ihn.
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Termine ──────────────────────────────────────── */}
@@ -1022,12 +1034,14 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                           <div className="project-schedule-monteur-chips" style={{ marginTop: 6 }}>
                             {monteurOptions.map(s => {
                               const active = apptForm.monteurIds.includes(s.id)
+                              const lead = apptForm.monteurIds[0] === s.id
                               return (
                                 <button
                                   key={s.id}
                                   type="button"
-                                  className={`project-schedule-chip${active ? ' active' : ''}`}
+                                  className={`project-schedule-chip${active ? ' active' : ''}${lead ? ' lead' : ''}`}
                                   onClick={() => toggleApptMonteur(s.id)}
+                                  title={lead ? 'Lead-Monteur (zuerst gewählt)' : undefined}
                                 >
                                   {s.name}
                                 </button>

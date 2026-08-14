@@ -339,7 +339,10 @@ export default function ProjectsScreen({
   }
 
   return (
-    <div className="admin-page">
+    // admin-page-wide: die Tabelle hat bis zu 9 Spalten (mit Projektleiter und
+    // Beschaffung). Bei den 1200px von .admin-page wird die letzte Spalte
+    // ("Erstellt") rechts abgeschnitten und nur per Scrollbalken erreichbar.
+    <div className="admin-page admin-page-wide">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Projekte</div>

@@ -18,7 +18,8 @@ import { SendQuoteDialog } from './SendQuoteDialog'
 import { SendThankyouDialog } from './SendThankyouDialog'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
-import { isFeatureEnabled } from '../../api/modules'
+import { getFeature, isFeatureEnabled } from '../../api/modules'
+import { isQuoteWithoutFeedback, quoteWaitHours } from './quoteFeedback'
 
 // Standard-Bemerkungen, die beim Erstellen einer Offerte vorausgefüllt werden.
 // Der verbindliche Text wird pro Mandant unter "Offert-Vorlagen" gepflegt und beim
@@ -52,6 +53,9 @@ interface Quote {
   customer_email?: string | null
   thankyou_sent_at?: string | null
   rejection_mail_sent_at?: string | null
+  // Versanddatum — Grundlage der Kennzeichnung «Kein Feedback»
+  // (Feature offerte_kein_feedback_meldung, siehe quoteFeedback.ts).
+  sent_at?: string | null
 }
 
 interface ProjektleiterOption {
@@ -1704,6 +1708,9 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   // „Absage senden"-Knopf bei abgelehnten Offerten (Per-Knopfdruck-Modus bzw.
   // Fallback, falls der Auto-Versand ausblieb).
   const [absageEnabled, setAbsageEnabled] = useState(false)
+  // Kennzeichnung «Kein Feedback» (Feature offerte_kein_feedback_meldung): ab wann
+  // eine versendete Offerte als unbeantwortet gilt. 0 = Feature aus, keine Kennzeichnung.
+  const [feedbackWaitHours, setFeedbackWaitHours] = useState(0)
 
   async function load() {
     setLoading(true)
@@ -1720,6 +1727,8 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     getMe().then(me => {
       setDankEnabled(isFeatureEnabled(me, 'offerte_dank_mail'))
       setAbsageEnabled(isFeatureEnabled(me, 'offerte_absage_mail'))
+      const fb = getFeature<{ enabled?: boolean; stunden?: number }>(me, 'offerte_kein_feedback_meldung')
+      setFeedbackWaitHours(fb?.enabled ? quoteWaitHours(fb) : 0)
     }).catch(() => {})
   }, [])
 
@@ -1876,6 +1885,17 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
                     <span className={`admin-badge ${STATUS_BADGE[q.status] || 'admin-badge-draft'}`}>
                       {STATUS_LABELS[q.status] || q.status}
                     </span>
+                    {/* Zusätzlich zum Status, nicht an seiner Stelle: die Offerte ist
+                        weiterhin 'gesendet' und ausdrücklich nicht abgelehnt. */}
+                    {feedbackWaitHours > 0 && isQuoteWithoutFeedback(q, feedbackWaitHours) && (
+                      <span
+                        className="admin-badge admin-badge-pending"
+                        style={{ marginLeft: 4 }}
+                        title={`Seit über ${feedbackWaitHours} Stunden keine Rückmeldung des Kunden — die Offerte ist weiterhin offen.`}
+                      >
+                        Kein Feedback
+                      </span>
+                    )}
                     {q.reminder_sent_at && (
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
                         Erinnerung gesendet {fmtDate(q.reminder_sent_at)}

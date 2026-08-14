@@ -7,6 +7,8 @@ import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
 import { AutoGrowTextarea } from '../components/AutoGrowTextarea'
 import { useIsMobile } from '../useIsMobile'
+import { isInvoiceOpen, openInvoicesHint } from '../utils/openInvoices'
+import type { AdminScreen } from '../useAdminNav'
 
 interface Invoice {
   id: number
@@ -63,7 +65,12 @@ export function invoiceWarningHint(warnings?: unknown): string {
   return texts.length > 0 ? ` — ${texts.join(' ')}` : ''
 }
 
-export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () => void }) {
+export default function InvoicesScreen({ onBadgeChange, onNav }: {
+  onBadgeChange?: () => void
+  // Sprung ins Projekt: die Rechnungsübersicht beantwortet «wie viel ist offen»,
+  // die Rückfragen dazu («welche Rapporte?», «welche Offerte?») stehen im Projekt.
+  onNav?: (screen: AdminScreen, detailId?: string) => void
+}) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilters, setStatusFilters] = useState<Set<string>>(
@@ -248,6 +255,23 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
     setConfirmPaid(inv)
   }
 
+  // Klick auf eine Rechnung öffnet ihr Projekt. Alt-Rechnungen ohne project_id
+  // (Backfill) bleiben unklickbar — es gibt kein eindeutiges Ziel.
+  function openProject(inv: Invoice) {
+    if (inv.project_id) onNav?.('projects', inv.project_id)
+  }
+
+  const canOpenProject = (inv: Invoice) => !!onNav && !!inv.project_id
+
+  // Weitere offene Rechnungen desselben Projekts. Die soeben bezahlte ist
+  // ausgenommen: der Listen-Reload läuft parallel, ihr Status kann noch alt sein.
+  function otherOpenInvoices(inv: Invoice): number {
+    if (!inv.project_id) return 0
+    return invoices.filter(i =>
+      i.project_id === inv.project_id && i.id !== inv.id && isInvoiceOpen(i.status)
+    ).length
+  }
+
   // Offen = noch nicht abgeschlossen/archiviert. Nur dann lohnt die Rückfrage.
   function projectStillOpen(inv: Invoice): boolean {
     if (!inv.project_id) return false
@@ -355,11 +379,15 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
   })
 
   const totalOpen = invoices
-    .filter(i => i.status === 'ausstehend' || i.status === 'offen' || i.status === 'gesendet')
+    .filter(i => isInvoiceOpen(i.status))
     .reduce((s, i) => s + i.total_amount, 0)
 
+  const closeProjectWarning = confirmCloseProject
+    ? openInvoicesHint(otherOpenInvoices(confirmCloseProject))
+    : ''
+
   return (
-    <div className="admin-page">
+    <div className="admin-page admin-page-wide">
       <div className="admin-page-header">
         <div>
           <div className="admin-page-title">Rechnungen</div>
@@ -398,6 +426,7 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
             items={filtered}
             keyFor={inv => String(inv.id)}
             empty="Keine Rechnungen gefunden."
+            onItemClick={onNav ? openProject : undefined}
             renderCard={inv => (
               <>
                 <div className="admin-card-head">
@@ -410,7 +439,8 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                 <div className="admin-card-meta">
                   {fmtCHF(inv.total_amount)} · erstellt {fmtDate(inv.created_at)}{inv.paid_at ? ` · bezahlt ${fmtDate(inv.paid_at)}` : ''}
                 </div>
-                <div className="admin-card-actions">
+                {/* Aktionen dürfen nicht ins Projekt springen — Klick hier stoppen. */}
+                <div className="admin-card-actions" onClick={e => e.stopPropagation()}>
                   {(inv.storage_path || inv.pdf_url) && (
                     <a
                       href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)}
@@ -467,7 +497,12 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
               {filtered.length === 0 ? (
                 <tr><td colSpan={7} className="admin-table-empty">Keine Rechnungen gefunden.</td></tr>
               ) : filtered.map(inv => (
-                <tr key={inv.id}>
+                <tr
+                  key={inv.id}
+                  onClick={canOpenProject(inv) ? () => openProject(inv) : undefined}
+                  title={canOpenProject(inv) ? 'Projekt öffnen' : undefined}
+                  style={canOpenProject(inv) ? undefined : { cursor: 'default' }}
+                >
                   <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{inv.invoice_number}</td>
                   <td><strong>{inv.project_name}</strong></td>
                   <td style={{ fontWeight: 700 }}>{fmtCHF(inv.total_amount)}</td>
@@ -478,8 +513,14 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
                   </td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(inv.created_at)}</td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(inv.paid_at)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {/* Aktionen bleiben einzeilig: die Spalte fordert per width:1% nur so
+                      viel Breite an, wie alle Pillen brauchen — der Rest bleibt beim
+                      Projektnamen. Zu schmales Fenster => .admin-table-wrap scrollt
+                      horizontal, statt dass die Pillen umbrechen.
+                      Der Klick stoppt hier: die Zeile springt ins Projekt, die
+                      Aktionen sollen das nicht auslösen. */}
+                  <td style={{ whiteSpace: 'nowrap', width: '1%' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
                       {(inv.storage_path || inv.pdf_url) && (
                         <a
                           href={apiUrl(`/pwa/admin/invoices/${inv.id}/pdf`)}
@@ -591,6 +632,9 @@ export default function InvoicesScreen({ onBadgeChange }: { onBadgeChange?: () =
               «{confirmCloseProject.project_name}» wird beim Abschliessen für Mitarbeiter
               ausgeblendet. Rapporte und Dokumente bleiben erhalten.
             </div>
+            {closeProjectWarning && (
+              <div className="admin-confirm-warning">{closeProjectWarning}</div>
+            )}
             <div className="admin-confirm-actions">
               <button
                 className="admin-btn admin-btn-secondary"

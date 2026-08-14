@@ -235,8 +235,12 @@ describe('Tagesplan (Gantt)', () => {
       })],
     })
     const bar = container.querySelector('.project-cal-gantt-bar')!
-    // Gepflegtes Kürzel, sonst Initialen.
-    expect(bar.querySelector('.project-cal-gantt-bar-crew')).toHaveTextContent('AM BB')
+    // Gepflegtes Kürzel, sonst Initialen — ein Chip je Monteur.
+    const chips = [...bar.querySelectorAll('.schedule-crew-chip')]
+    expect(chips.map(c => c.textContent)).toEqual(['AM', 'BB'])
+    // Rot ist der zuerst gewählte Monteur (Lead), nicht das ganze Team.
+    expect(chips[0]).toHaveClass('lead')
+    expect(chips[1]).not.toHaveClass('lead')
     // Zweite Zeile trägt nur die Ortschaft, nicht die ganze Adresse.
     const sub = bar.querySelector('.project-cal-gantt-bar-sub')!
     expect(sub).toHaveTextContent('Winterthur')

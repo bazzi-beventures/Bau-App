@@ -3,6 +3,7 @@ import { ApiError, isNetworkError } from '../api/client'
 import { createProjectDraft, ProjectDraftPayload } from '../api/projectDrafts'
 import { AddressAutocomplete } from '../shared/AddressAutocomplete'
 import { CompanySearch, CompanyResult } from '../shared/CompanySearch'
+import { WORK_TYPES } from '../api/workTypes'
 
 const OFFLINE_QUEUE_KEY = 'projektEntwurf_offline_queue'
 
@@ -45,6 +46,7 @@ const EMPTY_FORM: ProjectDraftPayload = {
   object_address: '',
   materials: [],
   notes: '',
+  art_der_arbeit: [],
 }
 
 export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }: Props) {
@@ -57,6 +59,7 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
   const [notes, setNotes] = useState('')
+  const [artDerArbeit, setArtDerArbeit] = useState<string[]>([])
   const [materials, setMaterials] = useState<MaterialRow[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<{ text: string; isError: boolean } | null>(null)
@@ -119,7 +122,14 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
     setCustomerEmail('')
     setCustomerAddress('')
     setNotes('')
+    setArtDerArbeit([])
     setMaterials([])
+  }
+
+  function toggleArt(value: string) {
+    setArtDerArbeit(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
+    )
   }
 
   function addMaterial() {
@@ -160,6 +170,9 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
       customer_email: customerEmail.trim() || null,
       customer_address: customerAddress.trim() || null,
       notes: notes.trim() || null,
+      // Kanonische Reihenfolge — der Server normalisiert ohnehin, aber die
+      // Offline-Queue soll nicht je nach Klickreihenfolge anders aussehen.
+      art_der_arbeit: WORK_TYPES.map(w => w.value).filter(v => artDerArbeit.includes(v)),
       materials: materials
         .filter(m => m.name.trim())
         .map(m => ({ name: m.name.trim(), quantity: m.quantity.trim() || null })),
@@ -252,6 +265,28 @@ export default function ProjektEntwurfScreen({ logoUrl, onNavHome, onLoggedOut }
               placeholder="Was genau soll gemacht werden?"
             />
           </label>
+          {/* Leistungsart: der Monteur steht vor Ort und weiss, ob es eine
+              Neumontage oder ein Service ist. Ohne dieses Feld musste der
+              Projektleiter beim Umwandeln raten — meistens blieb es leer. */}
+          <div className="entwurf-label">
+            <span>Art der Arbeit (Mehrfachauswahl)</span>
+            <div className="leistungsart-grid">
+              {WORK_TYPES.map(w => (
+                <button
+                  key={w.value}
+                  type="button"
+                  aria-pressed={artDerArbeit.includes(w.value)}
+                  className={`leistungsart-chip ${artDerArbeit.includes(w.value) ? 'is-selected' : ''}`}
+                  onClick={() => toggleArt(w.value)}
+                >
+                  <span className="leistungsart-chip-check" aria-hidden="true">
+                    {artDerArbeit.includes(w.value) ? '✓' : ''}
+                  </span>
+                  {w.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="entwurf-label">
             <span>Objekt-Name (optional)</span>
             <input

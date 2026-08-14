@@ -247,7 +247,15 @@ export default function ProjectScheduleGantt({
       >
         <span className="project-cal-gantt-bar-line">
           {crew.length > 0 && (
-            <span className="project-cal-gantt-bar-crew">{crew.join(' ')}</span>
+            <span className="project-cal-gantt-bar-crew">
+              {crew.map(c => (
+                <span
+                  key={c.label}
+                  className={`schedule-crew-chip${c.lead ? ' lead' : ''}`}
+                  title={c.lead ? 'Lead-Monteur' : undefined}
+                >{c.label}</span>
+              ))}
+            </span>
           )}
           {kindSymbol(p) && <span className="project-cal-kind-symbol">{kindSymbol(p)}</span>}
           {p.termin_badge && <span className="project-cal-termin-badge">{p.termin_badge}</span>}

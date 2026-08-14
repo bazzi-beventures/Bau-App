@@ -211,7 +211,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'project-schedule': return guard('scheduling', <ProjectScheduleScreen canton={canton} onNav={guardedNav} />)
       case 'customers':    return <CustomersScreen />
       case 'quotes':       return guard('quotes', <QuotesScreen initialStatus={detailId} onConsumed={clearDetail} />)
-      case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} />)
+      case 'invoices':     return guard('invoicing', <InvoicesScreen onBadgeChange={loadDashboard} onNav={guardedNav} />)
       case 'aftersales':   return guard('aftersales', <AftersalesScreen />)
       case 'payment-reconciliation': return guard('payment_matching', <PaymentReconciliationScreen />)
       case 'suppliers':    return <SuppliersScreen />

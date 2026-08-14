@@ -150,3 +150,59 @@ describe('InvoicesScreen — Anschlussfrage «Projekt abschliessen?»', () => {
     expect(screen.queryByText('Projekt abschliessen?')).not.toBeInTheDocument()
   })
 })
+
+describe('InvoicesScreen — Klick auf die Rechnung öffnet das Projekt', () => {
+  beforeEach(() => mockFetch.mockReset())
+
+  it('navigiert beim Klick auf die Zeile ins Projekt', async () => {
+    routeFetch([invoice()])
+    const onNav = vi.fn()
+    render(<InvoicesScreen onNav={onNav} />)
+    await userEvent.click(await screen.findByText('RE-2026-083'))
+
+    expect(onNav).toHaveBeenCalledWith('projects', 'p-1')
+  })
+
+  it('lässt die Aktions-Buttons nicht ins Projekt springen', async () => {
+    routeFetch([invoice()])
+    const onNav = vi.fn()
+    render(<InvoicesScreen onNav={onNav} />)
+    await screen.findByText('RE-2026-083')
+    await userEvent.click(screen.getByRole('button', { name: 'Als bezahlt markieren' }))
+
+    expect(screen.getByText('Rechnung als bezahlt markieren?')).toBeInTheDocument()
+    expect(onNav).not.toHaveBeenCalled()
+  })
+
+  it('navigiert nicht bei einer Rechnung ohne Projektbezug', async () => {
+    routeFetch([invoice({ project_id: null })])
+    const onNav = vi.fn()
+    render(<InvoicesScreen onNav={onNav} />)
+    await userEvent.click(await screen.findByText('RE-2026-083'))
+
+    expect(onNav).not.toHaveBeenCalled()
+  })
+})
+
+describe('InvoicesScreen — Hinweis auf offene Rechnungen beim Abschliessen', () => {
+  beforeEach(() => mockFetch.mockReset())
+
+  it('warnt, wenn das Projekt weitere offene Rechnungen hat', async () => {
+    routeFetch([invoice(), invoice({ id: 43, invoice_number: 'RE-2026-084', status: 'offen' })])
+    render(<InvoicesScreen />)
+    await screen.findByText('RE-2026-083')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Als bezahlt markieren' })[0])
+    await userEvent.click(screen.getByRole('button', { name: 'Ja, bezahlt' }))
+
+    expect(await screen.findByText('Projekt abschliessen?')).toBeInTheDocument()
+    expect(screen.getByText('Achtung: Für dieses Projekt ist noch 1 Rechnung offen.')).toBeInTheDocument()
+  })
+
+  it('warnt nicht, wenn die bezahlte die letzte offene Rechnung war', async () => {
+    await openPaidDialog()
+    await userEvent.click(screen.getByRole('button', { name: 'Ja, bezahlt' }))
+
+    expect(await screen.findByText('Projekt abschliessen?')).toBeInTheDocument()
+    expect(screen.queryByText(/Rechnung(en)? offen/)).not.toBeInTheDocument()
+  })
+})

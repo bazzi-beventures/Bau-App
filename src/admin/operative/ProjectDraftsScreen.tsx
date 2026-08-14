@@ -6,6 +6,8 @@ import {
   convertProjectDraft, rejectProjectDraft,
 } from '../../api/projectDrafts'
 import { fmtDate } from '../utils/format'
+import { findCustomerMatch, normalize } from './customerMatch'
+import { WORK_TYPES, workTypeLabel } from '../../api/workTypes'
 
 interface CustomerLite {
   id: string
@@ -13,23 +15,6 @@ interface CustomerLite {
   email: string | null
   phone: string | null
   address: string | null
-}
-
-function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-}
-
-function fuzzyFindCustomer(name: string, customers: CustomerLite[]): CustomerLite | null {
-  const needle = normalize(name)
-  if (!needle) return null
-  // 1. exakter Match (normalisiert)
-  const exact = customers.find(c => normalize(c.name) === needle)
-  if (exact) return exact
-  // 2. Teilstring in beide Richtungen
-  return customers.find(c => {
-    const hay = normalize(c.name)
-    return hay.includes(needle) || needle.includes(hay)
-  }) ?? null
 }
 
 type StatusFilter = 'open' | 'converted' | 'rejected' | 'all'
@@ -183,7 +168,11 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
   const [objectAddress, setObjectAddress] = useState(draft.object_address ?? draft.customer_address ?? '')
   const [contactName, setContactName] = useState(draft.customer_name)
   const [contactPhone, setContactPhone] = useState(draft.customer_phone ?? '')
-  const [artDerArbeit, setArtDerArbeit] = useState<'Neumontage' | 'Wiedermontage' | 'Umbau' | 'Reparatur' | 'Wartung' | 'Demontage' | ''>('')
+  // Vorbelegt mit dem, was der Mitarbeiter vor Ort angekreuzt hat — in kanonischer
+  // Reihenfolge, unbekannte Alt-Werte fallen dabei raus.
+  const [artDerArbeit, setArtDerArbeit] = useState<string[]>(
+    () => WORK_TYPES.map(w => w.value).filter(v => (draft.art_der_arbeit ?? []).includes(v)),
+  )
   const [rejectMode, setRejectMode] = useState(false)
   const [rejectNote, setRejectNote] = useState('')
   const [busy, setBusy] = useState<'convert' | 'reject' | null>(null)
@@ -205,12 +194,14 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
       .then(d => {
         const list = d as CustomerLite[]
         setCustomers(list)
-        // Fuzzy-Vorschlag — wenn Match, auf 'existing' wechseln und vorauswählen
-        const match = fuzzyFindCustomer(draft.customer_name, list)
-        if (match) {
+        // Nur der exakt gleiche Name wird vorausgewählt. Ein bloss ähnlicher
+        // Treffer erscheint als Vorschlagsbanner und braucht einen Klick —
+        // ein still verknüpfter falscher Kunde landet sonst auf der Rechnung.
+        const match = findCustomerMatch(draft.customer_name, list)
+        if (match?.exact) {
           setCustomerMode('existing')
-          setSelectedCustomerId(match.id)
-          setCustomerSearch(match.name)
+          setSelectedCustomerId(match.customer.id)
+          setCustomerSearch(match.customer.name)
         }
       })
       .catch(() => setCustomers([]))
@@ -224,9 +215,15 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
   }, [customers, customerSearch])
 
   const fuzzyMatch = useMemo(
-    () => customers ? fuzzyFindCustomer(draft.customer_name, customers) : null,
+    () => customers ? findCustomerMatch(draft.customer_name, customers)?.customer ?? null : null,
     [customers, draft.customer_name],
   )
+
+  function toggleArt(value: string) {
+    setArtDerArbeit(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
+    )
+  }
 
   async function handleConvert() {
     setError('')
@@ -264,7 +261,7 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
         object_address: objectAddress.trim() || null,
         site_contact_name: contactName.trim() || null,
         site_contact_phone: contactPhone.trim() || null,
-        art_der_arbeit: artDerArbeit || null,
+        art_der_arbeit: WORK_TYPES.map(w => w.value).filter(v => artDerArbeit.includes(v)),
       })
       onConverted({ project_name: res.project_name })
     } catch (e: unknown) {
@@ -315,6 +312,12 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
 
           {draft.description && (
             <DraftInfoBlock label="Beschreibung">{draft.description}</DraftInfoBlock>
+          )}
+
+          {(draft.art_der_arbeit?.length ?? 0) > 0 && (
+            <DraftInfoBlock label="Art der Arbeit (vom Mitarbeiter erfasst)">
+              {(draft.art_der_arbeit ?? []).map(v => workTypeLabel(v)).join(', ')}
+            </DraftInfoBlock>
           )}
 
           {draft.materials.length > 0 && (
@@ -397,22 +400,34 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
                       />
                     </label>
                   </div>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    <span>Art der Arbeit</span>
-                    <select
-                      className="admin-input"
-                      value={artDerArbeit}
-                      onChange={e => setArtDerArbeit(e.target.value as typeof artDerArbeit)}
-                    >
-                      <option value="">— wählen —</option>
-                      <option value="Neumontage">Neumontage</option>
-                      <option value="Wiedermontage">Wiedermontage</option>
-                      <option value="Umbau">Umbau</option>
-                      <option value="Reparatur">Reparatur</option>
-                      <option value="Wartung">Wartung</option>
-                      <option value="Demontage">Demontage</option>
-                    </select>
-                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    <span>Art der Arbeit (Mehrfachauswahl)</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+                      {WORK_TYPES.map(t => {
+                        const active = artDerArbeit.includes(t.value)
+                        return (
+                          <label
+                            key={t.value}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                              fontSize: 13, padding: '4px 10px', borderRadius: 6,
+                              background: active ? 'var(--primary)' : 'var(--surface-2)',
+                              color: active ? '#fff' : 'var(--text)',
+                              border: '1px solid', borderColor: active ? 'var(--primary)' : 'var(--border)',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              style={{ display: 'none' }}
+                              checked={active}
+                              onChange={() => toggleArt(t.value)}
+                            />
+                            {t.label}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
 
                   {/* ── Kunden-Verknüpfung ── */}
                   <div style={{ borderTop: '1px dashed var(--color-border)', paddingTop: 12, marginTop: 4 }}>
@@ -433,7 +448,8 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
                           setCustomerSearch(fuzzyMatch.name)
                         }}
                       >
-                        💡 Möglicher Treffer im Kundenstamm: <strong>{fuzzyMatch.name}</strong> — klicken zum Übernehmen
+                        💡 Möglicher Treffer im Kundenstamm: <strong>{fuzzyMatch.name}</strong>
+                        {fuzzyMatch.address ? ` — ${fuzzyMatch.address}` : ''} — klicken zum Übernehmen
                       </div>
                     )}
 

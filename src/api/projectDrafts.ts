@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { WorkType } from './workTypes'
 
 export interface DraftMaterial {
   name: string
@@ -16,6 +17,9 @@ export interface ProjectDraftPayload {
   object_address?: string | null
   materials: DraftMaterial[]
   notes?: string | null
+  // Vom Mitarbeiter vor Ort erfasst; belegt beim Umwandeln die Leistungsart des
+  // Projekts vor. Fehlt bei Entwürfen aus der Offline-Queue älterer Versionen.
+  art_der_arbeit?: WorkType[] | null
 }
 
 export interface ProjectDraft extends ProjectDraftPayload {
@@ -56,7 +60,9 @@ export interface ConvertDraftPayload {
   // projects.kontakte gespeichert (siehe Migration 20260516d).
   site_contact_name?: string | null
   site_contact_phone?: string | null
-  art_der_arbeit?: 'Neumontage' | 'Wiedermontage' | 'Umbau' | 'Reparatur' | 'Wartung' | 'Demontage' | null
+  // Mehrfachauswahl wie projects.art_der_arbeit; [] heisst "bewusst keine" und
+  // schlägt die Vorbelegung aus dem Entwurf.
+  art_der_arbeit?: WorkType[] | null
   projektleiter_id?: string | null
   bemerkung?: string | null
   start_date?: string | null

@@ -94,14 +94,41 @@ export function staffShortLabel(s: StaffLite): string {
     .toUpperCase()
 }
 
+// ─── Lead-Monteur ────────────────────────────────────────────────────────────
+// Lead ist der ZUERST angewählte Monteur eines Einsatzes, also `monteur_ids[0]`.
+// Die Auswahlreihenfolge überlebt das Speichern (Postgres-Array, unsortiert
+// geschrieben und gelesen) — es braucht dafür keine eigene Spalte. Rein visuell:
+// der Lead hat keine Sonderrechte, er ist der Ansprechpartner auf der Baustelle.
+//
+// Wird der Lead in der Plantafel per Drag&Drop aus dem Team gezogen, rückt der
+// nächste Monteur nach — das ist gewollt: das Team hat dann eine neue Nummer eins.
+
+// Das Team eines Einsatzes, aufgelöst und in Auswahlreihenfolge. Unbekannte ids
+// (gelöschter Mitarbeiter) fallen raus; Lead ist der erste, der übrig bleibt —
+// sonst hätte ein Einsatz durch eine Karteileiche gar keinen sichtbaren Lead.
+export interface CrewMember {
+  id: string
+  name: string
+  short: string
+  lead: boolean
+}
+
+export function crewMembers(p: Project, staff: StaffLite[]): CrewMember[] {
+  const byId = new Map(staff.map(s => [s.id, s]))
+  return (p.monteur_ids ?? [])
+    .map(id => byId.get(id))
+    .filter((s): s is StaffLite => !!s)
+    .map((s, i) => ({ id: s.id, name: s.name, short: staffShortLabel(s), lead: i === 0 }))
+}
+
 // Kürzel des Termin-Teams, gedeckelt: ein 6-Mann-Einsatz würde sonst den
 // Projektnamen von der Kachel drängen. Was wegfällt, zeigt "+n" an (und die
-// Hover-Karte nennt ohnehin alle Namen).
-export function crewShortLabels(p: Project, staff: StaffLite[], max = 3): string[] {
-  const byId = new Map(staff.map(s => [s.id, s]))
-  const known = (p.monteur_ids ?? []).map(id => byId.get(id)).filter((s): s is StaffLite => !!s)
-  const shown = known.slice(0, max).map(staffShortLabel)
-  if (known.length > max) shown.push(`+${known.length - max}`)
+// Hover-Karte nennt ohnehin alle Namen). Der Lead steht immer an erster Stelle
+// und wird deshalb nie vom Deckel abgeschnitten.
+export function crewShortLabels(p: Project, staff: StaffLite[], max = 3): { label: string; lead: boolean }[] {
+  const known = crewMembers(p, staff)
+  const shown = known.slice(0, max).map(m => ({ label: m.short, lead: m.lead }))
+  if (known.length > max) shown.push({ label: `+${known.length - max}`, lead: false })
   return shown
 }
 
@@ -170,6 +197,9 @@ export function pillExtraLines(p: Project, staff: StaffLite[], fields?: Record<s
   return lines
 }
 
+// Team als Klartext — für title-Attribute und den Text-Fallback. Wer den Lead
+// hervorheben will, nimmt crewMembers() und rendert selbst (ein title-Attribut
+// kann keine Farbe).
 export function projectMonteurNames(p: Project, staff: StaffLite[]): string {
   if (!p.monteur_ids || p.monteur_ids.length === 0) return ''
   const byId = new Map(staff.map(s => [s.id, s.name]))

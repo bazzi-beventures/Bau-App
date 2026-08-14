@@ -5,7 +5,7 @@
 import { createPortal } from 'react-dom'
 import { projectCustomerName } from './ProjectsScreen'
 import {
-  entryTitle, fmtRange, kindSymbol, pillBg, projectMonteurNames,
+  crewMembers, entryTitle, fmtRange, kindSymbol, pillBg,
   type HoverState, type StaffLite,
 } from './scheduleShared'
 
@@ -20,12 +20,14 @@ export default function EventHoverCard({ hover, staff }: { hover: HoverState; st
   const rows: [string, string][] = []
   const kunde = projectCustomerName(p)
   const pl = p.projektleiter_id ? staff.find(s => s.id === p.projektleiter_id)?.name : ''
-  const monteurs = projectMonteurNames(p, staff)
+  // Das Team steht nicht in `rows`: der Lead wird rot hervorgehoben, dafür braucht
+  // es Markup statt eines Strings.
+  const crew = crewMembers(p, staff)
   if (p.object_address) rows.push(['Adresse', p.object_address])
   if (kunde) rows.push(['Kunde', kunde])
   if (pl) rows.push(['Projektleiter', pl])
-  if (monteurs) rows.push(['Monteure', monteurs])
-  if (p.bemerkung) rows.push(['Bemerkung', p.bemerkung])
+  const tailRows: [string, string][] = []
+  if (p.bemerkung) tailRows.push(['Bemerkung', p.bemerkung])
 
   // Rechts neben der Kachel; bei zu wenig Platz nach links kippen. Vertikal an
   // der Kachel ausgerichtet, aber im sichtbaren Bereich gehalten.
@@ -43,6 +45,28 @@ export default function EventHoverCard({ hover, staff }: { hover: HoverState; st
       </div>
       <div className="project-cal-hovercard-time">{fmtRange(p) || 'Ganztägig'}</div>
       {rows.map(([label, value]) => (
+        <div key={label} className="project-cal-hovercard-row">
+          <span className="project-cal-hovercard-label">{label}</span>
+          <span>{value}</span>
+        </div>
+      ))}
+      {crew.length > 0 && (
+        <div className="project-cal-hovercard-row">
+          <span className="project-cal-hovercard-label">Monteure</span>
+          <span>
+            {crew.map((m, i) => (
+              <span key={m.id}>
+                {i > 0 && ', '}
+                <span
+                  className={m.lead ? 'schedule-lead-name' : undefined}
+                  title={m.lead ? 'Lead-Monteur (zuerst gewählt)' : undefined}
+                >{m.name}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
+      {tailRows.map(([label, value]) => (
         <div key={label} className="project-cal-hovercard-row">
           <span className="project-cal-hovercard-label">{label}</span>
           <span>{value}</span>

@@ -3,6 +3,10 @@ import { useEffect } from 'react'
 interface ConfirmDialogProps {
   title: string
   message: React.ReactNode
+  // Nicht blockierender Warnhinweis unter dem Text (z.B. «noch 2 Rechnungen
+  // offen»). Falsy = kein Kasten, damit Aufrufer direkt einen ggf. leeren String
+  // durchreichen können.
+  warning?: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
   onConfirm: () => void
@@ -15,6 +19,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   title,
   message,
+  warning,
   confirmLabel = 'Bestätigen',
   cancelLabel = 'Abbrechen',
   onConfirm,
@@ -44,6 +49,7 @@ export function ConfirmDialog({
       <div className="admin-confirm-box" onClick={e => e.stopPropagation()}>
         <div className="admin-confirm-title">{title}</div>
         <div className="admin-confirm-text">{message}</div>
+        {warning ? <div className="admin-confirm-warning">{warning}</div> : null}
         <div className="admin-confirm-actions">
           <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
           <button className={btnClass} onClick={onConfirm} disabled={busy}>
