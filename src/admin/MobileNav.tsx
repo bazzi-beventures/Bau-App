@@ -216,6 +216,14 @@ export default function MobileNav({ screen, onNav, onLoggedOut, onSwitchToUser, 
                 <button className={`admin-mobile-drawer-item${screen === 'materials' ? ' active' : ''}`} onClick={() => navigate('materials')}>
                   <IconBox /><span>Material / Lager</span>
                 </button>
+                {/* Personal (Funktionen + Stundensätze inkl. Werkstatt-Satz): stand nur in
+                    der Desktop-Sidebar — am Handy war der Bereich gar nicht erreichbar.
+                    Gleiches Management-Gate wie dort. */}
+                {isManagement && (
+                  <button className={`admin-mobile-drawer-item${screen === 'staff-roles' ? ' active' : ''}`} onClick={() => navigate('staff-roles')}>
+                    <IconUsers /><span>Personal</span>
+                  </button>
+                )}
                 {isManagement && (
                   <button className={`admin-mobile-drawer-item${screen === 'pricing-rules' ? ' active' : ''}`} onClick={() => navigate('pricing-rules')}>
                     <IconTag /><span>Lieferantenpreise</span>
