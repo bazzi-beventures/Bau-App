@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError, apiFormFetch, apiUrl, isNetworkError } from '../api/client'
 import { deleteOwnRapport, downloadRapportPdf, fetchProjectReports, ProjectReport } from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
+import SignaturePad from '../chat/SignaturePad'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 import { sortProjectsChronologically } from './projekte/sortProjects'
@@ -255,6 +256,12 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   const [reports, setReports] = useState<ProjectReport[]>([])
   const [deletingReportId, setDeletingReportId] = useState<number | null>(null)
   const [openingReportId, setOpeningReportId] = useState<number | null>(null)
+  // Unterschrift nachtragen: der Kunde ist beim Abschluss auf der Baustelle oft
+  // nicht greifbar, im Chat lässt sich der Schritt überspringen — und der Rapport
+  // blieb danach unsigniert liegen, also unverrechenbar. Hier ist er wieder
+  // erreichbar. Ein Rapport zur Zeit, sonst hat der Monteur zwei Unterschriftsfelder
+  // untereinander und weiss nicht mehr, welches zu welchem Tag gehört.
+  const [signingReportId, setSigningReportId] = useState<number | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<FileCategory>('fotos')
@@ -698,9 +705,14 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 const billed = !!r.invoice_id
                 const signed = !!r.signature_timestamp
                 const canDelete = r.is_own && !billed && !signed
+                // Nachtragen unter denselben Bedingungen wie Löschen: eigener
+                // Rapport, noch ohne Unterschrift, noch nicht verrechnet. Der Server
+                // prüft dieselben Regeln nochmals (409), der Knopf ist nur die
+                // sichtbare Hälfte.
+                const canSign = canDelete
                 return (
+                  <div key={r.id}>
                   <div
-                    key={r.id}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 10,
                       padding: '8px 0', borderTop: '1px solid var(--border, #e5e7eb)',
@@ -736,6 +748,20 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                       >
                         {openingReportId === r.id ? '…' : '📄 Ansehen'}
                       </button>
+                      {canSign && signingReportId !== r.id && (
+                        <button
+                          type="button"
+                          onClick={() => setSigningReportId(r.id)}
+                          style={{
+                            padding: '6px 10px', borderRadius: 8,
+                            border: '1px solid var(--accent-green, #16a34a)', background: 'transparent',
+                            color: 'var(--accent-green, #16a34a)', fontSize: 13, fontWeight: 600,
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          ✍️ Unterschrift
+                        </button>
+                      )}
                       {canDelete && (
                         <button
                           type="button"
@@ -752,6 +778,27 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                         </button>
                       )}
                     </div>
+                  </div>
+                  {signingReportId === r.id && (
+                    <SignaturePad
+                      reportId={r.id}
+                      skipLabel="Abbrechen"
+                      onDone={(justSigned) => {
+                        setSigningReportId(null)
+                        // Die Zeile lokal auf "unterschrieben" setzen: das PDF baut
+                        // der Server im Hintergrund, ein Neuladen der Liste käme zu
+                        // früh und zeigte den Rapport weiter als unsigniert. Der
+                        // Zeitstempel ist damit ein paar Sekunden vor dem in der DB —
+                        // sichtbar ist ohnehin nur der Zustand, nicht die Uhrzeit.
+                        if (justSigned) {
+                          setReports(prev => prev.map(x => x.id === r.id
+                            ? { ...x, signature_timestamp: new Date().toISOString() }
+                            : x))
+                        }
+                      }}
+                      onLoggedOut={onLoggedOut}
+                    />
+                  )}
                   </div>
                 )
               })}

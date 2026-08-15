@@ -985,15 +985,32 @@ describe('ReportCreateForm', () => {
     }
   })
 
+  // ── Einbauort: EIN Feld je Rapport (Migration 20260815) ────────────────
+  // Bis dahin gab es eines je Materialzeile — bei allen Zeilen desselben Einsatzes
+  // derselbe Wert. Jetzt eine Kopfangabe (reports.einbauort), sichtbar nur bei
+  // Mandanten mit Flag `material_standort`.
+
   it('zeigt das Einbauort-Feld nur mit Feature-Flag', async () => {
+    renderForm([makeQuote()])
+
+    expect(screen.queryByLabelText(/Einbauort/)).not.toBeInTheDocument()
+  })
+
+  it('bietet kein Einbauort-Feld je Materialzeile an', async () => {
+    vi.mocked(getMe).mockResolvedValue(
+      { feature_flags: { material_standort: { enabled: true } } } as never,
+    )
     const user = userEvent.setup()
     renderForm([makeQuote()])
 
+    await screen.findByLabelText(/Einbauort/)
     await user.click(screen.getByRole('button', { name: '+ Materialposition' }))
     expect(screen.queryByLabelText('Einbauort 1')).not.toBeInTheDocument()
+    // Genau EIN Feld, egal wie viele Materialzeilen offen sind.
+    expect(screen.getAllByLabelText(/Einbauort/)).toHaveLength(1)
   })
 
-  it('sendet den Einbauort mit, wenn das Flag aktiv ist', async () => {
+  it('sendet den Einbauort als Rapport-Feld, wenn das Flag aktiv ist', async () => {
     vi.mocked(getMe).mockResolvedValue(
       { feature_flags: { material_standort: { enabled: true } } } as never,
     )
@@ -1005,12 +1022,23 @@ describe('ReportCreateForm', () => {
     await user.click(screen.getByRole('button', { name: '+ Materialposition' }))
     await user.selectOptions(await screen.findByLabelText('Material'), 'STG123')
     await user.type(screen.getByLabelText('Materialmenge 1'), '2')
-    await user.type(await screen.findByLabelText('Einbauort 1'), 'Wohnzimmer Süd')
+    await user.type(await screen.findByLabelText(/Einbauort/), 'Wohnzimmer Süd')
     await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
 
     await waitFor(() => expect(postFired()).toBe(true))
-    expect(lastPostBody().materials).toEqual([
-      { art_nr: 'STG123', amount: 2, location: 'Wohnzimmer Süd' },
-    ])
+    expect(lastPostBody().einbauort).toBe('Wohnzimmer Süd')
+    expect(lastPostBody().materials).toEqual([{ art_nr: 'STG123', amount: 2 }])
+  })
+
+  it('schickt ohne Flag gar kein einbauort-Feld', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect('einbauort' in lastPostBody()).toBe(false)
   })
 })

@@ -17,7 +17,8 @@ import { AutoGrowTextarea, RowReorder, useReorder } from './QuoteRowControls'
 import { RichTextField } from '../components/RichTextField'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { SendThankyouDialog } from './SendThankyouDialog'
-import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
+import { parseNum, vkFromEk, factorToPct, pctToFactor, computeTravelCost, round2 } from '../utils/quotePricing'
+import type { TravelCostTable } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
 import { getFeature, isFeatureEnabled } from '../../api/modules'
 import { isQuoteWithoutFeedback, quoteWaitHours } from './quoteFeedback'
@@ -72,22 +73,6 @@ interface Project {
   project_id_text?: string | null
   is_closed?: boolean
   distance_km?: number | null
-}
-
-// Fahrspesen-Tabelle (Default — Mirror von db/invoices.py _DEFAULT_TRAVEL_COST_TABLE).
-// Wird nur zur Preview-Anzeige im Formular verwendet; verbindlich rechnet das Backend.
-const TRAVEL_COST_TABLE: [number, number][] = [
-  [1, 10], [5, 20], [8, 30], [11, 35], [14, 40],
-  [17, 45], [22, 50], [24, 55], [29, 60], [43, 70],
-  [Infinity, 75],
-]
-
-function computeTravelCost(km: number): number {
-  const kmCeil = Math.ceil(km)
-  for (const [threshold, price] of TRAVEL_COST_TABLE) {
-    if (kmCeil <= threshold) return price
-  }
-  return TRAVEL_COST_TABLE[TRAVEL_COST_TABLE.length - 1][1]
 }
 
 interface StaffRole {
@@ -337,6 +322,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   const [reviewMode, setReviewMode] = useState<'pdf' | 'manual'>('pdf')
   // Preisregeln aller Lieferanten — nur die manuelle Erfassung braucht sie (Warengruppe → Aufschlag).
   const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
+  // Wirksame Fahrspesen-Staffelung des Mandanten (Override sonst System-Default).
+  // Kommt vom Backend, damit die Vorschau nicht von der verbindlichen Berechnung
+  // abweicht — vorher stand hier eine hartcodierte Kopie des System-Defaults.
+  const [travelCostTable, setTravelCostTable] = useState<TravelCostTable>([])
   // Zeitstempel des beim Öffnen übernommenen Entwurfs — nur für den Hinweis
   // („Entwurf vom … übernommen"), keine Entscheidung mehr.
   const [restoredAt, setRestoredAt] = useState<number | null>(null)
@@ -390,6 +379,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         // (Nutzer hat nichts getippt und die Checkbox nicht abgewählt).
         setNotes(prev => (prev === STANDARD_NOTES ? text : prev))
       })
+      .catch(() => {})
+    // Wirksame Fahrspesen-Staffelung. Schlaegt der Fetch fehl, bleibt die Tabelle
+    // leer und die Vorschau zeigt keine Pauschale — besser als eine erfundene, von
+    // der das Backend nachher abweicht.
+    apiFetch('/pwa/admin/quote-travel-cost-table')
+      .then(res => setTravelCostTable((res as { travel_cost_table: TravelCostTable }).travel_cost_table ?? []))
       .catch(() => {})
     // Skonto-Vorgabe des Mandanten (pflegbar unter Offert-Vorlagen). Fehler ist
     // unkritisch — dann bleiben die Felder leer wie vor der Vorgabe.
@@ -1010,7 +1005,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
         <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
-          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.05). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
           <div key={i} className="quote-row" {...extraReorder.rowProps(i)}>
@@ -1061,7 +1056,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         const selectedProject = projects.find(p => p.id === projectId) ?? projects.find(p => p.name === projectName)
         const distanceKm = selectedProject?.distance_km ?? null
         const hasDistance = distanceKm !== null && distanceKm !== undefined
-        const travelAmount = hasDistance ? computeTravelCost(Number(distanceKm)) : 0
+        const travelAmount = hasDistance ? computeTravelCost(Number(distanceKm), travelCostTable) : 0
         return (
           <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <legend style={{ fontWeight: 600, padding: '0 8px' }}>Fahrspesen</legend>
@@ -1193,7 +1188,6 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   )
 }
 
-function round2(n: number) { return Math.round(n * 100) / 100 }
 
 // ─── Edit Form ──────────────────────────────────────────────
 
@@ -1616,7 +1610,7 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
       <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
         <legend style={{ fontWeight: 600, padding: '0 8px' }}>Weitere Produkte / Freie Positionen</legend>
         <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--muted)' }}>
-          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.50). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
+          EK + Aufschlag % füllen den Preis automatisch (aufgerundet auf 0.05). EK leer lassen, um den Preis direkt einzutippen. „Option" markiert eine Eventualposition (erscheint auf der Offerte, zählt nicht ins Total).
         </p>
         {extraProducts.map((row, i) => (
           <div key={i} className="quote-row" {...extraReorder.rowProps(i)}>

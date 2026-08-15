@@ -8,6 +8,7 @@ import { UserInfo } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
+import { vkFromEk } from '../utils/quotePricing'
 
 interface Supplier {
   id: string
@@ -176,6 +177,10 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
     setRemoveImage(!!material?.image_path)  // nur löschen, wenn vorher ein Bild da war
   }
 
+  // Nur für den Aufschlag in PROZENT — das ist kein Geldbetrag und wird auf zwei
+  // Stellen gerundet. Der VK dagegen läuft über `vkFromEk` (5-Rappen-Aufrundung,
+  // Pendant zu db.pricing.compute_material_vk): mit round2 zeigte die Maske 448.94,
+  // verrechnet wurden 448.95.
   const round2 = (n: number) => Math.round(n * 100) / 100
   const ekNum = costPrice ? parseFloat(costPrice) : 0
   const hasEk = !isNaN(ekNum) && ekNum > 0
@@ -186,14 +191,14 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
     setCostPrice(v)
     const ek = v ? parseFloat(v) : 0
     if (isNaN(ek) || ek <= 0) return
-    if (markupPct !== '') setTargetVk(String(round2(ek * (1 + parseFloat(markupPct) / 100))))
+    if (markupPct !== '') setTargetVk(String(vkFromEk(ek, parseFloat(markupPct))))
     else if (targetVk !== '') setMarkupPct(String(round2((parseFloat(targetVk) / ek - 1) * 100)))
   }
 
   function onChangeMarkup(v: string) {
     setMarkupPct(v)
     if (!hasEk) return
-    setTargetVk(v !== '' ? String(round2(ekNum * (1 + parseFloat(v) / 100))) : '')
+    setTargetVk(v !== '' ? String(vkFromEk(ekNum, parseFloat(v))) : '')
   }
 
   function onChangeTargetVk(v: string) {

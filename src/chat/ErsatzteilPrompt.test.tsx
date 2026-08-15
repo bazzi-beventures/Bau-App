@@ -66,12 +66,12 @@ describe('ErsatzteilPrompt', () => {
     expect(items).toHaveLength(2)
   })
 
-  // ── Einbauort (Feature `material_standort`) ────────────────────────────
-  // Der Ort ist freiwillig: er erscheint nur bei gewählter Zeile, nur mit Flag,
-  // und ein leeres Feld darf NICHT als '' in der Datenbank landen — sonst liesse
-  // sich «nicht erfasst» nicht mehr von «bewusst leer» unterscheiden.
+  // ── Kein Einbauort je Zeile mehr (Migration 20260815) ──────────────────
+  // Der Ort ist eine Angabe zum ganzen Rapport (reports.einbauort) und wird im Chat
+  // einmal erfragt, bevor dieser Schritt erscheint. Ein Feld je Ersatzteil war
+  // dieselbe Antwort n-mal.
 
-  it('zeigt kein Einbauort-Feld ohne das Flag', async () => {
+  it('zeigt kein Einbauort-Feld je Zeile', async () => {
     mockFetch.mockResolvedValue(LIST)
     const user = userEvent.setup()
     render(<ErsatzteilPrompt onSubmit={vi.fn()} />)
@@ -81,39 +81,19 @@ describe('ErsatzteilPrompt', () => {
     expect(screen.queryByPlaceholderText(/Einbauort/)).not.toBeInTheDocument()
   })
 
-  it('zeigt das Einbauort-Feld erst bei gewählter Zeile', async () => {
-    mockFetch.mockResolvedValue(LIST)
-    const user = userEvent.setup()
-    render(<ErsatzteilPrompt onSubmit={vi.fn()} showLocation />)
-
-    await screen.findByText('Ersatzteile verbraucht?')
-    expect(screen.queryByPlaceholderText(/Einbauort/)).not.toBeInTheDocument()
-    await user.click(screen.getAllByRole('checkbox')[0])
-    expect(screen.getAllByPlaceholderText(/Einbauort/)).toHaveLength(1)
-  })
-
-  it('gibt den erfassten Einbauort mit, leere bleiben weg', async () => {
+  it('schickt keinen Ort an der Position mit', async () => {
     mockFetch.mockResolvedValue(LIST)
     const onSubmit = vi.fn()
     const user = userEvent.setup()
-    render(<ErsatzteilPrompt onSubmit={onSubmit} showLocation />)
+    render(<ErsatzteilPrompt onSubmit={onSubmit} />)
 
     await screen.findByText('Ersatzteile verbraucht?')
-    const checkboxes = screen.getAllByRole('checkbox')
-    await user.click(checkboxes[0])
-    await user.click(checkboxes[1])
-    // Nur bei der ersten Zeile einen Ort eintippen.
-    await user.type(screen.getAllByPlaceholderText(/Einbauort/)[0], 'Wohnzimmer Süd')
+    await user.click(screen.getAllByRole('checkbox')[0])
     await user.click(screen.getByRole('button', { name: /Erfassen/ }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [items] = onSubmit.mock.calls[0]
-    expect(items).toEqual(
-      expect.arrayContaining([
-        { art_nr: 'A1', amount: 1, name: 'Motor', unit: 'Stk', location: 'Wohnzimmer Süd' },
-        { art_nr: 'B2', amount: 1, name: 'Kette', unit: 'm' },
-      ]),
-    )
+    expect(items).toEqual([{ art_nr: 'A1', amount: 1, name: 'Motor', unit: 'Stk' }])
   })
 
   it('sendet bei "Nichts verbraucht" eine leere Liste', async () => {

@@ -13,9 +13,6 @@ export interface SummaryItem {
   amount: number
   unit?: string
   art_nr?: string
-  // Einbauort im Gebäude (material_usage.location). Nur bei Mandanten mit
-  // Feature-Flag `material_standort` und nur, wenn der Monteur ihn genannt hat.
-  location?: string
 }
 
 /**
@@ -41,6 +38,9 @@ export interface ChatResponse {
     date: string
     staff: { name: string; hours: number }[]
     items: SummaryItem[]
+    // Einbauort des Einsatzes (reports.einbauort). Nur bei Mandanten mit
+    // Feature-Flag `material_standort` und nur, wenn der Monteur ihn genannt hat.
+    einbauort?: string
     // Vorauswahl der Leistungsart-Chips (aus dem Projekt geerbt).
     art_der_arbeit?: string[]
   }
@@ -56,9 +56,15 @@ export type ChatStreamEvent =
  *   - { type: 'result', result }    — Terminal-Event mit pending_summary etc.
  *
  * Caller bekommt am Ende garantiert genau ein "result"-Event.
+ *
+ * `project` wird NUR mit der Startnachricht aus dem Projekt-Detail mitgeschickt und
+ * bindet den Rapport server-seitig an genau dieses Projekt. Ohne die Angabe müsste
+ * der Server das Projekt bei jedem Turn aus dem Gesprächsverlauf raten — und lag
+ * daneben, sobald der Monteur nur noch Stunden nachreichte.
  */
-export async function* sendMessageStream(text: string): AsyncGenerator<ChatStreamEvent, void, void> {
-  for await (const raw of apiStreamFetch('/pwa/chat/message', { text })) {
+export async function* sendMessageStream(text: string, project?: string | null): AsyncGenerator<ChatStreamEvent, void, void> {
+  const body = project ? { text, project } : { text }
+  for await (const raw of apiStreamFetch('/pwa/chat/message', body)) {
     const t = raw.type
     if (t === 'delta' && typeof raw.text === 'string') {
       yield { type: 'delta', text: raw.text }
@@ -119,7 +125,7 @@ export async function getCorrectionStatus(correctionId: string): Promise<{ statu
 export interface ConfirmExtras {
   // Vor dem Speichern im Chat gesammelte Zusatz-Positionen.
   kleinmaterial?: { amount_chf: number | null; count: number; scope: string } | null
-  ersatzteile?: { art_nr: string; amount: number; location?: string }[]
+  ersatzteile?: { art_nr: string; amount: number }[]
   // Angekreuzte Leistungsart (reports.art_der_arbeit). undefined = nichts gesagt,
   // dann bleibt die Vorbelegung aus dem Projekt stehen; [] heisst "keine".
   art_der_arbeit?: string[]

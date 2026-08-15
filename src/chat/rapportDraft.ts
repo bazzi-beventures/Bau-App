@@ -31,10 +31,13 @@ export interface RapportDraftState {
   pendingQuoteQuestion: boolean
   pendingSignReportId: number | null
   downloadReportId: number | null
-  // Projekt des laufenden Rapports (aus pending_summary.project). Trägt die
-  // Rückfrage in planRapportStart: tippt der Monteur im selben Projekt erneut auf
-  // «Rapport erstellen», springt er in seinen laufenden Rapport statt ihn zu
-  // verwerfen. Fehlt im Draft (ältere Version) → es wird gefragt.
+  // Projekt des laufenden Rapports. Wird beim Start aus dem Projekt-Detail gesetzt —
+  // nicht erst mit der Zusammenfassung: der Rapport gehört ab dem ersten Klick zu
+  // einem Auftrag, nicht erst ab dem Bestätigungsschritt. `pending_summary.project`
+  // bestätigt ihn später bzw. korrigiert ihn, wenn der Monteur im Gespräch gewechselt
+  // hat. Trägt die Rückfrage in planRapportStart: tippt der Monteur im selben Projekt
+  // erneut auf «Rapport erstellen», springt er in seinen laufenden Rapport statt ihn
+  // zu verwerfen. Fehlt im Draft (ältere Version) → es wird gefragt.
   pendingProject?: string | null
   // Wurde der gespeicherte Rapport vom Kunden unterschrieben (statt übersprungen)?
   // Steuert, ob der Monteur ihn im Abschluss-Schritt noch selbst löschen darf —
@@ -54,7 +57,12 @@ interface StoredDraft extends RapportDraftState {
 }
 
 // Entwürfe, die älter als das sind, gelten als abgelaufen und werden verworfen —
-// verhindert, dass ein tagealter Rapport-Zwischenstand wieder auftaucht.
+// verhindert, dass ein tagealter Rapport-Zwischenstand wieder auftaucht. Die Frist
+// läuft ab der letzten Änderung, nicht ab dem Start: wer am Rapport arbeitet,
+// verliert ihn nicht. Serverseitig hat die Projekt-Bindung dieselbe Lebensdauer
+// (_ACTIVE_PROJECT_TTL in services/pwa_chat_service.py) — die beiden müssen
+// zusammen verfallen, sonst zeigt die PWA einen Rapport an, dessen Projekt der
+// Server nicht mehr kennt.
 export const DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000  // 12 Stunden
 
 // Gleiche Prefix-Konvention wie `quote-draft:` (Offert-Zwischenstand). Pro
@@ -71,7 +79,10 @@ export function isEmptyDraft(d: RapportDraftState): boolean {
   const nothingCollected = !d.collectedKlein && d.collectedErsatz.length === 0
   const nothingPending = !d.pendingConfirm && !d.pendingDisambiguation &&
     !d.pendingQuoteQuestion && d.pendingSignReportId === null && d.downloadReportId === null
-  return onlyGreeting && nothingCollected && nothingPending
+  // Ein zugeordnetes Projekt macht den Entwurf für sich genommen schon nicht mehr
+  // leer: der Monteur hat auf «Rapport erstellen» getippt, und genau diese Bindung
+  // muss den Weg zur Hauptmaske und zurück überleben.
+  return onlyGreeting && nothingCollected && nothingPending && !d.pendingProject
 }
 
 export function saveDraft(userId: string, state: RapportDraftState, now: number): void {

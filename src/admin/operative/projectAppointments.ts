@@ -80,6 +80,19 @@ export function draftPayload(d: AppointmentDraft): Partial<ProjectAppointment> {
   }
 }
 
+// Änderung am Startdatum. Ein eintägiger Termin (Enddatum leer oder gleicher
+// Tag) zieht das Enddatum mit: sichtbar ausgefülltes Feld statt einer Lücke,
+// die wie «noch auszufüllen» aussieht. Fachlich ändert das nichts — '' und
+// «gleicher Tag» gelten vorne wie hinten als eintägig.
+//
+// Ein echter Zeitraum (Ende nach Start) bleibt unangetastet, sonst würde ein
+// mehrtägiger Termin beim Korrigieren des Starts stillschweigend auf einen Tag
+// zusammenfallen; dort greift weiterhin die Prüfung «Enddatum vor Startdatum».
+export function applyStartDate(d: AppointmentDraft, startDate: string): Partial<AppointmentDraft> {
+  const eintaegig = !d.endDate || d.endDate === d.startDate
+  return eintaegig ? { startDate, endDate: startDate } : { startDate }
+}
+
 // ─── Sortierung, Vergleich ───────────────────────────────────────────────
 
 // Chronologisch: frühestes Datum zuerst, ganztägige Termine (ohne Zeit) nach

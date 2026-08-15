@@ -8,9 +8,13 @@ interface Props {
   // Rapport darf danach noch vom Monteur selbst gelöscht werden.
   onDone: (signed: boolean) => void
   onLoggedOut: () => void
+  // Beschriftung des Auswegs. Im Rapport-Abschluss überspringt man einen Schritt;
+  // beim späteren Nachtragen im Projekt-Detail bricht man eine Aktion ab — dort
+  // wäre «Überspringen» irreführend, es gibt nichts mehr zu überspringen.
+  skipLabel?: string
 }
 
-export default function SignaturePad({ reportId, onDone, onLoggedOut }: Props) {
+export default function SignaturePad({ reportId, onDone, onLoggedOut, skipLabel = 'Überspringen' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawing = useRef(false)
   const [isEmpty, setIsEmpty] = useState(true)
@@ -125,7 +129,7 @@ export default function SignaturePad({ reportId, onDone, onLoggedOut }: Props) {
       {status === 'error' && <p className="signature-status-error">❌ {errorMsg}</p>}
       {status !== 'ok' && (
         <button className="signature-skip-btn" onClick={() => onDone(false)}>
-          Überspringen
+          {skipLabel}
         </button>
       )}
     </div>

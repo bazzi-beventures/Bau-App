@@ -27,6 +27,11 @@ interface Props {
   logoUrl?: string
   activeNav: 'rapport' | 'arbeitszeit'
   initialMessage?: string | null
+  // Projekt, mit dem «Rapport erstellen» den Rapport startet. Bindet ihn sofort —
+  // im Draft (überlebt Navigation/Reload) und über die Startnachricht auch
+  // serverseitig. Frei im Chat begonnene Rapporte haben das nicht; deren Projekt
+  // steht erst mit der ersten Zusammenfassung fest.
+  initialProject?: string | null
   onInitialMessageConsumed?: () => void
   onNavHome: () => void
   onNavArbeitszeit: () => void
@@ -42,7 +47,7 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, initialProject, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
@@ -169,7 +174,10 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   useEffect(() => {
     if (!initialMessage || initialSentRef.current) return
     initialSentRef.current = true
-    handleResponseStream(initialMessage)
+    // Bindung SOFORT setzen, nicht erst wenn die Antwort da ist: verlässt der
+    // Monteur den Chat währenddessen, muss der Draft das Projekt schon tragen.
+    if (initialProject) setPendingProject(initialProject)
+    handleResponseStream(initialMessage, initialProject)
     onInitialMessageConsumed?.()
   }, [initialMessage])
 
@@ -184,7 +192,11 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingQuoteQuestion(false)
       // Hauptmaterialien der Zusammenfassung merken (für die Gesamt-Übersicht)
       setSummaryItems(res.pending_summary?.items ?? [])
-      setPendingProject(res.pending_summary?.project ?? null)
+      // Die Zusammenfassung bestätigt das Projekt (oder korrigiert es, wenn der
+      // Monteur im Gespräch gewechselt hat). Fehlt es dort, bleibt die bestehende
+      // Bindung stehen — sie hier auf null zu setzen hiesse, den Rapport wieder
+      // heimatlos zu machen.
+      setPendingProject(prev => res.pending_summary?.project ?? prev)
       // Neue Bestätigung → Zwischenschritte zurücksetzen
       setKleinCollected(false)
       setErsatzCollected(false)
@@ -250,7 +262,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
    * leer — der Spinner zeigt sich währenddessen — und wird am Ende mit dem
    * vollen Reply ersetzt.
    */
-  async function handleResponseStream(userText: string) {
+  async function handleResponseStream(userText: string, startProject?: string | null) {
     addMessage({ role: 'user', text: userText, timestamp: now() })
     const botId = nextId()
     setMessages(prev => [...prev, { id: botId, role: 'bot', text: '', timestamp: now() }])
@@ -258,7 +270,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     let sawDelta = false
     try {
       let finalRes: ChatResponse | null = null
-      for await (const ev of sendMessageStream(userText)) {
+      for await (const ev of sendMessageStream(userText, startProject)) {
         if (ev.type === 'delta') {
           sawDelta = true
           // Spinner ausblenden, sobald der erste Token kommt
@@ -313,12 +325,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     try {
       const res = await confirmReport({
         kleinmaterial: collectedKlein,
-        ersatzteile: collectedErsatz.map(it => ({
-          art_nr: it.art_nr, amount: it.amount,
-          // Einbauort nur mitschicken, wenn erfasst — das Backend behandelt
-          // undefined und '' gleich, undefined ist die ehrlichere Aussage.
-          ...(it.location ? { location: it.location } : {}),
-        })),
+        ersatzteile: collectedErsatz.map(it => ({ art_nr: it.art_nr, amount: it.amount })),
         art_der_arbeit: collectedWorkTypes,
       })
       addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
@@ -334,6 +341,19 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   async function handleCancel() {
     setPendingConfirm(false)
     setPendingDisambiguation(false)
+    // Ausdrücklicher Abbruch: die Bindung ans Projekt endet hier — und nur hier
+    // (sonst erst mit dem Ablauf des Entwurfs). Der Server räumt in cancelReport
+    // dasselbe ab; bliebe die Bindung im Client stehen, spränge «Rapport erstellen»
+    // danach in einen Rapport zurück, den es nicht mehr gibt.
+    setPendingProject(null)
+    setKleinCollected(false)
+    setErsatzCollected(false)
+    setCollectedKlein(null)
+    setCollectedErsatz([])
+    setWorkTypesCollected(false)
+    setCollectedWorkTypes([])
+    setSuggestedWorkTypes([])
+    setSummaryItems([])
     setLoading(true)
     try {
       const res = await cancelReport()
@@ -499,7 +519,6 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
         {/* Vor dem Speichern: Ersatzteil-Schritt (nach Kleinmaterial, Feature aktiv) */}
         {ersatzStepPending && !loading && (
           <ErsatzteilPrompt
-            showLocation={isFeatureEnabled(user, 'material_standort')}
             onSubmit={(items) => { setCollectedErsatz(items); setErsatzCollected(true) }}
           />
         )}
@@ -540,8 +559,6 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                     <div key={`main-${i}`} className="ersatzteil-row">
                       <span className="ersatzteil-name">
                         {it.art_nr ? <span className="ersatzteil-artnr">{it.art_nr}</span> : null} {it.name}
-                        {/* Einbauort nur zeigen, wenn erfasst — er ist freiwillig. */}
-                        {it.location ? <span className="ersatzteil-location-tag">{it.location}</span> : null}
                       </span>
                       <span>{it.amount} {it.unit ?? ''}</span>
                     </div>
@@ -556,7 +573,6 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                     <div key={it.art_nr} className="ersatzteil-row">
                       <span className="ersatzteil-name">
                         <span className="ersatzteil-artnr">{it.art_nr}</span> {it.name}
-                        {it.location ? <span className="ersatzteil-location-tag">{it.location}</span> : null}
                       </span>
                       <span>{it.amount} {it.unit}</span>
                     </div>

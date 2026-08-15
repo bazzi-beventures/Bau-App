@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch, ApiError, apiUrl } from '../api/client'
 import { QUOTE_STATUS_LABELS } from '../admin/constants/statuses'
+import { groupQuotesByProject, quoteCountLabel } from './offerten/groupQuotes'
 
 interface Quote {
   id: number
@@ -69,18 +70,7 @@ export default function OffertenScreen({ logoUrl, onNavHome, onNavArbeitszeit, o
   }, [])
 
   // Nach Projekt gruppieren (Reihenfolge = neueste Offerte zuerst, vom Backend sortiert)
-  const groups: { project: string; quotes: Quote[] }[] = []
-  const groupIndex = new Map<string, number>()
-  quotes.forEach(q => {
-    const key = q.project_name || '—'
-    let idx = groupIndex.get(key)
-    if (idx === undefined) {
-      idx = groups.length
-      groupIndex.set(key, idx)
-      groups.push({ project: key, quotes: [] })
-    }
-    groups[idx].quotes.push(q)
-  })
+  const groups = groupQuotesByProject(quotes)
 
   return (
     <div className="app-screen">
@@ -98,16 +88,22 @@ export default function OffertenScreen({ logoUrl, onNavHome, onNavArbeitszeit, o
           <div className="projekte-empty">Keine Offerten zu deinen Projekten vorhanden.</div>
         )}
 
+        {/* Der Projektname führt die Gruppe an, nicht die Offertennummer: der
+            Monteur sucht den Auftrag, an dem er heute steht — OF-2026-91 ist eine
+            Bürogrösse. Die Nummer bleibt sichtbar (sie nennt er dem Büro am
+            Telefon), aber klein. */}
         {!loading && groups.map(group => (
           <div key={group.project} className="projekte-group" style={{ marginBottom: 16 }}>
-            <div className="projekte-group-header">
-              <span className="projekte-group-date">{group.project}</span>
-              <span className="projekte-group-line" />
+            <div className="offerten-group-header">
+              <div className={`offerten-group-title${group.project ? '' : ' offerten-group-title-empty'}`}>
+                {group.project || 'Ohne Projekt'}
+              </div>
+              <div className="offerten-group-count">{quoteCountLabel(group.quotes.length)}</div>
             </div>
             {group.quotes.map(q => (
               <div key={q.id} className="projekte-detail-card" style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{q.quote_number}</span>
+                  <span className="offerten-quote-number">{q.quote_number}</span>
                   <span
                     className="projekte-detail-badge"
                     style={{ background: STATUS_COLORS[q.status] || '#64748b', color: '#fff' }}

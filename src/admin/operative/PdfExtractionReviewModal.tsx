@@ -375,7 +375,7 @@ export function PdfExtractionReviewModal({
         </div>
         <p style={{ marginTop: 0, marginBottom: 16, color: 'var(--muted, #666)', fontSize: 12 }}>
           {isManual
-            ? 'EK = dein Einkaufspreis. VK = EK × (1 + Aufschlag), aufgerundet auf 0.50. Lieferant + Warengruppe wählen lädt den Aufschlag automatisch.'
+            ? 'EK = dein Einkaufspreis. VK = EK × (1 + Aufschlag), aufgerundet auf 0.05. Lieferant + Warengruppe wählen lädt den Aufschlag automatisch.'
             : 'EK = Netto aus der Lieferanten-Offerte. VK = EK × (1 + Aufschlag). Warengruppe wählen lädt den Aufschlag aus den Lieferanten-Preisregeln.'}
         </p>
 

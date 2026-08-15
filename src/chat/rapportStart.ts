@@ -21,7 +21,12 @@ function hasUnfinishedRapport(draft: RapportDraftState): boolean {
   // pendingConfirm: erfasst, aber noch nicht gespeichert — echter Datenverlust.
   // pendingSignReportId: gespeichert, aber die Unterschrift steht noch aus — der
   // Rapport bliebe unsigniert liegen.
-  return draft.pendingConfirm || draft.pendingSignReportId !== null
+  if (draft.pendingConfirm || draft.pendingSignReportId !== null) return true
+  // Auch der Rapport MITTEN im Erfassen zählt: Projekt zugeordnet und das Gespräch
+  // hat begonnen. Vorher galt nur der Bestätigungsschritt als "unfertig" — wer nach
+  // den ersten Stunden kurz aufs Projekt schaute und über denselben Knopf zurückging,
+  // startete deshalb still einen zweiten Rapport, statt in seinen zurückzukehren.
+  return !!draft.pendingProject && draft.messages.length > 1
 }
 
 export function planRapportStart(

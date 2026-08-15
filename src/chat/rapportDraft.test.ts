@@ -46,6 +46,18 @@ describe('rapportDraft', () => {
     expect(isEmptyDraft(s)).toBe(false)
   })
 
+  // Die Projekt-Bindung entsteht mit dem Tippen auf «Rapport erstellen» — also
+  // bevor eine Antwort da ist. Zählte dieser Zustand als leer, verlöre der Entwurf
+  // das Projekt genau in dem Moment, in dem er es bekommt.
+  it('isEmptyDraft: zugeordnetes Projekt allein macht den Entwurf nicht leer', () => {
+    expect(isEmptyDraft(baseState({ pendingProject: 'Test 09.08.' }))).toBe(false)
+  })
+
+  it('persistiert das Projekt des laufenden Rapports über Save/Load', () => {
+    saveDraft(USER, baseState({ pendingProject: 'Test 09.08.' }), NOW)
+    expect(loadDraft(USER, NOW)?.pendingProject).toBe('Test 09.08.')
+  })
+
   it('speichert einen nicht-leeren Draft und lädt ihn zurück', () => {
     const s = baseState({
       pendingConfirm: true,

@@ -61,6 +61,40 @@ describe('planRapportStart', () => {
     const plan = planRapportStart(draft({ pendingConfirm: true }), 'Test 09.08.')
     expect(plan).toEqual({ kind: 'confirm-discard', pendingProject: null })
   })
+
+  // Der Fall, der den Rapport mitten im Erfassen zerriss: der Monteur hat Stunden
+  // getippt, aber die Zusammenfassung steht noch nicht (pendingConfirm=false). Das
+  // galt bisher als "nichts Unfertiges" — der Knopf begann einen zweiten Rapport,
+  // im Zweifel auf einem anderen Projekt.
+  const inArbeit = (project: string) => draft({
+    pendingProject: project,
+    messages: [
+      { id: 1, role: 'bot', text: 'Hallo', timestamp: '08:00' },
+      { id: 2, role: 'user', text: 'Neuer Rapport für Projekt "Test 09.08."', timestamp: '08:01' },
+      { id: 3, role: 'bot', text: 'Wie viele Stunden?', timestamp: '08:01' },
+    ],
+  })
+
+  it('springt in den laufenden Rapport zurück, auch ohne Zusammenfassung', () => {
+    expect(planRapportStart(inArbeit('Test 09.08.'), 'Test 09.08.')).toEqual({ kind: 'resume' })
+  })
+
+  it('fragt nach, bevor ein angefangener Rapport für ein anderes Projekt weicht', () => {
+    expect(planRapportStart(inArbeit('MFH Sonnhalde'), 'Test 09.08.')).toEqual({
+      kind: 'confirm-discard', pendingProject: 'MFH Sonnhalde',
+    })
+  })
+
+  it('startet normal, wenn nur die Begrüssung dasteht', () => {
+    const plan = planRapportStart(
+      draft({
+        pendingProject: 'Test 09.08.',
+        messages: [{ id: 1, role: 'bot', text: 'Hallo', timestamp: '08:00' }],
+      }),
+      'Test 09.08.',
+    )
+    expect(plan).toEqual({ kind: 'start' })
+  })
 })
 
 describe('discardPrompt', () => {

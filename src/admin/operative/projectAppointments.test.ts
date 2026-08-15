@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  AppointmentDraft, apptToDraft, diffAppointments, draftPayload, draftTeamNames, draftTitle,
-  emptyDraft, fmtDraftWhen, nextAppointment, normalizeDrafts, sortDrafts, todayISO, validateDrafts,
+  AppointmentDraft, applyStartDate, apptToDraft, diffAppointments, draftPayload, draftTeamNames,
+  draftTitle, emptyDraft, fmtDraftWhen, nextAppointment, normalizeDrafts, sortDrafts, todayISO,
+  validateDrafts,
 } from './projectAppointments'
 import type { ProjectAppointment } from '../../api/admin'
 
@@ -49,6 +50,28 @@ describe('draftPayload', () => {
   it('schickt das Freitext-Label nur beim Typ «sonstiges»', () => {
     expect(draftPayload(draft({ kind: 'montage', label: 'Rest' })).label).toBe('')
     expect(draftPayload(draft({ kind: 'sonstiges', label: '  Besprechung ' })).label).toBe('Besprechung')
+  })
+})
+
+describe('applyStartDate', () => {
+  it('füllt ein leeres Enddatum mit dem Startdatum', () => {
+    expect(applyStartDate(draft({ startDate: '', endDate: '' }), '2026-08-18'))
+      .toEqual({ startDate: '2026-08-18', endDate: '2026-08-18' })
+  })
+
+  it('zieht ein eintägiges Enddatum mit, wenn der Start verschoben wird', () => {
+    expect(applyStartDate(draft({ startDate: '2026-08-18', endDate: '2026-08-18' }), '2026-08-25'))
+      .toEqual({ startDate: '2026-08-25', endDate: '2026-08-25' })
+  })
+
+  it('lässt einen echten Zeitraum stehen', () => {
+    expect(applyStartDate(draft({ startDate: '2026-08-18', endDate: '2026-08-20' }), '2026-08-19'))
+      .toEqual({ startDate: '2026-08-19' })
+  })
+
+  it('räumt das mitgezogene Enddatum wieder ab, wenn der Start geleert wird', () => {
+    expect(applyStartDate(draft({ startDate: '2026-08-18', endDate: '2026-08-18' }), ''))
+      .toEqual({ startDate: '', endDate: '' })
   })
 })
 

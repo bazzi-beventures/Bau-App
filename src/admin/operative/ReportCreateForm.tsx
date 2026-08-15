@@ -76,8 +76,6 @@ interface StaffRow {
 interface MaterialRow {
   artNr: string
   amount: string
-  // Einbauort (Freitext), nur bei Mandanten mit Feature-Flag `material_standort`.
-  location: string
 }
 
 // Klein-/Schmiermaterial-Pauschale: eine optionale Zeile. Wird nur mitgeschickt,
@@ -168,8 +166,10 @@ export interface ReportEditPayload {
   beratung?: boolean | null
   is_warranty?: boolean | null
   art_der_arbeit?: string[] | null
+  // Einbauort des Einsatzes (reports.einbauort). null = nicht erfasst.
+  einbauort?: string | null
   staff: { staff_id: string | null; name: string; hours: number; hour_type: string }[]
-  materials: { art_nr: string; amount: number; item_name?: string; location?: string }[]
+  materials: { art_nr: string; amount: number; item_name?: string }[]
   kleinmaterial: { item_name: string; count: number; amount_chf: number } | null
   fixed_materials: { item_name: string; amount: number; unit: string; unit_price: number }[]
   editable?: boolean
@@ -238,8 +238,10 @@ export function ReportCreateForm({
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
     )
   }
-  // Einbauort je Materialzeile ist tenant-spezifisch (Flag `material_standort`).
-  const [locationEnabled, setLocationEnabled] = useState(false)
+  // Einbauort des Einsatzes — EIN Feld je Rapport (reports.einbauort), nicht mehr
+  // eines je Materialzeile. Tenant-spezifisch (Flag `material_standort`).
+  const [einbauortEnabled, setEinbauortEnabled] = useState(false)
+  const [einbauort, setEinbauort] = useState('')
   // Material ist optional: standardmässig keine Zeile. Der Katalog wird erst geladen,
   // wenn der Nutzer die erste Materialposition hinzufügt (lazy) — ein Rapport ohne
   // Material verursacht so keinen Katalog-Fetch (~4'500 Artikel bei Stobag).
@@ -294,8 +296,8 @@ export function ReportCreateForm({
 
   useEffect(() => {
     getMe()
-      .then(me => setLocationEnabled(isFeatureEnabled(me, 'material_standort')))
-      // Fehler ist unkritisch: ohne Flag fehlt nur die Zusatzspalte, der Rest des
+      .then(me => setEinbauortEnabled(isFeatureEnabled(me, 'material_standort')))
+      // Fehler ist unkritisch: ohne Flag fehlt nur das Einbauort-Feld, der Rest des
       // Formulars funktioniert unverändert.
       .catch(() => {})
   }, [])
@@ -317,6 +319,7 @@ export function ReportCreateForm({
         setBeratung(!!r.beratung)
         setIsWarranty(!!r.is_warranty)
         setArtDerArbeit(WORK_TYPES.map(w => w.value).filter(v => (r.art_der_arbeit ?? []).includes(v)))
+        setEinbauort(r.einbauort ?? '')
         setRows(
           (r.staff ?? []).map(s => ({
             // Zeilen aus der Zeit vor der staff_id (oder von gelöschtem Personal)
@@ -328,9 +331,7 @@ export function ReportCreateForm({
           })),
         )
         const mats = r.materials ?? []
-        setMaterialRows(mats.map(m => ({
-          artNr: m.art_nr, amount: numToField(m.amount), location: m.location ?? '',
-        })))
+        setMaterialRows(mats.map(m => ({ artNr: m.art_nr, amount: numToField(m.amount) })))
         // Der Katalog wird sonst erst beim Klick auf «+ Materialposition» geladen —
         // ohne ihn zeigte die Combobox der geladenen Zeilen keinen Artikelnamen.
         if (mats.length > 0) ensureMaterialsLoaded()
@@ -407,7 +408,7 @@ export function ReportCreateForm({
   }
   function addMaterialRow() {
     ensureMaterialsLoaded()
-    setMaterialRows(rs => [...rs, { artNr: '', amount: '', location: '' }])
+    setMaterialRows(rs => [...rs, { artNr: '', amount: '' }])
   }
   function removeMaterialRow(i: number) {
     setMaterialRows(rs => rs.filter((_, j) => j !== i))
@@ -537,15 +538,7 @@ export function ReportCreateForm({
     }
     const materialItems = materialRows
       .filter(r => r.artNr && parseNum(r.amount) > 0)
-      .map(r => {
-        const item: { art_nr: string; amount: number; location?: string } = {
-          art_nr: r.artNr, amount: parseNum(r.amount),
-        }
-        // Nur senden, wenn gefüllt — ein leerer Ort ist kein Ort.
-        const location = r.location.trim()
-        if (location) item.location = location
-        return item
-      })
+      .map(r => ({ art_nr: r.artNr, amount: parseNum(r.amount) }))
 
     // Klein-/Schmiermaterial: der Betrag ist der Auslöser (die Menge hat einen
     // Default und aktiviert die Pauschale nicht allein). Ist ein Betrag erfasst,
@@ -608,7 +601,8 @@ export function ReportCreateForm({
         beratung: boolean
         is_warranty: boolean
         art_der_arbeit: string[]
-        materials?: { art_nr: string; amount: number; location?: string }[]
+        einbauort?: string
+        materials?: { art_nr: string; amount: number }[]
         kleinmaterial?: { item_name: string; count: number; amount_chf: number }
         fixed_materials?: { item_name: string; amount: number; unit: string; unit_price: number }[]
       } = {
@@ -627,6 +621,11 @@ export function ReportCreateForm({
         // Feld vom Projekt. Eine leer geräumte Leiste ist eine Aussage.
         art_der_arbeit: artDerArbeit,
       }
+      // Einbauort nur bei aktivem Flag mitschicken — ohne es hat der Projektleiter
+      // gar kein Feld gesehen. Der (auch leere) String geht dann immer mit: beim
+      // Bearbeiten ist ein geleertes Feld eine Aussage und löscht den Ort, während
+      // ein fehlender Key den Bestandswert stehen liesse.
+      if (einbauortEnabled) payload.einbauort = einbauort.trim()
       if (materialItems.length > 0) payload.materials = materialItems
       if (fixedMaterials.length > 0) payload.fixed_materials = fixedMaterials
       if (kleinEngaged && kleinCount > 0 && kleinAmount > 0) {
@@ -710,6 +709,32 @@ export function ReportCreateForm({
           onChange={e => setReportDate(e.target.value)}
         />
       </div>
+
+      {/* Einbauort — die Zeile unter «Produkt» auf dem gedruckten Blatt. EIN Feld
+          für den ganzen Rapport: bis 20260815 hing der Ort an jeder Materialzeile,
+          war dort aber bei allen Zeilen desselben Einsatzes derselbe. Nur bei
+          Mandanten mit Flag `material_standort`. */}
+      {einbauortEnabled && (
+        <div style={{ marginBottom: 20 }}>
+          {/* Der InfoHint steht NEBEN dem Label, nicht darin: ein <button> im
+              <label> zählt selbst als beschriftetes Element — ein Klick auf das ⓘ
+              würde ins Eingabefeld springen (und macht die Beschriftung mehrdeutig). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <label className="admin-form-label" htmlFor="report-einbauort" style={{ marginBottom: 0 }}>
+              Einbauort
+            </label>
+            <InfoHint text="Wo im Gebäude gearbeitet wurde (z. B. «Wohnzimmer Süd»). Freiwillig — leer lassen, wenn nichts vermerkt ist. Die Angabe erscheint auf dem Rapport und als Zusatz bei den Materialpositionen der Rechnung." />
+          </div>
+          <input
+            id="report-einbauort"
+            className="admin-form-input"
+            placeholder="z. B. Wohnzimmer Süd"
+            maxLength={120}
+            value={einbauort}
+            onChange={e => setEinbauort(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Leistungsart — die obere Ankreuzleiste des gedruckten Blattes. Bis zur
           Migration 20260809 gab es dafür kein Feld: was der Monteur angekreuzt hatte,
@@ -904,17 +929,6 @@ export function ReportCreateForm({
                 value={row.amount}
                 onChange={e => updateMaterialRow(i, { amount: e.target.value })}
               />
-              {locationEnabled && (
-                <input
-                  className="admin-form-input"
-                  style={{ flex: '1 1 140px', minWidth: 0 }}
-                  placeholder="Einbauort"
-                  maxLength={60}
-                  aria-label={`Einbauort ${i + 1}`}
-                  value={row.location}
-                  onChange={e => updateMaterialRow(i, { location: e.target.value })}
-                />
-              )}
               {/* Preis erst ab gewähltem Artikel: VK je Einheit, und sobald eine
                   Menge dasteht zusätzlich die Zeilensumme. */}
               {mat && (

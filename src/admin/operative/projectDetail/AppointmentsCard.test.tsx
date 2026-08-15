@@ -89,6 +89,15 @@ describe('AppointmentsCard', () => {
     expect(onChange.mock.calls[0][0][0]).toMatchObject({ key: 'a-1', kind: 'aufmass' })
   })
 
+  it('setzt beim Startdatum das leere Enddatum auf denselben Tag', () => {
+    const onChange = setup([draft({ startDate: '', endDate: '' })])
+    fireEvent.click(screen.getByText('Montage'))
+    fireEvent.change(screen.getByLabelText('Start (Datum)'), { target: { value: '2026-08-18' } })
+    expect(onChange.mock.calls[0][0][0]).toMatchObject({
+      startDate: '2026-08-18', endDate: '2026-08-18',
+    })
+  })
+
   it('schaltet das Termin-Team erst nach «eigenes Team» frei', () => {
     const onChange = setup([draft()])
     fireEvent.click(screen.getByText('Montage'))

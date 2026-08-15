@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { AppointmentKind } from '../../../api/admin'
 import {
-  AppointmentDraft, draftTeamNames, draftTitle, emptyDraft, fmtDraftWhen,
+  AppointmentDraft, applyStartDate, draftTeamNames, draftTitle, emptyDraft, fmtDraftWhen,
   nextAppointment, todayISO,
 } from '../projectAppointments'
 
@@ -147,7 +147,7 @@ export default function AppointmentsCard({ appointments, onChange, staff, projec
                         className="admin-form-input" type="date"
                         aria-label="Start (Datum)"
                         value={d.startDate}
-                        onChange={e => patch(d.key, { startDate: e.target.value })}
+                        onChange={e => patch(d.key, applyStartDate(d, e.target.value))}
                       />
                     </div>
                     <div className="admin-form-group" style={{ margin: 0 }}>

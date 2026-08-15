@@ -7,15 +7,10 @@ export interface ErsatzteilSelection {
   amount: number
   name: string
   unit: string
-  // Einbauort im Gebäude (Freitext, z.B. «Wohnzimmer Süd»). Nur bei Mandanten mit
-  // Feature-Flag `material_standort`; leer = nicht erfasst (kein Pflichtfeld).
-  location?: string
 }
 
 interface Props {
   onSubmit: (items: ErsatzteilSelection[]) => void
-  /** Einbauort-Feld je gewählter Zeile einblenden (Flag `material_standort`). */
-  showLocation?: boolean
 }
 
 // Vor dem Speichern: Mitarbeiter wählt aus der kuratierten Ersatzteil-Liste
@@ -23,10 +18,12 @@ interface Props {
 // via onSubmit nach oben — die Buchung (verrechenbar + Lagerabbuchung) passiert
 // zusammen mit dem Rapport beim Bestätigen. Feature `ersatzteil_prompt` — die Liste
 // kommt vom Backend (leer ⇒ Schritt überspringen).
-export default function ErsatzteilPrompt({ onSubmit, showLocation = false }: Props) {
+//
+// Kein Einbauort-Feld mehr je Zeile (bis 20260815): der Ort ist eine Angabe zum
+// ganzen Rapport und wird im Chat einmal erfragt, bevor dieser Schritt erscheint.
+export default function ErsatzteilPrompt({ onSubmit }: Props) {
   const [items, setItems] = useState<FrequentMaterialOption[]>([])
   const [qty, setQty] = useState<Record<string, number>>({})  // art_nr -> Menge (0 = nicht gewählt)
-  const [loc, setLoc] = useState<Record<string, string>>({})  // art_nr -> Einbauort (leer = nicht erfasst)
   const [loading, setLoading] = useState(true)
   const [galleryCount, setGalleryCount] = useState(0)  // Anzahl aktiver Katalog-Artikel (>0 ⇒ Katalog-Button)
   const [showPicker, setShowPicker] = useState(false)
@@ -83,16 +80,9 @@ export default function ErsatzteilPrompt({ onSubmit, showLocation = false }: Pro
   function submit() {
     const selected: ErsatzteilSelection[] = items
       .filter(m => (qty[m.art_nr] || 0) > 0)
-      .map(m => {
-        const row: ErsatzteilSelection = {
-          art_nr: m.art_nr, amount: qty[m.art_nr], name: m.name, unit: m.unit,
-        }
-        // Leer lassen statt '' mitschicken: der Ort ist freiwillig, ein leerer
-        // String wäre in der DB nicht von «nicht erfasst» zu unterscheiden.
-        const where = (loc[m.art_nr] || '').trim()
-        if (showLocation && where) row.location = where
-        return row
-      })
+      .map(m => ({
+        art_nr: m.art_nr, amount: qty[m.art_nr], name: m.name, unit: m.unit,
+      }))
     onSubmit(selected)
   }
 
@@ -152,16 +142,6 @@ export default function ErsatzteilPrompt({ onSubmit, showLocation = false }: Pro
                   >+</button>
                   <span className="ersatzteil-unit">{m.unit}</span>
                 </div>
-              )}
-              {checked && showLocation && (
-                <input
-                  className="ersatzteil-location"
-                  type="text"
-                  maxLength={60}
-                  placeholder="Einbauort (optional), z.B. Wohnzimmer Süd"
-                  value={loc[m.art_nr] || ''}
-                  onChange={e => setLoc(prev => ({ ...prev, [m.art_nr]: e.target.value }))}
-                />
               )}
             </div>
           )

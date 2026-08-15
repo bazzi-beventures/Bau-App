@@ -88,6 +88,7 @@ export default function App() {
   const [canton, setCanton] = useState('ZH')
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
   const [rapportInitialMessage, setRapportInitialMessage] = useState<string | null>(null)
+  const [rapportInitialProject, setRapportInitialProject] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
   const [pushMsg, setPushMsg] = useState<{ title: string; body: string } | null>(null)
@@ -213,6 +214,10 @@ export default function App() {
       if (userId) clearDraft(userId)
     }
 
+    // Projektname zusätzlich als eigenes Feld, nicht nur im Text: der Server bindet
+    // den Rapport daran (Stammdaten-Abgleich statt Wort-Erkennung), damit spätere
+    // Nachrichten — "8 Stunden für Peter" — den Auftrag nicht mehr wechseln können.
+    setRapportInitialProject(projectName)
     setRapportInitialMessage(`Neuer Rapport für Projekt "${projectName}"`)
     setScreen('rapport')
   }
@@ -429,7 +434,8 @@ export default function App() {
         logoUrl={effectiveLogo}
         activeNav="rapport"
         initialMessage={rapportInitialMessage}
-        onInitialMessageConsumed={() => setRapportInitialMessage(null)}
+        initialProject={rapportInitialProject}
+        onInitialMessageConsumed={() => { setRapportInitialMessage(null); setRapportInitialProject(null) }}
         onNavHome={() => setScreen('home')}
         onNavArbeitszeit={() => setScreen('arbeitszeit')}
         onNavProjekte={() => setScreen('projekte')}
