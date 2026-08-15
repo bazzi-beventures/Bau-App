@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { PdfExtractionReviewModal, PdfExtractionResponse, ConfirmedExtraProduct, ConfirmedPosition, SupplierPricingRule } from './PdfExtractionReviewModal'
 import { QUOTE_STATUS_LABELS, QUOTE_STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
+import { UnsavedChangesDialog } from '../components/UnsavedChangesDialog'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset, pdfUploadErrorMessage } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
@@ -203,9 +204,17 @@ const STATUS_BADGE = QUOTE_STATUS_BADGE
 // ─── Auto-Entwurf (lokaler Zwischenstand) ───────────────────
 // Der noch nicht abgeschickte Offert-Entwurf wird laufend in localStorage
 // gehalten (pro Projekt ein Slot), damit ein versehentliches Schliessen des
-// Fensters die Eingaben nicht verliert. Beim erneuten Öffnen bietet ein Banner
-// die Wiederherstellung an. Gelöscht wird beim erfolgreichen Erstellen oder per
-// «Verwerfen». Neuer Key → in storageMigrations.isKnownKey whitelisten.
+// Fensters die Eingaben nicht verliert.
+//
+// Bewusst „Entwurf zuerst": beim Öffnen wird ein vorhandener Entwurf ohne
+// Rückfrage in das (noch leere) Formular übernommen — die Entscheidung fällt
+// erst beim Verlassen («Entwurf behalten» / «verwerfen»). Andersherum (beim
+// Öffnen fragen, beim Verlassen still wegwerfen) verliert, wer die Frage
+// falsch wegklickt, seine Eingaben — genau das soll nicht passieren.
+//
+// Gelöscht wird beim erfolgreichen Erstellen, per «Verwerfen» und beim
+// Verlassen eines leeren Formulars. Neuer Key → in storageMigrations.isKnownKey
+// whitelisten.
 const QUOTE_DRAFT_PREFIX = 'quote-draft:'
 
 // Gibt es für dieses Projekt einen laufenden (noch nicht abgeschickten) Entwurf?
@@ -233,10 +242,20 @@ interface QuoteDraft {
   useStandardNotes: boolean
 }
 
+// Skonto-Vorgabe des Mandanten (Offert-Vorlagen), mit der das Formular startet.
+// Leere Strings = keine Vorgabe.
+export interface SkontoDefaults { pct: string; days: string }
+const NO_SKONTO_DEFAULTS: SkontoDefaults = { pct: '', days: '' }
+
 // Hat der Entwurf überhaupt nennenswerten Inhalt? Leere Default-Formulare
-// (eine leere Lohn-/Materialzeile, Standard-Bemerkungen) zählen NICHT — so wird
-// kein leerer Entwurf gespeichert und das Restore-Banner bleibt aus.
-function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
+// (eine leere Lohn-/Materialzeile, Standard-Bemerkungen, die Skonto-Vorgabe des
+// Mandanten) zählen NICHT — so wird kein leerer Entwurf gespeichert und das
+// Restore-Banner bleibt aus.
+export function quoteDraftHasContent(
+  d: QuoteDraft,
+  stdNotes: string,
+  skontoDefaults: SkontoDefaults = NO_SKONTO_DEFAULTS,
+): boolean {
   return (
     d.laborRows.some(r => r.description.trim() || r.quantity.trim()) ||
     d.materialRows.some(r => r.art_nr.trim() || r.quantity.trim()) ||
@@ -248,15 +267,18 @@ function quoteDraftHasContent(d: QuoteDraft, stdNotes: string): boolean {
     !!d.laborDiscount.trim() ||
     !!d.materialDiscount.trim() ||
     !!d.fixedPrice?.trim() ||
-    !!d.skontoPct?.trim() ||
-    !!d.skontoDays?.trim() ||
+    // Nur eine Abweichung von der Vorgabe zählt: sonst wäre jedes frisch geöffnete
+    // Formular mit Skonto-Vorgabe sofort ein "Entwurf" (Restore-Banner, obwohl
+    // niemand etwas eingegeben hat).
+    (d.skontoPct ?? '').trim() !== skontoDefaults.pct ||
+    (d.skontoDays ?? '').trim() !== skontoDefaults.days ||
     (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
   )
 }
 
 // ─── Create Form ────────────────────────────────────────────
 
-export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId, autoRestoreDraft }: { onDone: (warning?: string) => void; onCancel: () => void; lockedProjectName?: string; lockedProjectId?: string; autoRestoreDraft?: boolean }) {
+export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId }: { onDone: (warning?: string) => void; onCancel: () => void; lockedProjectName?: string; lockedProjectId?: string }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [materials, setMaterials] = useState<Material[]>([])
@@ -294,6 +316,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   // Skonto = Abzug bei früher Zahlung; nur Hinweistext auf der Offerte (Total bleibt gleich).
   const [skontoPct, setSkontoPct] = useState('')
   const [skontoDays, setSkontoDays] = useState('')
+  // Vorgabe aus den Offert-Vorlagen (tenants.quote_skonto_default_pct/_days). Belegt die
+  // beiden Felder beim Öffnen vor und dient als Nullpunkt für den Entwurfs-Vergleich.
+  const [skontoDefaults, setSkontoDefaults] = useState<SkontoDefaults>(NO_SKONTO_DEFAULTS)
   const [notes, setNotes] = useState(STANDARD_NOTES)
   const [stdNotes, setStdNotes] = useState(STANDARD_NOTES)
   const [productDescription, setProductDescription] = useState('')
@@ -312,8 +337,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   const [reviewMode, setReviewMode] = useState<'pdf' | 'manual'>('pdf')
   // Preisregeln aller Lieferanten — nur die manuelle Erfassung braucht sie (Warengruppe → Aufschlag).
   const [pricingRules, setPricingRules] = useState<SupplierPricingRule[]>([])
-  // Gefundener, noch nicht abgeschlossener Entwurf aus einer früheren Sitzung.
-  const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; data: QuoteDraft } | null>(null)
+  // Zeitstempel des beim Öffnen übernommenen Entwurfs — nur für den Hinweis
+  // („Entwurf vom … übernommen"), keine Entscheidung mehr.
+  const [restoredAt, setRestoredAt] = useState<number | null>(null)
+  // Abfrage beim Verlassen: Entwurf behalten oder verwerfen?
+  const [askOnLeave, setAskOnLeave] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   // Per OCR hochgeladene Lieferanten-PDFs, deren Review bestätigt wurde. Werden
   // beim Speichern der Offerte als Projekt-Datei unter "Lieferantendokumente >
@@ -322,6 +350,9 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   // Das gerade im Review-Modal offene Quelle-PDF — erst bei "Übernehmen" wird es
   // zur Ablage vorgemerkt, bei "Abbrechen" verworfen (kein ungenutztes PDF ablegen).
   const pendingPdfFile = useRef<File | null>(null)
+  // Wurde ein gespeicherter Entwurf übernommen? Dann darf die (asynchron
+  // eintreffende) Skonto-Vorgabe die Entwurfswerte nicht mehr überschreiben.
+  const draftApplied = useRef(false)
 
   // localStorage-Slot pro Projekt — im gesperrten Projekt-Modal konstant, im
   // freien Formular wechselt er mit der Projektauswahl.
@@ -360,6 +391,21 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         setNotes(prev => (prev === STANDARD_NOTES ? text : prev))
       })
       .catch(() => {})
+    // Skonto-Vorgabe des Mandanten (pflegbar unter Offert-Vorlagen). Fehler ist
+    // unkritisch — dann bleiben die Felder leer wie vor der Vorgabe.
+    apiFetch('/pwa/admin/quote-skonto-defaults')
+      .then(res => {
+        const d = res as { pct: number | null; days: number | null }
+        const pct = d.pct != null ? String(d.pct) : ''
+        const days = d.days != null ? String(d.days) : ''
+        setSkontoDefaults({ pct, days })
+        // Nur vorbelegen, solange der Nutzer nichts getippt und kein Entwurf etwas
+        // gesetzt hat — sonst überschriebe die Antwort eine bewusste Eingabe.
+        if (draftApplied.current) return
+        setSkontoPct(prev => (prev === '' ? pct : prev))
+        setSkontoDays(prev => (prev === '' ? days : prev))
+      })
+      .catch(() => {})
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
     getMe().then(me => {
       setMontageEnabled(isFeatureEnabled(me, 'montage_in_produktpreis'))
@@ -384,12 +430,14 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   }
 
   const currentDraft = serializeDraft()
-  // Banner nur zeigen, solange das Formular noch leer ist — sobald der Nutzer
-  // tippt (oder den Entwurf übernimmt), verschwindet es von selbst.
-  const formIsPristine = !quoteDraftHasContent(currentDraft, stdNotes)
+  // Leeres Formular = nichts zu verlieren: kein Übernehmen-Schutz nötig, keine
+  // Rückfrage beim Verlassen. Skonto-Vorgaben aus der Vorlage zählen dabei
+  // nicht als Inhalt.
+  const formIsPristine = !quoteDraftHasContent(currentDraft, stdNotes, skontoDefaults)
 
   // Einen Entwurf in die Formularfelder übernehmen.
   function applyDraft(d: QuoteDraft) {
+    draftApplied.current = true
     if (!lockedProjectName && d.projectName) setProjectName(d.projectName)
     if (d.laborRows?.length) setLaborRows(d.laborRows)
     if (d.materialRows?.length) setMaterialRows(d.materialRows)
@@ -408,20 +456,21 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     setUseStandardNotes(d.useStandardNotes ?? true)
   }
 
-  // Gespeicherten Entwurf für den aktuellen Projekt-Slot laden (Mount + bei
-  // Projektwechsel). Defektes JSON wird ignoriert (selbstheilend). Wurde das
-  // Formular gezielt über «Entwurf fortsetzen» geöffnet (autoRestoreDraft),
-  // wird direkt übernommen statt nur das Banner anzubieten.
+  // Gespeicherten Entwurf für den aktuellen Projekt-Slot direkt übernehmen
+  // (Mount + bei Projektwechsel). Defektes JSON wird ignoriert (selbstheilend).
+  // Nur in ein leeres Formular übernehmen: wer im freien Formular erst tippt und
+  // dann das Projekt umstellt, darf seine Eingaben nicht verlieren.
   useEffect(() => {
+    setRestoredAt(null)
+    if (quoteDraftHasContent(serializeDraft(), stdNotes, skontoDefaults)) return
     try {
       const raw = localStorage.getItem(draftKey)
-      if (!raw) { setPendingDraft(null); return }
+      if (!raw) return
       const parsed = JSON.parse(raw)
-      if (parsed && parsed.data) {
-        if (autoRestoreDraft) { applyDraft(parsed.data); setPendingDraft(null) }
-        else setPendingDraft({ savedAt: parsed.savedAt ?? 0, data: parsed.data })
-      } else setPendingDraft(null)
-    } catch { setPendingDraft(null) }
+      if (!parsed?.data) return
+      applyDraft(parsed.data)
+      setRestoredAt(parsed.savedAt ?? 0)
+    } catch { /* defektes JSON: Entwurf ignorieren */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey])
 
@@ -430,7 +479,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   // einen vorhandenen Entwurf vor dem Wiederherstellen überschreiben.
   useEffect(() => {
     const d = serializeDraft()
-    if (!quoteDraftHasContent(d, stdNotes)) return
+    if (!quoteDraftHasContent(d, stdNotes, skontoDefaults)) return
     try {
       localStorage.setItem(draftKey, JSON.stringify({ savedAt: Date.now(), data: d }))
     } catch { /* localStorage voll/blockiert — Entwurf ist Komfort, kein Muss */ }
@@ -438,28 +487,69 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   }, [draftKey, projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
       materialDiscount, fixedPrice, skontoPct, skontoDays, notes, productDescription,
-      useStandardNotes, stdNotes])
+      useStandardNotes, stdNotes, skontoDefaults])
 
-  // Esc schliesst das Fenster — ist das PDF-Review-Modal offen, zuerst dieses.
+  // Verlassen (✕ / Esc / Abbrechen): bei Inhalt erst fragen, ob der Entwurf
+  // bleiben soll. Ein leeres Formular schliesst sofort — und räumt dabei einen
+  // vorhandenen Entwurf weg: wer ihn gerade leergeräumt hat, will ihn beim
+  // nächsten Öffnen nicht wiedersehen.
+  const requestClose = useCallback(() => {
+    if (!formIsPristine) { setAskOnLeave(true); return }
+    try { localStorage.removeItem(draftKey) } catch { /* egal */ }
+    onCancel()
+  }, [formIsPristine, draftKey, onCancel])
+
+  // Esc schliesst das Fenster — ist das PDF-Review-Modal oder die Verlassen-
+  // Abfrage offen, zuerst diese (die Abfrage räumt sich selbst per Esc weg).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       if (pdfReview) { pendingPdfFile.current = null; setPdfReview(null); return }
-      onCancel()
+      if (askOnLeave) return
+      requestClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pdfReview, onCancel])
+  }, [pdfReview, askOnLeave, requestClose])
 
-  function restoreDraft() {
-    if (!pendingDraft) return
-    applyDraft(pendingDraft.data)
-    setPendingDraft(null)
+  // «Entwurf behalten»: die Autospeicherung hat ihn längst geschrieben, es ist
+  // also nichts zu tun ausser zuzumachen.
+  function keepDraftAndClose() {
+    setAskOnLeave(false)
+    onCancel()
   }
 
-  function discardDraft() {
+  function dropDraft() {
     try { localStorage.removeItem(draftKey) } catch { /* egal */ }
-    setPendingDraft(null)
+    setRestoredAt(null)
+  }
+
+  function discardDraftAndClose() {
+    dropDraft()
+    setAskOnLeave(false)
+    onCancel()
+  }
+
+  // «Leer starten» im Hinweis auf den übernommenen Entwurf. Das Formular muss
+  // dabei mit zurückgesetzt werden — nur den Slot zu löschen würde nichts
+  // bringen, die Autospeicherung schriebe den unveränderten Stand sofort neu.
+  function startEmpty() {
+    setLaborRows([{ description: '', quantity: '', unit_price: null, hidden: false }])
+    setMaterialRows([{ art_nr: '', quantity: '' }])
+    setExtraProducts([])
+    setExtraCharges([])
+    setInstallationRows([])
+    setSpecialRows([])
+    setIncludeTravelCost(true)
+    setLaborDiscount('')
+    setMaterialDiscount('')
+    setFixedPrice('')
+    setSkontoPct('')
+    setSkontoDays('')
+    setProductDescription('')
+    setUseStandardNotes(true)
+    setNotes(stdNotes)
+    dropDraft()
   }
 
   // ── Labor helpers ──
@@ -723,7 +813,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     <div className="admin-table-wrap" style={{ padding: 24, position: 'relative' }}>
       <button
         type="button"
-        onClick={onCancel}
+        onClick={requestClose}
         disabled={saving}
         title="Schliessen (Esc)"
         aria-label="Schliessen"
@@ -762,18 +852,30 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         />
       )}
 
-      {/* Nicht abgeschlossener Entwurf aus einer früheren Sitzung */}
-      {pendingDraft && formIsPristine && (
+      {/* Übernommener Entwurf aus einer früheren Sitzung — reiner Hinweis, die
+          Felder sind bereits gefüllt. Wer neu anfangen will, startet leer. */}
+      {restoredAt !== null && (
         <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', textAlign: 'left' }}>
           <span style={{ fontSize: 13 }}>
-            Es gibt einen nicht abgeschlossenen Entwurf
-            {pendingDraft.savedAt ? ` vom ${new Date(pendingDraft.savedAt).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}.
+            Entwurf
+            {restoredAt ? ` vom ${new Date(restoredAt).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''} übernommen.
           </span>
-          <span style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={restoreDraft}>Wiederherstellen</button>
-            <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={discardDraft}>Verwerfen</button>
-          </span>
+          <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={startEmpty}>Leer starten</button>
         </div>
+      )}
+
+      {/* Verlassen mit Inhalt: Entwurf behalten oder wegwerfen? */}
+      {askOnLeave && (
+        <UnsavedChangesDialog
+          title="Offerte verlassen"
+          message="Die Offerte ist noch nicht erstellt. Soll der Entwurf für später aufbewahrt werden?"
+          saveLabel="Entwurf behalten"
+          discardLabel="Entwurf verwerfen"
+          cancelLabel="Zurück zum Formular"
+          onSave={keepDraftAndClose}
+          onDiscard={discardDraftAndClose}
+          onCancel={() => setAskOnLeave(false)}
+        />
       )}
 
       {error && <div className="admin-alert admin-alert-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -1085,7 +1187,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         <button className="admin-btn admin-btn-primary" onClick={handleSubmit} disabled={saving}>
           {saving ? 'Wird erstellt…' : (quoteType === 'richtofferte' ? 'Richtofferte erstellen' : 'Offerte erstellen')}
         </button>
-        <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>Abbrechen</button>
+        <button className="admin-btn admin-btn-secondary" onClick={requestClose} disabled={saving}>Abbrechen</button>
       </div>
     </div>
   )
@@ -1110,7 +1212,7 @@ type EditExtraRow = EditFreeRow & {
 type EditChargeRow = { description: string; total_price: string }
 type EditTravelRow = { description: string; total_price: string }
 
-export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail; onDone: (warning?: string) => void; onCancel: () => void }) {
+export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quote: QuoteDetail; onDone: (warning?: string) => void; onCancel: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [roles, setRoles] = useState<StaffRole[]>([])
   const [laborRows, setLaborRows] = useState<EditLaborRow[]>(() =>
     quote.labor_items.map(i => ({ description: i.description, quantity: String(i.quantity), unit_price: String(i.unit_price), hidden: !!i.hidden }))
@@ -1204,6 +1306,23 @@ export function QuoteEditForm({ quote, onDone, onCancel }: { quote: QuoteDetail;
     () => [...new Set(materials.map(m => m.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
     [materials],
   )
+
+  // ── Dirty-Check ──
+  // Anders als beim Erstellen gibt es hier keinen localStorage-Entwurf: was in
+  // dieser Maske steht, existiert nur im State. Der Aufrufer (Projekt-Dialog)
+  // erfährt darüber, ob ein Klick neben das Fenster etwas wegwerfen würde.
+  // Alle Felder stammen aus `quote` und werden nicht nachgeladen — der erste
+  // Render taugt darum als Vergleichswert.
+  const editSnapshot = JSON.stringify({
+    laborRows, materialRows, extraProducts, extraCharges, travelRows, installationRows,
+    specialRows, laborDiscount, materialDiscount, fixedPrice, skontoPct, skontoDays,
+    notes, productDescription, customerId,
+  })
+  // useState statt useRef: der Startwert wird nur beim ersten Render berechnet
+  // und darf im Render gelesen werden.
+  const [initialSnapshot] = useState(editSnapshot)
+  const isDirty = editSnapshot !== initialSnapshot
+  useEffect(() => { onDirtyChange?.(isDirty) }, [isDirty, onDirtyChange])
 
   useEffect(() => {
     Promise.all([

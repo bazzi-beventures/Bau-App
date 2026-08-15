@@ -9,6 +9,13 @@ interface UnsavedChangesDialogProps {
   onCancel: () => void
   saving?: boolean
   message?: React.ReactNode
+  /** Überschrift/Beschriftungen überschreiben — für Masken, in denen „Speichern"
+   *  etwas anderes heisst (z. B. Offert-Entwurf behalten statt Offerte anlegen). */
+  title?: string
+  saveLabel?: string
+  savingLabel?: string
+  discardLabel?: string
+  cancelLabel?: string
 }
 
 /**
@@ -22,6 +29,11 @@ export function UnsavedChangesDialog({
   onCancel,
   saving = false,
   message = 'Du hast Änderungen gemacht, die noch nicht gespeichert sind.',
+  title = 'Ungespeicherte Änderungen',
+  saveLabel = 'Speichern',
+  savingLabel = 'Speichern…',
+  discardLabel = 'Verwerfen',
+  cancelLabel = 'Abbrechen',
 }: UnsavedChangesDialogProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -37,20 +49,20 @@ export function UnsavedChangesDialog({
       onClick={() => { if (!saving) onCancel() }}
       role="dialog"
       aria-modal="true"
-      aria-label="Ungespeicherte Änderungen"
+      aria-label={title}
     >
       <div className="admin-confirm-box" onClick={e => e.stopPropagation()}>
-        <div className="admin-confirm-title">Ungespeicherte Änderungen</div>
+        <div className="admin-confirm-title">{title}</div>
         <div className="admin-confirm-text">{message}</div>
         <div className="admin-confirm-actions">
           <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>
-            Abbrechen
+            {cancelLabel}
           </button>
           <button className="admin-btn admin-btn-danger" onClick={onDiscard} disabled={saving}>
-            Verwerfen
+            {discardLabel}
           </button>
           <button className="admin-btn admin-btn-primary" onClick={onSave} disabled={saving}>
-            {saving ? 'Speichern…' : 'Speichern'}
+            {saving ? savingLabel : saveLabel}
           </button>
         </div>
       </div>

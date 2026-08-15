@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { getFeature, hasModule, isFeatureEnabled } from '../../api/modules'
@@ -6,11 +6,13 @@ import {
   createAppointment, deleteAppointment, getProjectAppointments, setProjectBeschaffung, updateAppointment,
 } from '../../api/admin'
 import {
-  AppointmentDraft, apptToDraft, diffAppointments, draftPayload, normalizeDrafts, validateDrafts,
+  AppointmentDraft, apptToDraft, diffAppointments, draftPayload, emptyDraft, normalizeDrafts, validateDrafts,
 } from './projectAppointments'
+import { NewProjectPrefill, takeNewProjectPrefill } from './newProjectPrefill'
 import AppointmentsCard from './projectDetail/AppointmentsCard'
 import { BeschaffungStep, beschaffungStep, daysSince, enabledBeschaffungSteps } from '../constants/beschaffungSteps'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
+import { backdropCloseProps } from '../../shared/backdropClose'
 import { Kontakt, Eigentuemer, Project, DisposalDetails, projectBillingAddress, projectCustomerName } from './ProjectsScreen'
 import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
@@ -88,7 +90,38 @@ export interface ProjectFormValues {
   wartungNextDueAt: string
 }
 
-export function initialProjectForm(project: Project | null): ProjectFormValues {
+// Aufgezogenes Zeitfenster → erster Termin-Entwurf. `endDate` bleibt leer,
+// solange der Slot eintägig ist ('' = eintägig, siehe AppointmentDraft).
+function slotToDraft(slot: NewProjectPrefill): AppointmentDraft {
+  return {
+    ...emptyDraft('montage'),
+    startDate: slot.startDate,
+    endDate: slot.endDate && slot.endDate !== slot.startDate ? slot.endDate : '',
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+  }
+}
+
+/**
+ * Ausgangsstand der Maske.
+ *
+ * `prefill` kommt aus der Einsatzplanung («Zeitfenster aufgezogen → + Neues
+ * Projekt anlegen») und gilt nur für ein NEUES Projekt: der Monteur der
+ * angeklickten Zeile wird Projekt-Monteur, das Zeitfenster wird der erste
+ * Termin. Bewusst `ownTeam: false` — der Termin erbt damit das Projekt-Team,
+ * statt eine zweite, gleich lautende Mannschaft nur für diesen Termin zu führen.
+ *
+ * Die Vorbelegung steckt im BASELINE und nicht nur im Formularstand: sonst
+ * gälte die frisch geöffnete Maske sofort als geändert und würde beim
+ * Verlassen nach Speichern fragen, obwohl niemand etwas getippt hat. Angelegt
+ * wird der Termin trotzdem — `diffAppointments` schickt jeden Entwurf ohne id
+ * als `create`, unabhängig vom Baseline.
+ */
+export function initialProjectForm(
+  project: Project | null,
+  prefill?: NewProjectPrefill | null,
+): ProjectFormValues {
+  const slot = project ? null : prefill
   return {
     name: project?.name ?? '',
     customerId: project?.customer_id ?? '',
@@ -101,8 +134,8 @@ export function initialProjectForm(project: Project | null): ProjectFormValues {
     bemerkung: project?.bemerkung ?? '',
     geruestfach: project?.geruestfach?.toString() ?? '',
     projektleiterId: project?.projektleiter_id ?? '',
-    monteurIds: project?.monteur_ids ?? [],
-    appointments: [],
+    monteurIds: project?.monteur_ids ?? slot?.monteurIds ?? [],
+    appointments: slot ? [slotToDraft(slot)] : [],
     kontakte: project?.kontakte ?? [],
     eigentuemer: project?.eigentuemer ?? EMPTY_EIGENTUEMER,
     disposal: project?.disposal_details ?? EMPTY_DISPOSAL,
@@ -177,10 +210,15 @@ interface Props {
 export default function ProjectDetailScreen({ project, onClose, onSaved }: Props) {
   const isNew = !project
 
+  // Vorbelegung aus der Einsatzplanung, einmalig beim Öffnen abgeholt (der
+  // Lazy-Initializer läuft genau einmal). Bei einem bestehenden Projekt gar
+  // nicht erst anfassen: dessen Termine kommen vom Server.
+  const [prefill] = useState<NewProjectPrefill | null>(() => (project ? null : takeNewProjectPrefill()))
+
   // Ausgangsstand der Maske. Speist die useState-Initialwerte UND dient als
   // Referenz für die „ungespeicherte Änderungen"-Abfrage; nach jedem Speichern
   // wird er auf den neuen Stand nachgezogen.
-  const [baseline, setBaseline] = useState<ProjectFormValues>(() => initialProjectForm(project))
+  const [baseline, setBaseline] = useState<ProjectFormValues>(() => initialProjectForm(project, prefill))
 
   const [name, setName] = useState(baseline.name)
   const [customerId, setCustomerId] = useState(baseline.customerId)
@@ -284,15 +322,21 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // Erfassung (siehe ReportCreateForm).
   const [editReportId, setEditReportId] = useState<number | null>(null)
   // Lokaler, noch nicht abgeschickter Offert-Entwurf für dieses Projekt vorhanden?
-  // Steuert den «Entwurf fortsetzen»-Button. resumeQuoteDraft = Form gezielt zum
-  // Fortsetzen geöffnet (übernimmt den Entwurf automatisch statt nur per Banner).
+  // Steuert den «Entwurf fortsetzen»-Button. Die Maske übernimmt einen vorhandenen
+  // Entwurf ohnehin selbst — der Knopf zeigt vor allem an, dass es einen gibt.
   const [quoteDraftExists, setQuoteDraftExists] = useState(() => hasQuoteDraft(project?.name ?? ''))
-  const [resumeQuoteDraft, setResumeQuoteDraft] = useState(false)
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
-  // Verhindert, dass eine im Textfeld begonnene Maus-Selektion, die auf dem Overlay
-  // endet (mouseup ausserhalb der Box), die Bearbeiten-Maske schliesst. Nur schliessen,
-  // wenn mousedown UND click auf dem Overlay selbst landen. Vgl. PdfExtractionReviewModal.
-  const editQuoteMouseDownOnOverlay = useRef(false)
+  // Die Bearbeiten-Maske kennt keinen localStorage-Entwurf — geänderte Positionen
+  // leben nur in ihrem State. Sie meldet über onDirtyChange, ob etwas offen ist;
+  // ein Klick neben das Fenster fragt dann nach, statt alles wegzuwerfen.
+  const editQuoteDirty = useRef(false)
+  const [confirmDiscardQuoteEdit, setConfirmDiscardQuoteEdit] = useState(false)
+  const markQuoteEditDirty = useCallback((dirty: boolean) => { editQuoteDirty.current = dirty }, [])
+  const closeQuoteEdit = useCallback(() => {
+    setEditQuote(null)
+    setConfirmDiscardQuoteEdit(false)
+    editQuoteDirty.current = false
+  }, [])
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [regeneratingQuoteId, setRegeneratingQuoteId] = useState<number | null>(null)
   // Feature offerte_dank_mail: „Dankeschön senden"-Knopf bei angenommenen Offerten.
@@ -1676,8 +1720,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           dankEnabled={dankEnabled}
           absageEnabled={absageEnabled}
           sendingRejectionId={sendingRejectionId}
-          onShowCreateForm={() => { setResumeQuoteDraft(false); setShowQuoteForm(true) }}
-          onResumeDraft={() => { setResumeQuoteDraft(true); setShowQuoteForm(true) }}
+          onShowCreateForm={() => setShowQuoteForm(true)}
+          onResumeDraft={() => setShowQuoteForm(true)}
           onUpdateStatus={handleUpdateQuoteStatus}
           onRegenerate={handleRegenerateQuote}
           onSend={q => setSendQuote(q)}
@@ -1820,9 +1864,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
             <QuoteCreateForm
               lockedProjectName={project.name}
               lockedProjectId={project.id}
-              autoRestoreDraft={resumeQuoteDraft}
-              onDone={warning => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes(); if (warning) showToast(warning) }}
-              onCancel={() => { setShowQuoteForm(false); setResumeQuoteDraft(false); setQuoteDraftExists(hasQuoteDraft(project.name)) }}
+              onDone={warning => { setShowQuoteForm(false); setQuoteDraftExists(hasQuoteDraft(project.name)); reloadQuotes(); if (warning) showToast(warning) }}
+              onCancel={() => { setShowQuoteForm(false); setQuoteDraftExists(hasQuoteDraft(project.name)) }}
             />
           </div>
         </div>
@@ -1852,26 +1895,39 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {/* ── Dialog: Offerte bearbeiten (nur Entwürfe) ────────── */}
-      {/* Klick ausserhalb (auf das Overlay) verlässt die Maske ohne zu speichern.
-          Das PDF entsteht erst beim Speichern — Verlassen erzeugt nichts. Wieder
-          rein kommt man per Klick auf den Entwurf in der Liste. */}
+      {/* Klick ausserhalb (auf das Overlay) verlässt die Maske. Solange nichts
+          geändert wurde, direkt — das PDF entsteht erst beim Speichern, Verlassen
+          erzeugt nichts. Sind Änderungen offen, kommt zuerst die Rückfrage; sie
+          gingen sonst ersatzlos verloren (kein Entwurf wie beim Erstellen). */}
       {editQuote && (
         <div
           className="admin-confirm-overlay"
-          onMouseDown={e => { editQuoteMouseDownOnOverlay.current = e.target === e.currentTarget }}
-          onClick={e => {
-            if (e.target === e.currentTarget && editQuoteMouseDownOnOverlay.current) setEditQuote(null)
-            editQuoteMouseDownOnOverlay.current = false
-          }}
+          {...backdropCloseProps(closeQuoteEdit, {
+            blockWhen: () => editQuoteDirty.current,
+            onBlocked: () => setConfirmDiscardQuoteEdit(true),
+          })}
         >
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteEditForm
               quote={editQuote}
-              onDone={warning => { setEditQuote(null); reloadQuotes(); if (warning) showToast(warning) }}
-              onCancel={() => setEditQuote(null)}
+              onDirtyChange={markQuoteEditDirty}
+              onDone={warning => { closeQuoteEdit(); reloadQuotes(); if (warning) showToast(warning) }}
+              onCancel={closeQuoteEdit}
             />
           </div>
         </div>
+      )}
+
+      {confirmDiscardQuoteEdit && (
+        <ConfirmDialog
+          title="Änderungen verwerfen?"
+          message="Die Offerte ist noch nicht gespeichert. Schliessen verwirft die Änderungen."
+          confirmLabel="Verwerfen"
+          cancelLabel="Weiter bearbeiten"
+          variant="danger"
+          onConfirm={closeQuoteEdit}
+          onCancel={() => setConfirmDiscardQuoteEdit(false)}
+        />
       )}
 
       {/* ── Status (eigener Tab) ──────────────────────────────── */}

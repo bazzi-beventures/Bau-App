@@ -8,6 +8,7 @@ import {
 import { AdminScreen } from '../useAdminNav'
 import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
 import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalendar'
+import { setNewProjectPrefill } from './newProjectPrefill'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { shiftISO, hhmmToMin, minToHHMM, toDateStr } from '../utils/calendarHelpers'
 
@@ -382,8 +383,15 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     setError(null)
   }
 
+  // «+ Neues Projekt anlegen» aus dem Panel. Wurde vorher ein Zeitfenster
+  // aufgezogen, nimmt die Neu-Maske Zeiten und Monteur mit — sonst müsste man
+  // beides dort von Hand nachtragen, obwohl es im Kalender schon gewählt war.
+  // Ohne Slot (Panel per «+ Einsatz planen» geöffnet) wird eine allenfalls
+  // stehen gebliebene Vorbelegung ausdrücklich verworfen.
   function handleCreateNew() {
-    if (onNav) onNav('projects', 'new')
+    if (!onNav) return
+    setNewProjectPrefill(pendingSlot ? { ...pendingSlot } : null)
+    onNav('projects', 'new')
   }
 
   // Drag-Verschiebung aus dem Kalender: id = TERMIN-ID. deltaDays = Tagesversatz;

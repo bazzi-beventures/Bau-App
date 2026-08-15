@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { fmtCHF } from '../utils/format'
 import { parseNum, vkFromEk, factorToPct, pctToFactor } from '../utils/quotePricing'
 
@@ -324,7 +326,26 @@ export function PdfExtractionReviewModal({
   }
 
   const supplierLabel = data.supplier_label || 'Unbekannt'
-  const mouseDownOnBackdrop = useRef(false)
+  // Klick neben das Fenster schliesst nur, solange nichts zu übernehmen wäre.
+  // Sonst wären eine ganze OCR-Extraktion bzw. die manuell erfassten Positionen
+  // weg — sie stecken nur in diesem Modal, nicht im Offert-Entwurf.
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  // Esc bei offener Rückfrage schliesst nur die Rückfrage. Ohne diesen
+  // Capture-Handler käme der Esc-Handler des Offert-Formulars dran (window,
+  // Bubble-Phase) und würde das Review-Fenster samt Positionen zumachen —
+  // genau das, wovor die Rückfrage schützen soll.
+  useEffect(() => {
+    if (!confirmDiscard) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      setConfirmDiscard(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirmDiscard])
 
   return (
     <div
@@ -332,11 +353,10 @@ export function PdfExtractionReviewModal({
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       }}
-      onMouseDown={e => { mouseDownOnBackdrop.current = e.target === e.currentTarget }}
-      onClick={e => {
-        if (e.target === e.currentTarget && mouseDownOnBackdrop.current) onCancel()
-        mouseDownOnBackdrop.current = false
-      }}
+      {...backdropCloseProps(onCancel, {
+        blockWhen: () => confirmed.length > 0,
+        onBlocked: () => setConfirmDiscard(true),
+      })}
     >
       <div
         style={{ background: 'var(--bg, #fff)', borderRadius: 12, padding: 24, maxWidth: 880, width: '95%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}
@@ -591,6 +611,21 @@ export function PdfExtractionReviewModal({
           </button>
         </div>
       </div>
+
+      {/* Geschwister der Modal-Box, nicht darin: so liegt die Rückfrage im selben
+          Stacking-Kontext wie das Overlay (z-index 1000) und damit über der Box —
+          ein eigener Wrapper wäre nötig, stünde sie ausserhalb. */}
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Positionen verwerfen?"
+          message={`${confirmed.length} erfasste ${confirmed.length === 1 ? 'Position' : 'Positionen'} sind noch nicht übernommen. Schliessen verwirft sie.`}
+          confirmLabel="Verwerfen"
+          cancelLabel="Weiter bearbeiten"
+          variant="danger"
+          onConfirm={onCancel}
+          onCancel={() => setConfirmDiscard(false)}
+        />
+      )}
     </div>
   )
 }

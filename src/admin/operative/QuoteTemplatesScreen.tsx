@@ -5,6 +5,7 @@ import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { fmtDate } from '../utils/format'
 import { RichTextField } from '../components/RichTextField'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // Vorlagen für die Offerten-Sektionen "Montagepositionen" und "Sonderpositionen".
 // Spiegelt die Schnell-Buttons im Offerte-Formular — hier zentral pflegbar, ohne Migration.
@@ -71,6 +72,10 @@ function OffertenVorlagenPanel() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<EditState | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  // Stand beim Öffnen des Modals — Vergleichswert für den Dirty-Check. Ein Klick
+  // neben das Fenster darf eine angefangene Vorlage nicht kommentarlos wegwerfen.
+  const [formOpened, setFormOpened] = useState<FormState>(EMPTY_FORM)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
@@ -98,6 +103,12 @@ function OffertenVorlagenPanel() {
   const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
   const [skontoIsDefault, setSkontoIsDefault] = useState(true)
   const [savingSkonto, setSavingSkonto] = useState(false)
+  // Skonto-Vorgabe: belegt die beiden Skonto-Felder im Erstell-Formular vor. Leer =
+  // keine Vorgabe. Beide Felder als String im State (Eingabefeld), Zahl erst beim Speichern.
+  const [skontoDefPct, setSkontoDefPct] = useState('')
+  const [skontoDefDays, setSkontoDefDays] = useState('')
+  const [skontoDefSaved, setSkontoDefSaved] = useState({ pct: '', days: '' })
+  const [savingSkontoDef, setSavingSkontoDef] = useState(false)
   // Danke-Text bei Offerten-Annahme (Feature offerte_dank_mail). Eigenes Tenant-Feld +
   // System-Default; immer pflegbar (kein Feature-Flag, damit man ihn vorbereiten kann).
   const [thankyouTxt, setThankyouTxt] = useState('')
@@ -122,12 +133,13 @@ function OffertenVorlagenPanel() {
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto, thankyou, rejection, att] = await Promise.all([
+      const [data, notes, disc, discR, skonto, skontoDef, thankyou, rejection, att] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
         apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
+        apiFetch('/pwa/admin/quote-skonto-defaults') as Promise<{ pct: number | null; days: number | null }>,
         apiFetch('/pwa/admin/quote-thankyou-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-rejection-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-attachment-templates') as Promise<{ attachments: QuoteAttachmentTpl[] }>,
@@ -147,6 +159,11 @@ function OffertenVorlagenPanel() {
       setSkontoTxt(skonto.text ?? '')
       setSkontoTxtSaved(skonto.text ?? '')
       setSkontoIsDefault(skonto.is_default)
+      const defPct = skontoDef.pct != null ? String(skontoDef.pct) : ''
+      const defDays = skontoDef.days != null ? String(skontoDef.days) : ''
+      setSkontoDefPct(defPct)
+      setSkontoDefDays(defDays)
+      setSkontoDefSaved({ pct: defPct, days: defDays })
       setThankyouTxt(thankyou.text ?? '')
       setThankyouTxtSaved(thankyou.text ?? '')
       setThankyouIsDefault(thankyou.is_default)
@@ -238,6 +255,36 @@ function OffertenVorlagenPanel() {
     }
   }
 
+  // Vorgabe speichern. `clear` leert beide Felder (Vorgabe entfernen) — serverseitig
+  // führt ein fehlender/ungültiger %-Satz ohnehin zu NULL in beiden Spalten.
+  async function saveQuoteSkontoDefaults(clear = false) {
+    setSavingSkontoDef(true)
+    setError('')
+    try {
+      const pct = clear || skontoDefPct.trim() === '' ? null : parseFloat(skontoDefPct.replace(',', '.'))
+      const days = clear || skontoDefDays.trim() === '' ? null : parseInt(skontoDefDays, 10)
+      const res = await apiFetch('/pwa/admin/quote-skonto-defaults', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          pct: pct != null && !isNaN(pct) ? pct : null,
+          days: days != null && !isNaN(days) ? days : null,
+        }),
+      }) as { pct: number | null; days: number | null }
+      // Antwort ist die normalisierte Wahrheit (z.B. 150% => keine Vorgabe) — sie
+      // zurückschreiben, sonst zeigt das Formular einen Wert, den der Server verworfen hat.
+      const nextPct = res.pct != null ? String(res.pct) : ''
+      const nextDays = res.days != null ? String(res.days) : ''
+      setSkontoDefPct(nextPct)
+      setSkontoDefDays(nextDays)
+      setSkontoDefSaved({ pct: nextPct, days: nextDays })
+      showToast(res.pct == null ? 'Skonto-Vorgabe entfernt' : 'Skonto-Vorgabe gespeichert')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Fehler')
+    } finally {
+      setSavingSkontoDef(false)
+    }
+  }
+
   async function saveQuoteThankyouText(reset = false) {
     setSavingThankyou(true)
     setError('')
@@ -294,28 +341,42 @@ function OffertenVorlagenPanel() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  function openNew(kind: Kind) {
-    setForm(EMPTY_FORM)
-    setEditing({ kind, id: 'new' })
+  function openEditor(state: EditState, f: FormState) {
+    setForm(f)
+    setFormOpened(f)
+    setEditing(state)
     setError('')
+    setConfirmDiscard(false)
+  }
+
+  function closeEditor() {
+    setEditing(null)
+    setConfirmDiscard(false)
+  }
+
+  // Hat der Nutzer seit dem Öffnen etwas eingetippt? Nur dann fragt der
+  // Backdrop-Klick nach, statt die Eingaben wegzuwerfen.
+  const formIsDirty = (Object.keys(form) as (keyof FormState)[]).some(k => form[k] !== formOpened[k])
+
+  function openNew(kind: Kind) {
+    openEditor({ kind, id: 'new' }, EMPTY_FORM)
   }
 
   function openEditInstallation(t: InstallationTpl) {
-    setForm({ ...EMPTY_FORM, label: t.label, default_fee: String(t.default_fee), notes: t.notes ?? '' })
-    setEditing({ kind: 'installation', id: t.id })
-    setError('')
+    openEditor(
+      { kind: 'installation', id: t.id },
+      { ...EMPTY_FORM, label: t.label, default_fee: String(t.default_fee), notes: t.notes ?? '' },
+    )
   }
 
   function openEditSpecial(t: SpecialTpl) {
-    setForm({
+    openEditor({ kind: 'special', id: t.id }, {
       label: t.label,
       default_fee: String(t.default_fee),
       pricing_mode: t.pricing_mode,
       default_hours: t.default_hours != null ? String(t.default_hours) : '',
       notes: t.notes ?? '',
     })
-    setEditing({ kind: 'special', id: t.id })
-    setError('')
   }
 
   function basePath(kind: Kind) {
@@ -346,7 +407,7 @@ function OffertenVorlagenPanel() {
         body.default_hours = form.pricing_mode === 'stunden' ? parseFloat(form.default_hours.replace(',', '.')) : null
       }
       await apiFetch(url, { method: isEdit ? 'PATCH' : 'POST', body: JSON.stringify(body) })
-      setEditing(null)
+      closeEditor()
       showToast('Vorlage gespeichert')
       load()
     } catch (err: unknown) {
@@ -363,7 +424,7 @@ function OffertenVorlagenPanel() {
     setError('')
     try {
       await apiFetch(`${basePath(editing.kind)}/${editing.id}`, { method: 'DELETE' })
-      setEditing(null)
+      closeEditor()
       showToast('Vorlage gelöscht')
       load()
     } catch (err: unknown) {
@@ -747,6 +808,67 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
 
+          {/* ── Skonto-Vorgabe (Vorbelegung im Erstell-Formular) ── */}
+          <div className="admin-page-header" style={{ marginTop: 24 }}>
+            <div>
+              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Vorgabe</div>
+              <div className="admin-page-subtitle">
+                Startwerte für die Skonto-Felder einer neuen Offerte — üblich ist ein fester
+                Satz pro Firma («2% innert 10 Tagen»). Pro Offerte bleiben beide Werte frei
+                änderbar; bestehende Offerten ändert die Vorgabe nicht.
+                {!skontoDefSaved.pct && ' Aktuell keine Vorgabe — die Felder starten leer.'}
+              </div>
+            </div>
+          </div>
+          <div className="admin-table-wrap" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 160px' }}>
+                <label className="admin-form-label">Skonto (%)</label>
+                <input
+                  className="admin-form-input"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={skontoDefPct}
+                  onChange={e => setSkontoDefPct(e.target.value)}
+                  placeholder="z.B. 2"
+                />
+              </div>
+              <div style={{ flex: '1 1 160px' }}>
+                <label className="admin-form-label">Frist (Tage)</label>
+                <input
+                  className="admin-form-input"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={skontoDefDays}
+                  onChange={e => setSkontoDefDays(e.target.value)}
+                  placeholder="z.B. 10"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="admin-btn admin-btn-primary"
+                onClick={() => saveQuoteSkontoDefaults(false)}
+                disabled={savingSkontoDef || (skontoDefPct === skontoDefSaved.pct && skontoDefDays === skontoDefSaved.days)}
+              >
+                {savingSkontoDef ? 'Speichern…' : 'Vorgabe speichern'}
+              </button>
+              <button
+                className="admin-btn admin-btn-secondary"
+                onClick={() => saveQuoteSkontoDefaults(true)}
+                disabled={savingSkontoDef || (!skontoDefSaved.pct && !skontoDefSaved.days)}
+              >
+                Vorgabe entfernen
+              </button>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                Ohne Prozentsatz gibt es keine Vorgabe — die Frist allein bewirkt nichts.
+              </span>
+            </div>
+          </div>
+
           {/* ── Danke-Text bei Offerten-Annahme (Feature „Danke-Mail bei Offerten-Annahme") ── */}
           <div className="admin-page-header" style={{ marginTop: 24 }}>
             <div>
@@ -839,7 +961,13 @@ function OffertenVorlagenPanel() {
 
       {/* Edit/New Modal */}
       {editing !== null && (
-        <div className="admin-modal-overlay" {...backdropCloseProps(() => setEditing(null))}>
+        <div
+          className="admin-modal-overlay"
+          {...backdropCloseProps(closeEditor, {
+            blockWhen: () => formIsDirty,
+            onBlocked: () => setConfirmDiscard(true),
+          })}
+        >
           <div className="admin-modal" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
               <div className="admin-modal-title">
@@ -847,7 +975,7 @@ function OffertenVorlagenPanel() {
                   ? (isSpecialModal ? 'Neue Sonderposition' : 'Neue Montage-Vorlage')
                   : 'Vorlage bearbeiten'}
               </div>
-              <button className="admin-modal-close" onClick={() => setEditing(null)}>×</button>
+              <button className="admin-modal-close" onClick={closeEditor}>×</button>
             </div>
             <form onSubmit={handleSave} className="admin-modal-body">
               {error && <div className="admin-form-error">{error}</div>}
@@ -925,7 +1053,7 @@ function OffertenVorlagenPanel() {
                   Löschen
                 </button>
               )}
-              <button className="admin-btn admin-btn-secondary" onClick={() => setEditing(null)}>Abbrechen</button>
+              <button className="admin-btn admin-btn-secondary" onClick={closeEditor}>Abbrechen</button>
               <button
                 className="admin-btn admin-btn-primary"
                 onClick={e => { (e.currentTarget.closest('div.admin-modal')?.querySelector('form') as HTMLFormElement)?.requestSubmit() }}
@@ -936,6 +1064,19 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Klick neben das Fenster bei angefangener Vorlage: nachfragen statt wegwerfen. */}
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Eingaben verwerfen?"
+          message="Die Vorlage ist noch nicht gespeichert. Schliessen verwirft die Eingaben."
+          confirmLabel="Verwerfen"
+          cancelLabel="Weiter bearbeiten"
+          variant="danger"
+          onConfirm={closeEditor}
+          onCancel={() => setConfirmDiscard(false)}
+        />
       )}
 
       {toast && (
