@@ -8,8 +8,9 @@ import {
   OverdueProject, getOverdueProjects, updateProjectSchedule, closeProject,
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
-import { fmtDate } from '../utils/format'
+import { fmtCHF, fmtDate } from '../utils/format'
 import { apiUrl } from '../../api/client'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface Props {
   dashboard: AdminDashboard | null
@@ -74,10 +75,6 @@ function IconXCircle() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM8.707 7.293a1 1 0 0 0-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 1 0 1.414 1.414L10 11.414l1.293 1.293a1 1 0 0 0 1.414-1.414L11.414 10l1.293-1.293a1 1 0 0 0-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
 }
 
-function fmtCHF(amount: number) {
-  return amount.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
 function daysSince(iso: string | null): number {
   if (!iso) return 0
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
@@ -93,16 +90,11 @@ interface ReminderModalProps {
 function ReminderModal({ onClose, onSent }: ReminderModalProps) {
   const [quotes, setQuotes] = useState<PendingReminderQuote[] | null>(null)
   const [sending, setSending] = useState<number | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3000)
 
   useEffect(() => {
     getPendingReminderQuotes().then(setQuotes).catch(() => setQuotes([]))
   }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleSend(quoteId: number) {
     setSending(quoteId)
@@ -126,7 +118,7 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
           <button className="admin-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
-          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          <ToastHost toast={toast} />
           {quotes === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
           {quotes !== null && quotes.length === 0 && <div className="admin-empty">Keine fälligen Erinnerungen</div>}
           {quotes !== null && quotes.length > 0 && (
@@ -139,7 +131,7 @@ function ReminderModal({ onClose, onSent }: ReminderModalProps) {
                       {q.customer_name} — {q.project_name}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                      Gesendet: {fmtDate(q.sent_at)} ({daysSince(q.sent_at)} Tage) · CHF {fmtCHF(q.total_amount)}
+                      Gesendet: {fmtDate(q.sent_at)} ({daysSince(q.sent_at)} Tage) · {fmtCHF(q.total_amount)}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{q.customer_email}</div>
                   </div>
@@ -171,16 +163,11 @@ interface MahnungModalProps {
 function MahnungModal({ onClose, onSent }: MahnungModalProps) {
   const [invoices, setInvoices] = useState<PendingActionInvoice[] | null>(null)
   const [sending, setSending] = useState<{ id: number; type: 'erinnerung' | 'mahnung' } | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3500)
 
   useEffect(() => {
     getPendingActionInvoices().then(setInvoices).catch(() => setInvoices([]))
   }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
-  }
 
   async function handleErinnerung(invoiceId: number) {
     setSending({ id: invoiceId, type: 'erinnerung' })
@@ -227,7 +214,7 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
           <button className="admin-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
-          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          <ToastHost toast={toast} />
           {invoices === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
           {invoices !== null && invoices.length === 0 && <div className="admin-empty">Keine überfälligen Rechnungen</div>}
           {invoices !== null && invoices.length > 0 && (
@@ -248,7 +235,7 @@ function MahnungModal({ onClose, onSent }: MahnungModalProps) {
                       <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
                         Gesendet: {fmtDate(inv.sent_at)} ({daysSince(inv.sent_at)} Tage offen)
                         {inv.due_date ? ` · Fällig: ${fmtDate(inv.due_date)}` : ''}
-                        {' · CHF '}{fmtCHF(inv.total_amount)}
+                        {' · '}{fmtCHF(inv.total_amount)}
                       </div>
                       <div style={{ fontSize: 12, marginTop: 4, display: 'flex', gap: 12 }}>
                         {inv.zahlungserinnerung_sent_at && (
@@ -298,16 +285,11 @@ interface ApprovalModalProps {
 function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
   const [approvals, setApprovals] = useState<PendingApproval[] | null>(null)
   const [busy, setBusy] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3000)
 
   useEffect(() => {
     getPendingApprovals().then(setApprovals).catch(() => setApprovals([]))
   }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleApprove(id: string) {
     setBusy({ id, type: 'approve' })
@@ -350,7 +332,7 @@ function ApprovalModal({ onClose, onSent }: ApprovalModalProps) {
           <button className="admin-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
-          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          <ToastHost toast={toast} />
           {approvals === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
           {approvals !== null && approvals.length === 0 && <div className="admin-empty">Keine offenen Freigaben für dich</div>}
           {approvals !== null && approvals.length > 0 && (
@@ -438,7 +420,7 @@ function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps)
   const [projects, setProjects] = useState<OverdueProject[] | null>(null)
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({})
   const [busy, setBusy] = useState<{ id: string; type: 'save' | 'close' } | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3000)
 
   useEffect(() => {
     getOverdueProjects()
@@ -450,11 +432,6 @@ function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps)
       })
       .catch(() => setProjects([]))
   }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   function patchDraft(id: string, patch: Partial<RowDraft>) {
     setDrafts(d => ({ ...d, [id]: { ...d[id], ...patch } }))
@@ -517,7 +494,7 @@ function OverdueProjectsModal({ onClose, onChanged }: OverdueProjectsModalProps)
           <button className="admin-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="admin-modal-body">
-          {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+          <ToastHost toast={toast} />
           {projects === null && <div className="admin-loading"><div className="admin-spinner" />Lade…</div>}
           {projects !== null && projects.length === 0 && <div className="admin-empty">Keine überfälligen Projekte</div>}
           {projects !== null && projects.length > 0 && (

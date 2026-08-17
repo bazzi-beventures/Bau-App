@@ -66,6 +66,27 @@ describe('ProjektDrillModal', () => {
     expect(screen.getAllByText('Keine im Zeitraum.')).toHaveLength(3)
   })
 
+  it('weist eine Variantengruppe als solche aus, eine Einzelofferte nicht', () => {
+    // Der Betrag ist der der Leitvariante — ohne den Hinweis liest sich die Zeile
+    // wie eine einzelne Offerte ueber CHF 1'200.
+    const { rerender } = render(
+      <ProjektDrillModal
+        projekt={agg({ offertenDetail: [{ status: 'gesendet', betrag: 1200, datum: '2026-05-10', variant_count: 3 }] })}
+        from={null} to={null} onClose={() => {}}
+      />,
+    )
+    expect(screen.getByText('· 1 von 3 Varianten')).toBeInTheDocument()
+
+    // variant_count 1 bzw. fehlend (aelteres Backend) => kein Hinweis.
+    rerender(
+      <ProjektDrillModal
+        projekt={agg({ offertenDetail: [{ status: 'gesendet', betrag: 1200, datum: '2026-05-10' }] })}
+        from={null} to={null} onClose={() => {}}
+      />,
+    )
+    expect(screen.queryByText(/von .* Varianten/)).not.toBeInTheDocument()
+  })
+
   it('schliesst per Button, Escape und Overlay-Klick', () => {
     const onClose = vi.fn()
     const { container, rerender } = render(

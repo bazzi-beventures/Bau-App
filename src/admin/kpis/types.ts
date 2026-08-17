@@ -11,9 +11,15 @@ export interface KpiDashboardRow {
   stunden_aktueller_monat: number
   stunden_vormonat: number
   stunden_veraenderung_pct: number
-  lohnkosten_aktueller_monat: number
-  materialkosten_aktueller_monat: number
-  kosten_aktueller_monat: number
+  // null = mindestens eine Position ohne Preis/Stundensatz, die Summe waere
+  // unvollstaendig (Migration 20260815). Die Tabellen rendern das als „—".
+  lohnkosten_aktueller_monat: number | null
+  materialkosten_aktueller_monat: number | null
+  kosten_aktueller_monat: number | null
+  /** Anzahl Lohnpositionen ohne hinterlegten Stundensatz. */
+  lohn_ohne_satz: number
+  /** Anzahl Materialpositionen ohne ermittelbaren VK. */
+  material_ohne_preis: number
   umsatz_aktueller_monat: number
   offene_rechnungen_anzahl: number
   offene_rechnungen_betrag: number
@@ -34,12 +40,17 @@ export interface KpiProjektRow {
   erster_rapport: string | null
   letzter_rapport: string | null
   total_arbeitsstunden: number
-  total_lohnkosten: number
+  // null = Position ohne Preis/Stundensatz vorhanden (Migration 20260815).
+  total_lohnkosten: number | null
   anzahl_mitarbeiter: number
   mitarbeiter_liste: string | null
-  total_materialkosten: number
+  total_materialkosten: number | null
   anzahl_artikel: number
-  total_kosten: number
+  total_kosten: number | null
+  /** Anzahl Lohnpositionen ohne hinterlegten Stundensatz. */
+  lohn_ohne_satz: number
+  /** Anzahl Materialpositionen ohne ermittelbaren VK. */
+  material_ohne_preis: number
   offerte_nummer: string | null
   offerte_betrag: number
   offerte_status: string | null
@@ -62,15 +73,24 @@ export interface KpiFinanzenMonatRow {
   monat_name: string
   anzahl_rapporte: number
   arbeitsstunden: number
-  lohnkosten: number
+  // null = Position ohne Preis/Stundensatz vorhanden (Migration 20260815).
+  lohnkosten: number | null
+  /** Anzahl Lohnpositionen ohne hinterlegten Stundensatz. */
+  lohn_ohne_satz: number
+  // ACHTUNG: die *_intern-Spalten und die Margen kamen mit Migration 20260429,
+  // wurden aber von 20260726 beim Neuaufbau der View nicht mitgenommen — sie
+  // fehlen in vw_kpi_finanzen_monat und kommen als undefined an (Anzeige „—").
+  // Siehe docs/specs/refactoring-charge-d-notizen.md.
   lohnkosten_intern: number
   mitarbeiter_ohne_lohn_count: number
   mitarbeiter_aktiv: number
   projekte_aktiv: number
-  materialkosten: number
+  materialkosten: number | null
+  /** Anzahl Materialpositionen ohne ermittelbaren VK. */
+  material_ohne_preis: number
   materialkosten_intern: number
   material_ohne_ek_count: number
-  total_kosten: number
+  total_kosten: number | null
   total_kosten_intern: number
   marge_arbeit: number
   marge_material: number
@@ -234,10 +254,17 @@ export interface FilterGroup {
 
 /* ── Projekt-Pipeline (GET /pwa/kpi-projekt-pipeline) ─── */
 
+// Ein Eintrag = eine ENTSCHEIDUNG, nicht ein Dokument: eine Variantengruppe
+// (Option A/B/C zur Kundenauswahl) liefert einen Eintrag mit dem Betrag der
+// Leit- bzw. angenommenen Variante. Das Backend reduziert das bereits fertig
+// (db/kpis.py build_projekt_pipeline_rows, Spec offerten-varianten.md §9).
 export interface PipelineOfferte {
   status: string // entwurf | gesendet | akzeptiert | abgelehnt
   betrag: number // brutto (backend-normalisiert via quote_gross_total)
   datum: string | null // created_at, YYYY-MM-DD
+  /** Zahl der vertretenen Offerten: >1 nur bei einer Variantengruppe. Ältere
+   *  Backends liefern das Feld nicht — Anzeige behandelt undefined wie 1. */
+  variant_count?: number
 }
 
 export interface PipelineRechnung {

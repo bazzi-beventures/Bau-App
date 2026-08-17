@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface Unit {
   id: string
@@ -30,7 +31,7 @@ export default function UnitsPanel() {
   const [code, setCode] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<{ msg: string; kind: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3500)
 
   async function load() {
     setLoading(true)
@@ -42,11 +43,6 @@ export default function UnitsPanel() {
   }
 
   useEffect(() => { load() }, [])
-
-  function showToast(msg: string, kind: 'success' | 'error' = 'success') {
-    setToast({ msg, kind })
-    setTimeout(() => setToast(null), 3500)
-  }
 
   function openNew() {
     setCode('')
@@ -208,11 +204,7 @@ export default function UnitsPanel() {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.kind}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -7,7 +7,8 @@ import { CompanySearch } from '../../shared/CompanySearch'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
-import { formatDateTime } from './projectDetail/tabs'
+import { formatDateTime } from '../utils/format'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface CustomerComment {
   id: string
@@ -580,7 +581,6 @@ export default function CustomersScreen() {
   const [editing, setEditing] = useState<Customer | null | 'new'>(null)
   const [confirmDelete, setConfirmDelete] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
 
   // Suche: 300ms Debounce, damit nicht jeder Tastendruck einen Roundtrip ausloest.
   useEffect(() => {
@@ -607,10 +607,7 @@ export default function CustomersScreen() {
 
   useEffect(() => { load() }, [load])
 
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
+  const { toast, showToast } = useToast()
 
   async function handleDelete() {
     if (!confirmDelete) return
@@ -790,27 +787,19 @@ export default function CustomersScreen() {
       </div>
 
       {confirmDelete && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Kunde löschen?</div>
-            <div className="admin-confirm-text">
-              «{confirmDelete.name}» wird dauerhaft gelöscht. Bestehende Projekte bleiben erhalten.
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmDelete(null)}>Abbrechen</button>
-              <button className="admin-btn admin-btn-danger" onClick={handleDelete} disabled={deleting}>
-                {deleting ? 'Löschen…' : 'Ja, löschen'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Kunde löschen?"
+          message={<>«{confirmDelete.name}» wird dauerhaft gelöscht. Bestehende Projekte bleiben erhalten.</>}
+          confirmLabel="Ja, löschen"
+          busyLabel="Löschen…"
+          busy={deleting}
+          variant="danger"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => void handleDelete()}
+        />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

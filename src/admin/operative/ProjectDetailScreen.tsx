@@ -18,12 +18,13 @@ import { Customer } from './CustomersScreen'
 import { CustomerCombobox } from './CustomerCombobox'
 import { QuoteCreateForm, QuoteEditForm, QuoteDetail, hasQuoteDraft } from './QuotesScreen'
 import { invoiceWarningHint, sammelrechnungHint } from './InvoicesScreen'
+import { useToast, ToastHost } from '../components/useToast'
 import { ReportCreateForm } from './ReportCreateForm'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { SendThankyouDialog } from './SendThankyouDialog'
 import { WORK_TYPES } from '../../api/workTypes'
 import { ProjectStatus, PROJECT_STATUS_LABELS, PROJECT_STATUS_BADGE } from '../constants/statuses'
-import { fmtDate } from '../utils/format'
+import { fmtDate, formatDateTime } from '../utils/format'
 import { countOpenInvoices, openInvoicesHint } from '../utils/openInvoices'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -32,7 +33,6 @@ import { useUnsavedChangesGuard } from '../unsavedChanges'
 import {
   DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
   ProjectFile, ProjectFileCategory, ProjectQuote, ProjectReport, ProjectInvoice, ProjectApproval, ProjectTask,
-  formatDateTime,
 } from './projectDetail/tabs'
 
 // Kommentare sind nach 10 Minuten gesperrt (kein Bearbeiten/Löschen mehr) —
@@ -284,7 +284,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   const [confirmCloseAfterPaid, setConfirmCloseAfterPaid] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [confirmReactivate, setConfirmReactivate] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast()
 
   // Wiedereröffnen
   const [confirmReopen, setConfirmReopen] = useState(false)
@@ -809,11 +809,6 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       showToast(err instanceof Error ? err.message : 'Fehler')
       return false
     }
-  }
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
   }
 
   function handleSelectCustomer(id: string) {
@@ -1794,8 +1789,14 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
       {/* ── Dialog: Neue Bestellfreigabe ─────────────────────── */}
       {showApprovalForm && project && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 520 }}>
+        <div
+          className="admin-confirm-overlay"
+          {...backdropCloseProps(
+            () => { setShowApprovalForm(false); setApprovalTitle(''); setApprovalApproverUserId(''); setApprovalFile(null) },
+            { blockWhen: () => !!(approvalTitle.trim() || approvalApproverUserId || approvalFile) },
+          )}
+        >
+          <div className="admin-confirm-box" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
             <form onSubmit={handleCreateApproval}>
               <div className="admin-confirm-title">Neue Bestellfreigabe</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
@@ -2170,13 +2171,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
       )}
 
       {confirmReopen && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Projekt wiedereröffnen?</div>
-            <div className="admin-confirm-text">
-              Grund für die Wiedereröffnung von «{project?.name}»:
-            </div>
-            <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ConfirmDialog
+          title="Projekt wiedereröffnen?"
+          message={<>Grund für die Wiedereröffnung von «{project?.name}»:</>}
+          confirmLabel="Wiedereröffnen"
+          busyLabel="Wird geöffnet…"
+          busy={reopening}
+          onCancel={() => setConfirmReopen(false)}
+          onConfirm={() => void handleReopen()}
+        >
+          <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
                 <input
                   type="radio"
@@ -2197,15 +2201,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
                 />
                 Garantiefall <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>(Reparatur, als Garantie markiert)</span>
               </label>
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmReopen(false)}>Abbrechen</button>
-              <button className="admin-btn admin-btn-primary" onClick={handleReopen} disabled={reopening}>
-                {reopening ? 'Wird geöffnet…' : 'Wiedereröffnen'}
-              </button>
-            </div>
           </div>
-        </div>
+        </ConfirmDialog>
       )}
 
       {sendQuote && (
@@ -2267,11 +2264,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

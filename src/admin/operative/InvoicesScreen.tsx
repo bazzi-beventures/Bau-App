@@ -6,9 +6,11 @@ import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
 import { AutoGrowTextarea } from '../components/AutoGrowTextarea'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useIsMobile } from '../useIsMobile'
 import { isInvoiceOpen, openInvoicesHint } from '../utils/openInvoices'
 import type { AdminScreen } from '../useAdminNav'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface Invoice {
   id: number
@@ -94,7 +96,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   // Postversand: Rechnung als versendet markieren, ohne sie zu mailen.
   const [confirmPostal, setConfirmPostal] = useState<Invoice | null>(null)
   const [postalDate, setPostalDate] = useState('')
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
   // Generate invoice
   const [showGenerate, setShowGenerate] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
@@ -243,11 +245,6 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     } finally {
       setSending(false)
     }
-  }
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
   }
 
   function openPaid(inv: Invoice) {
@@ -587,169 +584,153 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
 
       {/* Bestätigungsdialog bezahlt markieren */}
       {confirmPaid && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Rechnung als bezahlt markieren?</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Rechnung als bezahlt markieren?"
+          message={
+            <>
               {confirmPaid.invoice_number} · {fmtCHF(confirmPaid.total_amount)}<br />
               Projekt: {confirmPaid.project_name}
-            </div>
-            <div style={{ margin: '12px 0' }}>
-              <label className="admin-form-label" htmlFor="invoice-paid-date">Zahlungsdatum</label>
-              <input
-                id="invoice-paid-date"
-                className="admin-form-input"
-                type="date"
-                value={paidDate}
-                max={todayISO()}
-                onChange={e => setPaidDate(e.target.value)}
-              />
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                Tag des Zahlungseingangs — nachtragbar, vorbelegt mit heute.
-              </div>
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPaid(null)}>Abbrechen</button>
-              <button
-                className="admin-btn admin-btn-success"
-                onClick={() => handleMarkPaid(confirmPaid)}
-                disabled={acting === confirmPaid.id || !paidDate}
-              >
-                {acting === confirmPaid.id ? '…' : 'Ja, bezahlt'}
-              </button>
+            </>
+          }
+          confirmLabel="Ja, bezahlt"
+          busyLabel="…"
+          busy={acting === confirmPaid.id}
+          confirmDisabled={!paidDate}
+          variant="success"
+          onCancel={() => setConfirmPaid(null)}
+          onConfirm={() => void handleMarkPaid(confirmPaid)}
+        >
+          <div style={{ margin: '12px 0' }}>
+            <label className="admin-form-label" htmlFor="invoice-paid-date">Zahlungsdatum</label>
+            <input
+              id="invoice-paid-date"
+              className="admin-form-input"
+              type="date"
+              value={paidDate}
+              max={todayISO()}
+              onChange={e => setPaidDate(e.target.value)}
+            />
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+              Tag des Zahlungseingangs — nachtragbar, vorbelegt mit heute.
             </div>
           </div>
-        </div>
+        </ConfirmDialog>
       )}
 
       {/* Anschlussfrage nach dem Bezahlen: Projekt abschliessen? */}
       {confirmCloseProject && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Projekt abschliessen?</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Projekt abschliessen?"
+          message={
+            <>
               Rechnung {confirmCloseProject.invoice_number} ist bezahlt.<br />
               «{confirmCloseProject.project_name}» wird beim Abschliessen für Mitarbeiter
               ausgeblendet. Rapporte und Dokumente bleiben erhalten.
-            </div>
-            {closeProjectWarning && (
-              <div className="admin-confirm-warning">{closeProjectWarning}</div>
-            )}
-            <div className="admin-confirm-actions">
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => setConfirmCloseProject(null)}
-                disabled={closingProject}
-              >
-                Offen lassen
-              </button>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => handleCloseProject(confirmCloseProject)}
-                disabled={closingProject}
-              >
-                {closingProject ? 'Schliessen…' : 'Ja, abschliessen'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          warning={closeProjectWarning}
+          confirmLabel="Ja, abschliessen"
+          cancelLabel="Offen lassen"
+          busyLabel="Schliessen…"
+          busy={closingProject}
+          onCancel={() => setConfirmCloseProject(null)}
+          onConfirm={() => void handleCloseProject(confirmCloseProject)}
+        />
       )}
 
       {/* Bestätigungsdialog Postversand */}
       {confirmPostal && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Als per Post versendet markieren?</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Als per Post versendet markieren?"
+          message={
+            <>
               {confirmPostal.invoice_number} · {fmtCHF(confirmPostal.total_amount)}<br />
               Projekt: {confirmPostal.project_name}<br />
               Es wird keine E-Mail verschickt. Die Rechnung gilt danach als gesendet und
               läuft normal ins Mahnwesen — die Zahlungsfrist zählt ab dem Aufgabedatum.
-            </div>
-            <div style={{ margin: '12px 0' }}>
-              <label className="admin-form-label" htmlFor="postal-sent-date">Aufgabedatum</label>
-              <input
-                id="postal-sent-date"
-                className="admin-form-input"
-                type="date"
-                value={postalDate}
-                max={todayISO()}
-                onChange={e => setPostalDate(e.target.value)}
-              />
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmPostal(null)}>Abbrechen</button>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => handleMarkSentByPost(confirmPostal.id)}
-                disabled={acting === confirmPostal.id || !postalDate}
-              >
-                {acting === confirmPostal.id ? '…' : 'Als versendet markieren'}
-              </button>
-            </div>
+            </>
+          }
+          confirmLabel="Als versendet markieren"
+          busyLabel="…"
+          busy={acting === confirmPostal.id}
+          confirmDisabled={!postalDate}
+          onCancel={() => setConfirmPostal(null)}
+          onConfirm={() => void handleMarkSentByPost(confirmPostal.id)}
+        >
+          <div style={{ margin: '12px 0' }}>
+            <label className="admin-form-label" htmlFor="postal-sent-date">Aufgabedatum</label>
+            <input
+              id="postal-sent-date"
+              className="admin-form-input"
+              type="date"
+              value={postalDate}
+              max={todayISO()}
+              onChange={e => setPostalDate(e.target.value)}
+            />
           </div>
-        </div>
+        </ConfirmDialog>
       )}
 
       {/* Bestätigungsdialog Zahlung zurücksetzen */}
       {confirmUnpay && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Zahlung zurücksetzen?</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Zahlung zurücksetzen?"
+          message={
+            <>
               {confirmUnpay.invoice_number} · {fmtCHF(confirmUnpay.total_amount)}<br />
               Projekt: {confirmUnpay.project_name}<br />
               Die Rechnung gilt danach wieder als offen (gesendet bzw. ausstehend)
               und kann anschliessend archiviert werden.
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmUnpay(null)}>Abbrechen</button>
-              <button
-                className="admin-btn admin-btn-danger"
-                onClick={() => handleUnmarkPaid(confirmUnpay.id)}
-                disabled={acting === confirmUnpay.id}
-              >
-                {acting === confirmUnpay.id ? '…' : 'Zahlung zurücksetzen'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          confirmLabel="Zahlung zurücksetzen"
+          busyLabel="…"
+          busy={acting === confirmUnpay.id}
+          variant="danger"
+          onCancel={() => setConfirmUnpay(null)}
+          onConfirm={() => void handleUnmarkPaid(confirmUnpay.id)}
+        />
       )}
 
       {/* Bestätigungsdialog Rechnung archivieren */}
       {confirmArchive && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Rechnung archivieren?</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Rechnung archivieren?"
+          message={
+            <>
               {confirmArchive.invoice_number} · {fmtCHF(confirmArchive.total_amount)}<br />
               Projekt: {confirmArchive.project_name}<br />
               Die Rechnung gilt danach als annulliert. Ihre Rapporte werden von der
               Rechnung gelöst — sie sind wieder verrechenbar und können bei Bedarf
               gelöscht oder korrigiert werden, bevor eine neue Rechnung erstellt wird.
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmArchive(null)}>Abbrechen</button>
-              <button
-                className="admin-btn admin-btn-danger"
-                onClick={() => handleArchive(confirmArchive.id)}
-                disabled={acting === confirmArchive.id}
-              >
-                {acting === confirmArchive.id ? '…' : 'Archivieren'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          confirmLabel="Archivieren"
+          busyLabel="…"
+          busy={acting === confirmArchive.id}
+          variant="danger"
+          onCancel={() => setConfirmArchive(null)}
+          onConfirm={() => void handleArchive(confirmArchive.id)}
+        />
       )}
 
       {/* Dialog: Rechnung erstellen */}
       {showGenerate && (
-        <div className="admin-confirm-overlay">
-          {/* maxHeight/overflow: Arbeitsbeschrieb und Bemerkung wachsen mit dem Text —
-              ohne das schöben sie auf kleinen Bildschirmen die Knöpfe aus dem Bild. */}
-          <div className="admin-confirm-box" style={{ maxWidth: 440, maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="admin-confirm-title">Rechnung erstellen</div>
-            <div style={{ marginBottom: 12 }}>
+        <ConfirmDialog
+          title="Rechnung erstellen"
+          message={null}
+          confirmLabel="Rechnung erstellen"
+          busyLabel="Wird erstellt…"
+          busy={generating}
+          confirmDisabled={!genProject}
+          maxWidth={440}
+          // Arbeitsbeschrieb und Bemerkung wachsen mit dem Text — ohne Scrollen
+          // schöben sie auf kleinen Bildschirmen die Knöpfe aus dem Bild.
+          scrollable
+          onCancel={() => { if (!generating) setShowGenerate(false) }}
+          onConfirm={() => void handleGenerate()}
+        >
+          <div style={{ marginBottom: 12 }}>
               <label className="admin-form-label">Projekt</label>
               <select className="admin-form-select" value={genProject} onChange={e => checkQuote(e.target.value, projects)}>
                 <option value="">-- Projekt wählen --</option>
@@ -812,50 +793,41 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
                 </div>
               </div>
             )}
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setShowGenerate(false)} disabled={generating}>Abbrechen</button>
-              <button className="admin-btn admin-btn-primary" onClick={handleGenerate} disabled={!genProject || generating}>
-                {generating ? 'Wird erstellt…' : 'Rechnung erstellen'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </ConfirmDialog>
       )}
 
       {/* Dialog: Rechnung senden */}
       {sendInvoice && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
-            <div className="admin-confirm-title">Rechnung senden</div>
-            <div className="admin-confirm-text" style={{ marginBottom: 12 }}>
+        <ConfirmDialog
+          title="Rechnung senden"
+          message={
+            <>
               {sendInvoice.invoice_number} · {fmtCHF(sendInvoice.total_amount)}<br />
               Projekt: {sendInvoice.project_name}
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label className="admin-form-label">Empfänger E-Mail</label>
-              <input
-                className="admin-form-input"
-                type="email"
-                value={sendEmail}
-                onChange={e => setSendEmail(e.target.value)}
-                placeholder="kunde@example.com"
-              />
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setSendInvoice(null)} disabled={sending}>Abbrechen</button>
-              <button className="admin-btn admin-btn-primary" onClick={handleSendInvoice} disabled={!sendEmail || sending}>
-                {sending ? 'Wird gesendet…' : 'Rechnung senden'}
-              </button>
-            </div>
+            </>
+          }
+          confirmLabel="Rechnung senden"
+          busyLabel="Wird gesendet…"
+          busy={sending}
+          confirmDisabled={!sendEmail}
+          maxWidth={440}
+          onCancel={() => { if (!sending) setSendInvoice(null) }}
+          onConfirm={() => void handleSendInvoice()}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <label className="admin-form-label">Empfänger E-Mail</label>
+            <input
+              className="admin-form-input"
+              type="email"
+              value={sendEmail}
+              onChange={e => setSendEmail(e.target.value)}
+              placeholder="kunde@example.com"
+            />
           </div>
-        </div>
+        </ConfirmDialog>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

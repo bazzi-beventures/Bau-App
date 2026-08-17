@@ -7,6 +7,11 @@ export function fmtDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 /** Heutiges Datum als JJJJ-MM-TT für <input type="date"> — in LOKALER Zeit.
  *  Bewusst nicht `toISOString().slice(0, 10)`: das rechnet nach UTC um und liefert in
  *  der Schweiz zwischen Mitternacht und 01:00 (bzw. 02:00 im Sommer) noch das Datum

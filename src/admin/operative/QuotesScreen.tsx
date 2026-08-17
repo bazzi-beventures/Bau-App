@@ -17,6 +17,7 @@ import { AutoGrowTextarea, RowReorder, useReorder } from './QuoteRowControls'
 import { RichTextField } from '../components/RichTextField'
 import { SendQuoteDialog } from './SendQuoteDialog'
 import { SendThankyouDialog } from './SendThankyouDialog'
+import { useToast, ToastHost } from '../components/useToast'
 import { parseNum, vkFromEk, factorToPct, pctToFactor, computeTravelCost, round2 } from '../utils/quotePricing'
 import type { TravelCostTable } from '../utils/quotePricing'
 import { getMe } from '../../api/auth'
@@ -1805,7 +1806,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
   const [projektleiterOptions, setProjektleiterOptions] = useState<ProjektleiterOption[]>([])
   const [acting, setActing] = useState<number | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
   const [showCreate, setShowCreate] = useState(false)
   const [editQuote, setEditQuote] = useState<QuoteDetail | null>(null)
   // Send quote
@@ -1871,11 +1872,6 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
       })
       .catch(() => setProjektleiterOptions([]))
   }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleEdit(id: number) {
     try {
@@ -2158,11 +2154,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

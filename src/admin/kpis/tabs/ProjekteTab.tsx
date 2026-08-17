@@ -125,7 +125,11 @@ export default function ProjekteTab() {
     if (!filtered.length) return []
     const aktiv = filtered.filter((r) => !r.ist_abgeschlossen).length
     const stunden = filtered.reduce((s, r) => s + r.total_arbeitsstunden, 0)
-    const kosten = filtered.reduce((s, r) => s + r.total_kosten, 0)
+    // Fehlt einem Projekt der Preis/Stundensatz, ist seine Summe null (Migration
+    // 20260815). Dann ist auch das Total unbekannt — eine Summe ueber die uebrigen
+    // waere zu niedrig, ohne dass man es sieht.
+    const kostenUnvollstaendig = filtered.some((r) => r.total_kosten == null)
+    const kosten = filtered.reduce((s, r) => s + (r.total_kosten ?? 0), 0)
     const diffs = filtered.filter((r) => r.differenz_offerte_ist != null)
     const avgDiff = diffs.length
       ? diffs.reduce((s, r) => s + (r.differenz_offerte_ist ?? 0), 0) / diffs.length
@@ -133,7 +137,7 @@ export default function ProjekteTab() {
     return [
       { label: 'Projekte aktiv', value: String(aktiv) },
       { label: 'Total Stunden', value: num(stunden) as string },
-      { label: 'Total Kosten', value: chf(kosten) },
+      { label: 'Total Kosten', value: kostenUnvollstaendig ? '—' : chf(kosten) },
       { label: 'Ø Diff Offerte/Ist', value: chf(avgDiff), color: avgDiff >= 0 ? '#22c55e' : '#f87171' },
     ]
   }, [filtered])
@@ -141,8 +145,10 @@ export default function ProjekteTab() {
   const chartData = useMemo(
     () =>
       filtered
-        .filter((r) => r.total_kosten > 0)
-        .sort((a, b) => b.total_kosten - a.total_kosten)
+        // Projekte mit unbekannten Kosten (null) fallen hier raus — ein Balken
+        // waere entweder falsch hoch oder eine unerklaerte Luecke.
+        .filter((r) => (r.total_kosten ?? 0) > 0)
+        .sort((a, b) => (b.total_kosten ?? 0) - (a.total_kosten ?? 0))
         .slice(0, 12)
         .map((r) => ({
           name: r.projekt_name.slice(0, 18),

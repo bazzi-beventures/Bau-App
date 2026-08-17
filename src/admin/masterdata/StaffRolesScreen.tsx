@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   StaffRole, getStaffRoles, upsertStaffRole, deleteStaffRole, reorderStaffRoles,
 } from '../../api/admin'
+import { useToast, ToastHost } from '../components/useToast'
 
 // "Personal"-Screen: Tab-Layout analog zum Material-Screen. Vorerst nur der Tab
 // "Stundensätze" (die früheren "Funktionen"). Weitere Tabs können hier andocken.
@@ -38,7 +39,7 @@ function StaffRatesPanel() {
   const [deletingName, setDeletingName] = useState<string | null>(null)
   const [savingOrder, setSavingOrder] = useState(false)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast()
 
   const [newName, setNewName] = useState('')
   const [newRate, setNewRate] = useState('')
@@ -59,11 +60,6 @@ function StaffRatesPanel() {
   }
 
   useEffect(() => { load() }, [])
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
 
   function parseRate(v: string): number | null {
     const n = parseFloat(v.replace(',', '.'))
@@ -314,11 +310,7 @@ function StaffRatesPanel() {
         </button>
       </form>
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </>
   )
 }

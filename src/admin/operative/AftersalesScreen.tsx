@@ -7,6 +7,7 @@ import {
 } from '../../api/admin'
 import { apiUrl } from '../../api/client'
 import { fmtDate } from '../utils/format'
+import { useToast, ToastHost } from '../components/useToast'
 
 type FilterKey = AftersalesStatus | 'all'
 
@@ -97,12 +98,7 @@ export default function AftersalesScreen() {
     { send_date: '', mail_subject: '', mail_body: '' },
   )
   const [busy, setBusy] = useState<'save' | 'send' | 'regen' | 'cancel' | 'reactivate' | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
-  }
+  const { toast, showToast } = useToast(3500)
 
   async function load() {
     setLoading(true)
@@ -410,11 +406,7 @@ export default function AftersalesScreen() {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

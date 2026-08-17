@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useToast, ToastHost } from '../components/useToast'
 import {
   downloadErrorLogsCsv,
   ERROR_LEVELS,
@@ -197,16 +198,7 @@ export default function ErrorLogsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ErrorLogRow | null>(null)
   const [visible, setVisible] = useState(PAGE)
-  const [toast, setToast] = useState<{ msg: string; kind: 'success' | 'error' | 'info' } | null>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const showToast = useCallback((msg: string, kind: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ msg, kind })
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 3500)
-  }, [])
-
-  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
+  const { toast, showToast } = useToast(3500)
 
   function applyPreset(id: Exclude<PresetId, 'custom'>) {
     const r = presetRange(id)
@@ -427,11 +419,7 @@ export default function ErrorLogsScreen() {
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.kind}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import {
 import { fmtDate } from '../utils/format'
 import { findCustomerMatch, normalize } from './customerMatch'
 import { WORK_TYPES, workTypeLabel } from '../../api/workTypes'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface CustomerLite {
   id: string
@@ -39,7 +40,7 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
   const [drafts, setDrafts] = useState<ProjectDraft[] | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('open')
   const [selected, setSelected] = useState<ProjectDraft | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast(3500)
 
   async function load() {
     setDrafts(null)
@@ -52,11 +53,6 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
   }
 
   useEffect(() => { load() }, [filter])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
-  }
 
   function onConverted(p: { project_name: string }) {
     showToast(`Projekt "${p.project_name}" erstellt.`, 'success')
@@ -93,7 +89,7 @@ export default function ProjectDraftsScreen({ onBadgeChange }: Props) {
         </div>
       </div>
 
-      {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+      <ToastHost toast={toast} />
 
       {drafts === null && (
         <div className="admin-loading"><div className="admin-spinner" />Lade…</div>

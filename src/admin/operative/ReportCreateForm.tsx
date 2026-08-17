@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { apiFetch } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
-import { fmtCHF, fmtDate } from '../utils/format'
+import { fmtCHF, fmtDate, todayISO } from '../utils/format'
 import { parseNum } from '../utils/quotePricing'
 import { QUOTE_STATUS_LABELS } from '../constants/statuses'
 import { InfoHint } from '../components/InfoHint'
@@ -148,12 +148,6 @@ function pickDefaultQuote(quotes: ProjectQuote[]): ProjectQuote | null {
 
 function prefillDescription(q: ProjectQuote | null): string {
   return q ? `Arbeiten gemäss Offerte ${q.quote_number}` : ''
-}
-
-function todayISO(): string {
-  const d = new Date()
-  const off = d.getTimezoneOffset()
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10)
 }
 
 // Antwort von GET /pwa/admin/projects/{id}/reports/{reportId} — der gespeicherte

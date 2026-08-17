@@ -5,6 +5,7 @@ import {
   createBoardTask, deleteBoardTask, getTaskBoard, updateBoardTask,
 } from '../../api/admin'
 import { AdminScreen } from '../useAdminNav'
+import { useToast, ToastHost } from '../components/useToast'
 import { fmtDate } from '../utils/format'
 import {
   BoardView, COLUMN_LABELS, daysSince, dropSortOrder,
@@ -17,8 +18,6 @@ interface Props {
   onNav: (screen: AdminScreen, detailId?: string) => void
   onBadgeChange?: () => void
 }
-
-type Toast = { msg: string; type: 'success' | 'error' } | null
 
 /** Deep-Link von der Karte zum Quell-Datensatz. */
 function navTarget(task: BoardTask): { screen: AdminScreen; detailId?: string } | null {
@@ -336,15 +335,14 @@ export default function TaskBoardScreen({ onNav, onBadgeChange }: Props) {
   const [loading, setLoading] = useState(true)
   const [detailTask, setDetailTask] = useState<BoardTask | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [toast, setToast] = useState<Toast>(null)
+  const { toast, showToast } = useToast(3000)
 
   async function load(assignee = filter, refresh = false) {
     setLoading(true)
     try {
       setBoard(await getTaskBoard(assignee, refresh))
     } catch {
-      setToast({ msg: 'Board konnte nicht geladen werden', type: 'error' })
-      setTimeout(() => setToast(null), 3000)
+      showToast('Board konnte nicht geladen werden', 'error')
     } finally {
       setLoading(false)
     }
@@ -377,8 +375,7 @@ export default function TaskBoardScreen({ onNav, onBadgeChange }: Props) {
       await updateBoardTask(task.id, patch)
       onBadgeChange?.()
     } catch {
-      setToast({ msg: 'Aktion fehlgeschlagen', type: 'error' })
-      setTimeout(() => setToast(null), 3000)
+      showToast('Aktion fehlgeschlagen', 'error')
       load()
     }
   }
@@ -390,8 +387,7 @@ export default function TaskBoardScreen({ onNav, onBadgeChange }: Props) {
   async function moveTask(task: BoardTask, column: BoardColumn, targetIndex: number) {
     if (!board) return
     if (column === 'erledigt' && task.status !== 'erledigt' && isProcessBound(task, board.task_types)) {
-      setToast({ msg: PROCESS_BOUND_HINT, type: 'error' })
-      setTimeout(() => setToast(null), 3000)
+      showToast(PROCESS_BOUND_HINT, 'error')
       return
     }
     const grouped = groupByColumn(board.tasks, board.columns)
@@ -503,7 +499,7 @@ export default function TaskBoardScreen({ onNav, onBadgeChange }: Props) {
         </div>
       </div>
 
-      {toast && <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>}
+      <ToastHost toast={toast} />
 
       <div className="tb-filterbar">
         <span className="tb-filterbar-label">Ansicht:</span>

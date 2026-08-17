@@ -3,6 +3,7 @@ import { apiFetch } from '../../api/client'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import MultiDropdown from '../kpis/components/MultiDropdown'
 import '../kpis/kpi-dashboard.css'
+import { useToast, ToastHost } from '../components/useToast'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const LS_SHOW_MANAGEMENT = 'hr_reports_show_management'
@@ -102,7 +103,7 @@ export default function HrReportsScreen() {
   const [loading, setLoading] = useState(false)
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
 
   const [violations, setViolations] = useState<DbViolation[]>([])
   const [violationsLoading, setViolationsLoading] = useState(false)
@@ -157,8 +158,7 @@ export default function HrReportsScreen() {
       await apiFetch(`/pwa/admin/hr/violations/${id}/acknowledge`, { method: 'PATCH' })
       setViolations(vs => vs.map(v => v.id === id ? { ...v, acknowledged: true } : v))
     } catch {
-      setToast({ msg: 'Fehler beim Bestätigen', type: 'error' })
-      setTimeout(() => setToast(null), 3000)
+      showToast('Fehler beim Bestätigen', 'error')
     } finally {
       setAcknowledging(null)
     }
@@ -195,11 +195,9 @@ export default function HrReportsScreen() {
       a.download = filename
       a.click()
       URL.revokeObjectURL(url)
-      setToast({ msg: 'Export heruntergeladen', type: 'success' })
-      setTimeout(() => setToast(null), 3000)
+      showToast('Export heruntergeladen', 'success')
     } catch (err) {
-      setToast({ msg: err instanceof Error ? err.message : 'Export fehlgeschlagen', type: 'error' })
-      setTimeout(() => setToast(null), 3000)
+      showToast(err instanceof Error ? err.message : 'Export fehlgeschlagen', 'error')
     } finally {
       setExporting(false)
     }
@@ -649,11 +647,7 @@ export default function HrReportsScreen() {
         </>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -242,8 +242,4 @@ export function nextAppointment(list: AppointmentDraft[], todayISO: string): App
   return upcoming[0] ?? null
 }
 
-export function todayISO(now: Date = new Date()): string {
-  // Lokales Datum (nicht toISOString → UTC), sonst gilt am Abend schon morgen.
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
+export { todayISO } from '../utils/format'

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAdminCorrections, approveCorrection, rejectCorrection, Correction } from '../../api/admin'
 import { fmtDate } from '../utils/format'
+import { useToast, ToastHost } from '../components/useToast'
 
 function TimeChange({ before, after, label }: { before: string | null; after: string | null; label: string }) {
   if (!after) return null
@@ -18,7 +19,7 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
   const [corrections, setCorrections] = useState<Correction[]>([])
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
   const [expanded, setExpanded] = useState<string | null>(null)
 
   async function load() {
@@ -31,11 +32,6 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
   }
 
   useEffect(() => { load() }, [])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleApprove(id: string) {
     setActing(id)
@@ -168,11 +164,7 @@ export default function CorrectionsScreen({ onBadgeChange }: { onBadgeChange?: (
         )}
       </div>
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { backdropCloseProps } from '../../shared/backdropClose'
 import { apiFetch } from '../../api/client'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface Supplier {
   id: string
@@ -51,7 +52,7 @@ export default function SuppliersScreen() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast()
 
   const [lookupHits, setLookupHits] = useState<LookupHit[]>([])
   const [lookupOpen, setLookupOpen] = useState(false)
@@ -188,11 +189,6 @@ export default function SuppliersScreen() {
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Fehler beim Löschen')
     }
-  }
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
   }
 
   return (
@@ -455,11 +451,7 @@ export default function SuppliersScreen() {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -12,6 +12,7 @@ import {
 } from '../../api/chat'
 import { apiFetch, ApiError, isOfflineError } from '../../api/client'
 import BerichtScreen, { BerichtType } from '../../screens/BerichtScreen'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface SessionStatus {
   status: 'active' | 'inactive' | 'on_break'
@@ -31,11 +32,6 @@ const ABSENCE_TYPE_LABELS: Record<AbsenceCreatePayload['absence_type'], string> 
   sick: 'Krankheit',
   military: 'Militärdienst',
   other: 'Sonstiges',
-}
-
-interface Toast {
-  msg: string
-  type: 'success' | 'error' | 'info'
 }
 
 const STEMPEL_STATE_KEY = 'my-time-stempel-state'
@@ -147,7 +143,7 @@ interface ActionCard {
 
 export default function MyTimeScreen({ onLoggedOut }: Props) {
   const [loadingAction, setLoadingAction] = useState<ZeitAction | null>(null)
-  const [toast, setToast] = useState<Toast | null>(null)
+  const { toast, showToast } = useToast(4000)
   const [stempel, setStempel] = useState<StempelState>(() => loadStempelState())
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [berichtModal, setBerichtModal] = useState<BerichtType | null>(null)
@@ -252,11 +248,6 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
     } finally {
       setAbsLoading(false)
     }
-  }
-
-  function showToast(msg: string, type: Toast['type']) {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 4000)
   }
 
   useEffect(() => {
@@ -744,13 +735,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`} style={{ pointerEvents: 'auto' }}>
-            {toast.msg}
-          </div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

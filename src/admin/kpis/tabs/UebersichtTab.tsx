@@ -3,7 +3,10 @@ import { useKpiData } from '../useKpiData'
 import type { KpiDashboardRow } from '../types'
 import KpiCards from '../components/KpiCards'
 
-const chf = (v: number) => `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0 })}`
+// null = die View konnte die Summe nicht vollstaendig bilden (Position ohne Preis
+// oder Stundensatz, Migration 20260815) — dann „—" statt einer zu niedrigen Zahl.
+const chf = (v: number | null | undefined) =>
+  typeof v === 'number' ? `CHF ${v.toLocaleString('de-CH', { minimumFractionDigits: 0 })}` : '—'
 
 export default function UebersichtTab() {
   const { data, loading, error } = useKpiData<KpiDashboardRow>('vw_kpi_dashboard')

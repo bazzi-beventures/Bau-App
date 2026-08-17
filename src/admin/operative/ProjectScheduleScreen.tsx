@@ -11,6 +11,8 @@ import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalenda
 import { setNewProjectPrefill } from './newProjectPrefill'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { shiftISO, hhmmToMin, minToHHMM, toDateStr } from '../utils/calendarHelpers'
+import { useToast, ToastHost } from '../components/useToast'
+import { backdropCloseProps } from '../../shared/backdropClose'
 
 interface StaffLite {
   id: string
@@ -207,7 +209,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [apptForm, setApptForm] = useState<ApptFormState | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
   const [panelOpen, setPanelOpen] = useState(false)
   const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null)
   // Offene Rückfrage «nur dieser Termin oder ganze Serie?» beim Löschen.
@@ -288,11 +290,6 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [seriesDeletePrompt])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   // Nächster (ab heute) Termin eines Projekts als Editor-State; ohne künftigen
   // Termin der letzte vergangene, ohne Termine null.
@@ -1278,7 +1275,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       {seriesDeletePrompt && (
         <div
           className="admin-confirm-overlay"
-          onClick={() => { if (!saving) setSeriesDeletePrompt(null) }}
+          {...backdropCloseProps(() => { if (!saving) setSeriesDeletePrompt(null) })}
           role="dialog"
           aria-modal="true"
           aria-label="Serientermin entfernen"
@@ -1314,11 +1311,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

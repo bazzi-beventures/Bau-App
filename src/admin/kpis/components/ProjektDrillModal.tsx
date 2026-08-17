@@ -107,6 +107,13 @@ export default function ProjektDrillModal({ projekt: p, from, to, onClose }: Pro
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <Badge label={s.label} color={s.color} />
                     <span style={{ color: 'var(--text-muted)' }}>{o.datum ?? '—'}</span>
+                    {/* Die Zeile steht fuer eine ganze Variantengruppe — ohne den
+                        Hinweis wirkt der Betrag der Leitvariante wie das Ganze. */}
+                    {(o.variant_count ?? 1) > 1 && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        · 1 von {o.variant_count} Varianten
+                      </span>
+                    )}
                   </span>
                   <span>{chf(o.betrag)}</span>
                 </div>

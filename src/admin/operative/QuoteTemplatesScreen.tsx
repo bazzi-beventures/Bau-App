@@ -4,11 +4,17 @@ import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { fmtDate } from '../utils/format'
-import { RichTextField } from '../components/RichTextField'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useToast, ToastHost } from '../components/useToast'
+import { useTenantText, TenantTextSetting } from '../components/TenantTextSetting'
 
 // Vorlagen für die Offerten-Sektionen "Montagepositionen" und "Sonderpositionen".
 // Spiegelt die Schnell-Buttons im Offerte-Formular — hier zentral pflegbar, ohne Migration.
+//
+// Die reinen Textbausteine (Bemerkungen, Disclaimer, Mail-Texte …) laufen über
+// useTenantText/<TenantTextSetting/> — ein Baustein pro Endpoint der Backend-
+// Factory make_tenant_text_endpoints. Nur Positions-Vorlagen, Standard-Anhänge
+// und die Skonto-Vorgabe (zwei Zahlen, eigener Vertrag) haben eigenen Code.
 
 interface InstallationTpl {
   id: string
@@ -78,49 +84,37 @@ function OffertenVorlagenPanel() {
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
-  // Standard-Bemerkungen: aktueller Editor-Wert, zuletzt gespeicherter Wert (für Dirty-Check),
-  // und ob aktuell der System-Default greift (Mandant hat noch keinen eigenen Text).
-  const [stdNotes, setStdNotes] = useState('')
-  const [stdNotesSaved, setStdNotesSaved] = useState('')
-  const [stdIsDefault, setStdIsDefault] = useState(true)
-  const [savingNotes, setSavingNotes] = useState(false)
-  // Footer-Disclaimer: analog zu den Standard-Bemerkungen, eigenes Tenant-Feld.
-  const [stdDisc, setStdDisc] = useState('')
-  const [stdDiscSaved, setStdDiscSaved] = useState('')
-  const [stdDiscIsDefault, setStdDiscIsDefault] = useState(true)
-  const [savingDisc, setSavingDisc] = useState(false)
-  // Zweiter Disclaimer für den Typ "Richtofferte" — nur sichtbar/pflegbar bei aktivem
-  // Feature "richtofferte". Eigenes Tenant-Feld + eigener System-Default.
+  const { toast, showToast } = useToast()
   const [richtoffAvailable, setRichtoffAvailable] = useState(false)
-  const [stdDiscR, setStdDiscR] = useState('')
-  const [stdDiscRSaved, setStdDiscRSaved] = useState('')
-  const [stdDiscRIsDefault, setStdDiscRIsDefault] = useState(true)
-  const [savingDiscR, setSavingDiscR] = useState(false)
-  // Skonto-Begleittext (Hinweis "Abzug bei früher Zahlung" auf der Offerte). Eigenes
-  // Tenant-Feld + System-Default; immer pflegbar (kein Feature-Flag).
-  const [skontoTxt, setSkontoTxt] = useState('')
-  const [skontoTxtSaved, setSkontoTxtSaved] = useState('')
-  const [skontoIsDefault, setSkontoIsDefault] = useState(true)
-  const [savingSkonto, setSavingSkonto] = useState(false)
+
+  // Textbausteine — je Endpoint ein Hook; Semantik (2-/3-Zustand, Reset-Payload)
+  // siehe TenantTextSetting.tsx.
+  const stdNotes = useTenantText('/pwa/admin/quote-standard-notes', 'notes', {
+    showToast, savedMsg: 'Standard-Bemerkungen gespeichert', resetPayload: '',
+  })
+  const disc = useTenantText('/pwa/admin/quote-footer-disclaimer', 'disclaimer', {
+    showToast, savedMsg: 'Disclaimer gespeichert',
+  })
+  const discR = useTenantText('/pwa/admin/quote-footer-disclaimer-richtofferte', 'disclaimer', {
+    showToast, savedMsg: 'Disclaimer (Richtofferte) gespeichert',
+  })
+  const skontoText = useTenantText('/pwa/admin/quote-skonto-text', 'text', {
+    showToast, savedMsg: 'Skonto-Begleittext gespeichert',
+  })
+  const thankyou = useTenantText('/pwa/admin/quote-thankyou-text', 'text', {
+    showToast, savedMsg: 'Danke-Text gespeichert',
+  })
+  const rejection = useTenantText('/pwa/admin/quote-rejection-text', 'text', {
+    showToast, savedMsg: 'Absage-Text gespeichert',
+  })
+  const textsLoading = [stdNotes, disc, discR, skontoText, thankyou, rejection].some(s => s.loading)
+
   // Skonto-Vorgabe: belegt die beiden Skonto-Felder im Erstell-Formular vor. Leer =
   // keine Vorgabe. Beide Felder als String im State (Eingabefeld), Zahl erst beim Speichern.
   const [skontoDefPct, setSkontoDefPct] = useState('')
   const [skontoDefDays, setSkontoDefDays] = useState('')
   const [skontoDefSaved, setSkontoDefSaved] = useState({ pct: '', days: '' })
   const [savingSkontoDef, setSavingSkontoDef] = useState(false)
-  // Danke-Text bei Offerten-Annahme (Feature offerte_dank_mail). Eigenes Tenant-Feld +
-  // System-Default; immer pflegbar (kein Feature-Flag, damit man ihn vorbereiten kann).
-  const [thankyouTxt, setThankyouTxt] = useState('')
-  const [thankyouTxtSaved, setThankyouTxtSaved] = useState('')
-  const [thankyouIsDefault, setThankyouIsDefault] = useState(true)
-  const [savingThankyou, setSavingThankyou] = useState(false)
-  // Absage-Text bei Offerten-Ablehnung (Feature offerte_absage_mail). Gegenstück zum
-  // Danke-Text; ebenfalls immer pflegbar (kein Feature-Flag am Editor).
-  const [rejectionTxt, setRejectionTxt] = useState('')
-  const [rejectionTxtSaved, setRejectionTxtSaved] = useState('')
-  const [rejectionIsDefault, setRejectionIsDefault] = useState(true)
-  const [savingRejection, setSavingRejection] = useState(false)
   // Standard-Anhänge: pflegbar auch bei deaktiviertem Feature (nur der Versand-Dialog
   // hängt am Flag) — analog zu den Sonderpositionen mit Hinweis statt Ausblenden.
   const [attachments, setAttachments] = useState<QuoteAttachmentTpl[]>([])
@@ -133,125 +127,21 @@ function OffertenVorlagenPanel() {
   async function load() {
     setLoading(true)
     try {
-      const [data, notes, disc, discR, skonto, skontoDef, thankyou, rejection, att] = await Promise.all([
+      const [data, skontoDef, att] = await Promise.all([
         apiFetch('/pwa/admin/quote-position-templates') as Promise<{ installation: InstallationTpl[]; special: SpecialTpl[] }>,
-        apiFetch('/pwa/admin/quote-standard-notes') as Promise<{ notes: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/quote-footer-disclaimer') as Promise<{ disclaimer: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte') as Promise<{ disclaimer: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/quote-skonto-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-skonto-defaults') as Promise<{ pct: number | null; days: number | null }>,
-        apiFetch('/pwa/admin/quote-thankyou-text') as Promise<{ text: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/quote-rejection-text') as Promise<{ text: string; is_default: boolean }>,
         apiFetch('/pwa/admin/quote-attachment-templates') as Promise<{ attachments: QuoteAttachmentTpl[] }>,
       ])
       setInstallation(data.installation ?? [])
       setSpecial(data.special ?? [])
       setAttachments(att.attachments ?? [])
-      setStdNotes(notes.notes ?? '')
-      setStdNotesSaved(notes.notes ?? '')
-      setStdIsDefault(notes.is_default)
-      setStdDisc(disc.disclaimer ?? '')
-      setStdDiscSaved(disc.disclaimer ?? '')
-      setStdDiscIsDefault(disc.is_default)
-      setStdDiscR(discR.disclaimer ?? '')
-      setStdDiscRSaved(discR.disclaimer ?? '')
-      setStdDiscRIsDefault(discR.is_default)
-      setSkontoTxt(skonto.text ?? '')
-      setSkontoTxtSaved(skonto.text ?? '')
-      setSkontoIsDefault(skonto.is_default)
       const defPct = skontoDef.pct != null ? String(skontoDef.pct) : ''
       const defDays = skontoDef.days != null ? String(skontoDef.days) : ''
       setSkontoDefPct(defPct)
       setSkontoDefDays(defDays)
       setSkontoDefSaved({ pct: defPct, days: defDays })
-      setThankyouTxt(thankyou.text ?? '')
-      setThankyouTxtSaved(thankyou.text ?? '')
-      setThankyouIsDefault(thankyou.is_default)
-      setRejectionTxt(rejection.text ?? '')
-      setRejectionTxtSaved(rejection.text ?? '')
-      setRejectionIsDefault(rejection.is_default)
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function saveStandardNotes(reset = false) {
-    setSavingNotes(true)
-    setError('')
-    try {
-      const res = await apiFetch('/pwa/admin/quote-standard-notes', {
-        method: 'PATCH',
-        body: JSON.stringify({ notes: reset ? '' : stdNotes }),
-      }) as { notes: string; is_default: boolean }
-      setStdNotes(res.notes ?? '')
-      setStdNotesSaved(res.notes ?? '')
-      setStdIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Standard-Bemerkungen gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingNotes(false)
-    }
-  }
-
-  async function saveFooterDisclaimer(reset = false) {
-    setSavingDisc(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer
-      // String ist erlaubt und heisst "bewusst kein Disclaimer" (wird gespeichert).
-      const res = await apiFetch('/pwa/admin/quote-footer-disclaimer', {
-        method: 'PATCH',
-        body: JSON.stringify({ disclaimer: reset ? null : stdDisc }),
-      }) as { disclaimer: string; is_default: boolean }
-      setStdDisc(res.disclaimer ?? '')
-      setStdDiscSaved(res.disclaimer ?? '')
-      setStdDiscIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Disclaimer gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingDisc(false)
-    }
-  }
-
-  async function saveFooterDisclaimerRichtofferte(reset = false) {
-    setSavingDiscR(true)
-    setError('')
-    try {
-      const res = await apiFetch('/pwa/admin/quote-footer-disclaimer-richtofferte', {
-        method: 'PATCH',
-        body: JSON.stringify({ disclaimer: reset ? null : stdDiscR }),
-      }) as { disclaimer: string; is_default: boolean }
-      setStdDiscR(res.disclaimer ?? '')
-      setStdDiscRSaved(res.disclaimer ?? '')
-      setStdDiscRIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Disclaimer (Richtofferte) gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingDiscR(false)
-    }
-  }
-
-  async function saveQuoteSkontoText(reset = false) {
-    setSavingSkonto(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
-      // serverseitig ebenfalls als Reset behandelt — leerer Begleittext ergibt keinen Sinn).
-      const res = await apiFetch('/pwa/admin/quote-skonto-text', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : skontoTxt }),
-      }) as { text: string; is_default: boolean }
-      setSkontoTxt(res.text ?? '')
-      setSkontoTxtSaved(res.text ?? '')
-      setSkontoIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Begleittext gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingSkonto(false)
     }
   }
 
@@ -285,48 +175,6 @@ function OffertenVorlagenPanel() {
     }
   }
 
-  async function saveQuoteThankyouText(reset = false) {
-    setSavingThankyou(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); leerer Editor-Wert wird serverseitig
-      // ebenfalls als Reset behandelt (leerer Danke-Text ergibt keine sinnvolle Mail).
-      const res = await apiFetch('/pwa/admin/quote-thankyou-text', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : thankyouTxt }),
-      }) as { text: string; is_default: boolean }
-      setThankyouTxt(res.text ?? '')
-      setThankyouTxtSaved(res.text ?? '')
-      setThankyouIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Danke-Text gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingThankyou(false)
-    }
-  }
-
-  async function saveQuoteRejectionText(reset = false) {
-    setSavingRejection(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); leerer Editor-Wert wird serverseitig
-      // ebenfalls als Reset behandelt (leerer Absage-Text ergibt keine sinnvolle Mail).
-      const res = await apiFetch('/pwa/admin/quote-rejection-text', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : rejectionTxt }),
-      }) as { text: string; is_default: boolean }
-      setRejectionTxt(res.text ?? '')
-      setRejectionTxtSaved(res.text ?? '')
-      setRejectionIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Absage-Text gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingRejection(false)
-    }
-  }
-
   useEffect(() => { load() }, [])
   useEffect(() => {
     getMe().then(me => {
@@ -335,11 +183,6 @@ function OffertenVorlagenPanel() {
       setAnhangFeatureOn(isFeatureEnabled(me, 'prospekt_mit_offerte'))
     }).catch(() => {})
   }, [])
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
 
   function openEditor(state: EditState, f: FormState) {
     setForm(f)
@@ -486,7 +329,7 @@ function OffertenVorlagenPanel() {
         </div>
       </div>
 
-      {loading ? (
+      {loading || textsLoading ? (
         <div className="admin-table-wrap"><div className="admin-loading"><div className="admin-spinner" /> Laden…</div></div>
       ) : (
         <>
@@ -641,172 +484,64 @@ function OffertenVorlagenPanel() {
             </table>
           </div>
 
-          {/* ── Standard-Bemerkungen ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Standard-Bemerkungen</div>
-              <div className="admin-page-subtitle">
-                Vorausgefüllter Bemerkungstext im Offerte-Formular — gibt dem Kunden mehr Flexibilität.
-                {stdIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <RichTextField
-              rows={10}
-              value={stdNotes}
-              onChange={setStdNotes}
-              placeholder="Standard-Bemerkungstext für neue Offerten…"
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveStandardNotes(false)}
-                disabled={savingNotes || stdNotes === stdNotesSaved}
-              >
-                {savingNotes ? 'Speichern…' : 'Bemerkungen speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveStandardNotes(true)}
-                disabled={savingNotes || stdIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
-              </span>
-            </div>
-          </div>
+          <TenantTextSetting
+            title="Standard-Bemerkungen"
+            subtitle="Vorausgefüllter Bemerkungstext im Offerte-Formular — gibt dem Kunden mehr Flexibilität."
+            state={stdNotes}
+            editor="rich"
+            rows={10}
+            placeholder="Standard-Bemerkungstext für neue Offerten…"
+            saveLabel="Bemerkungen speichern"
+            hint="Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF."
+          />
 
-          {/* ── Footer-Disclaimer ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer{richtoffAvailable ? ' — Offerte' : ''}</div>
-              <div className="admin-page-subtitle">
-                {richtoffAvailable
-                  ? 'Erscheint zuunterst auf Offerten vom Typ „Offerte", unter den Bemerkungen.'
-                  : 'Erscheint zuunterst auf jedem Offerten-PDF, unter den Bemerkungen.'}
-                {stdDiscIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-                {!stdDiscIsDefault && stdDiscSaved.trim() === '' &&
-                  ' Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <RichTextField
-              rows={4}
-              value={stdDisc}
-              onChange={setStdDisc}
-              placeholder="Schlusstext / Disclaimer fürs Offerten-PDF…"
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveFooterDisclaimer(false)}
-                disabled={savingDisc || stdDisc === stdDiscSaved}
-              >
-                {savingDisc ? 'Speichern…' : 'Disclaimer speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveFooterDisclaimer(true)}
-                disabled={savingDisc || stdDiscIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
-              </span>
-            </div>
-          </div>
+          <TenantTextSetting
+            title={`Schlusstext / Disclaimer${richtoffAvailable ? ' — Offerte' : ''}`}
+            subtitle={richtoffAvailable
+              ? 'Erscheint zuunterst auf Offerten vom Typ „Offerte", unter den Bemerkungen.'
+              : 'Erscheint zuunterst auf jedem Offerten-PDF, unter den Bemerkungen.'}
+            state={disc}
+            editor="rich"
+            rows={4}
+            placeholder="Schlusstext / Disclaimer fürs Offerten-PDF…"
+            saveLabel="Disclaimer speichern"
+            hint="Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF."
+            emptyStateHint="Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer."
+          />
 
-          {/* ── Footer-Disclaimer Richtofferte (nur bei aktivem Feature "richtofferte") ── */}
+          {/* Zweiter Disclaimer für den Typ "Richtofferte" — nur sichtbar/pflegbar bei
+              aktivem Feature "richtofferte". Eigenes Tenant-Feld + eigener System-Default. */}
           {richtoffAvailable && (
-            <>
-              <div className="admin-page-header" style={{ marginTop: 24 }}>
-                <div>
-                  <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusstext / Disclaimer — Richtofferte</div>
-                  <div className="admin-page-subtitle">
-                    Erscheint nur auf Offerten vom Typ „Richtofferte", unter den Bemerkungen.
-                    {stdDiscRIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-                    {!stdDiscRIsDefault && stdDiscRSaved.trim() === '' &&
-                      ' Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer.'}
-                  </div>
-                </div>
-              </div>
-              <div className="admin-table-wrap" style={{ padding: 16 }}>
-                <RichTextField
-                  rows={4}
-                  value={stdDiscR}
-                  onChange={setStdDiscR}
-                  placeholder="Schlusstext / Disclaimer für Richtofferten…"
-                />
-                <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    className="admin-btn admin-btn-primary"
-                    onClick={() => saveFooterDisclaimerRichtofferte(false)}
-                    disabled={savingDiscR || stdDiscR === stdDiscRSaved}
-                  >
-                    {savingDiscR ? 'Speichern…' : 'Disclaimer speichern'}
-                  </button>
-                  <button
-                    className="admin-btn admin-btn-secondary"
-                    onClick={() => saveFooterDisclaimerRichtofferte(true)}
-                    disabled={savingDiscR || stdDiscRIsDefault}
-                  >
-                    Auf Standardtext zurücksetzen
-                  </button>
-                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                    Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF.
-                  </span>
-                </div>
-              </div>
-            </>
+            <TenantTextSetting
+              title="Schlusstext / Disclaimer — Richtofferte"
+              subtitle={'Erscheint nur auf Offerten vom Typ „Richtofferte", unter den Bemerkungen.'}
+              state={discR}
+              editor="rich"
+              rows={4}
+              placeholder="Schlusstext / Disclaimer für Richtofferten…"
+              saveLabel="Disclaimer speichern"
+              hint="Zeilenumbrüche bleiben erhalten und erscheinen so auch im Offerten-PDF."
+              emptyStateHint="Aktuell ist kein Schlusstext gesetzt — das PDF zeigt unten keinen Disclaimer."
+            />
           )}
 
-          {/* ── Skonto-Begleittext (Hinweis "Abzug bei früher Zahlung"; für alle Mandanten) ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Begleittext</div>
-              <div className="admin-page-subtitle">
+          <TenantTextSetting
+            title="Skonto-Begleittext"
+            subtitle={
+              <>
                 Erscheint auf der Offerte unter dem Total, sobald bei einer Offerte ein Skonto-%
                 gesetzt ist. Platzhalter <code>{'{prozent}'}</code>, <code>{'{tage}'}</code> und{' '}
                 <code>{'{betrag}'}</code> werden beim PDF aus den Offert-Werten gefüllt
                 (<code>{'{betrag}'}</code> = Brutto-Skonto-Betrag).
-                {skontoIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={3}
-              value={skontoTxt}
-              onChange={e => setSkontoTxt(e.target.value)}
-              placeholder="Bei Zahlung innerhalb von {tage} Tagen {prozent}% Skonto."
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveQuoteSkontoText(false)}
-                disabled={savingSkonto || skontoTxt === skontoTxtSaved}
-              >
-                {savingSkonto ? 'Speichern…' : 'Begleittext speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveQuoteSkontoText(true)}
-                disabled={savingSkonto || skontoIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Leer lassen setzt auf den System-Standardtext zurück.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={skontoText}
+            editor="textarea"
+            rows={3}
+            placeholder="Bei Zahlung innerhalb von {tage} Tagen {prozent}% Skonto."
+            saveLabel="Begleittext speichern"
+            hint="Leer lassen setzt auf den System-Standardtext zurück."
+          />
 
           {/* ── Skonto-Vorgabe (Vorbelegung im Erstell-Formular) ── */}
           <div className="admin-page-header" style={{ marginTop: 24 }}>
@@ -821,6 +556,7 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
           <div className="admin-table-wrap" style={{ padding: 16 }}>
+            {error && <div className="admin-form-error" style={{ marginBottom: 8 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 160px' }}>
                 <label className="admin-form-label">Skonto (%)</label>
@@ -869,93 +605,45 @@ function OffertenVorlagenPanel() {
             </div>
           </div>
 
-          {/* ── Danke-Text bei Offerten-Annahme (Feature „Danke-Mail bei Offerten-Annahme") ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Danke-Text (Offerten-Annahme)</div>
-              <div className="admin-page-subtitle">
+          {/* Danke-/Absage-Text: immer pflegbar (kein Feature-Flag am Editor, damit man
+              die Texte vor dem Aktivieren der Mail-Features vorbereiten kann). */}
+          <TenantTextSetting
+            title="Danke-Text (Offerten-Annahme)"
+            subtitle={
+              <>
                 Inhalt der Dankesmail, die dem Kunden nach Annahme einer Offerte zugeht —
                 sobald das Feature „Danke-Mail bei Offerten-Annahme" aktiv ist (unter
                 Konfiguration). Platzhalter <code>{'{kunde}'}</code>, <code>{'{offerte}'}</code>{' '}
                 und <code>{'{projekt}'}</code> werden beim Versand aus der Offerte gefüllt.
                 Anrede und Grussformel gehören in den Text.
-                {thankyouIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={8}
-              value={thankyouTxt}
-              onChange={e => setThankyouTxt(e.target.value)}
-              placeholder="Guten Tag {kunde}&#10;&#10;Vielen Dank für die Annahme unserer Offerte {offerte}…"
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveQuoteThankyouText(false)}
-                disabled={savingThankyou || thankyouTxt === thankyouTxtSaved}
-              >
-                {savingThankyou ? 'Speichern…' : 'Danke-Text speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveQuoteThankyouText(true)}
-                disabled={savingThankyou || thankyouIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={thankyou}
+            editor="textarea"
+            rows={8}
+            placeholder={'Guten Tag {kunde}\n\nVielen Dank für die Annahme unserer Offerte {offerte}…'}
+            saveLabel="Danke-Text speichern"
+            hint="Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück."
+          />
 
-          {/* ── Absage-Text bei Offerten-Ablehnung (Feature „Absage-Mail bei Offerten-Ablehnung") ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Absage-Text (Offerten-Ablehnung)</div>
-              <div className="admin-page-subtitle">
+          <TenantTextSetting
+            title="Absage-Text (Offerten-Ablehnung)"
+            subtitle={
+              <>
                 Inhalt der Mail, die dem Kunden nach der Ablehnung einer Offerte zugeht —
                 sobald das Feature „Absage-Mail bei Offerten-Ablehnung" aktiv ist (unter
                 Konfiguration). Platzhalter <code>{'{kunde}'}</code>, <code>{'{offerte}'}</code>{' '}
                 und <code>{'{projekt}'}</code> werden beim Versand aus der Offerte gefüllt.
                 Anrede und Grussformel gehören in den Text.
-                {rejectionIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={8}
-              value={rejectionTxt}
-              onChange={e => setRejectionTxt(e.target.value)}
-              placeholder="Guten Tag {kunde}&#10;&#10;Besten Dank für Ihre Rückmeldung zu unserer Offerte {offerte}…"
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveQuoteRejectionText(false)}
-                disabled={savingRejection || rejectionTxt === rejectionTxtSaved}
-              >
-                {savingRejection ? 'Speichern…' : 'Absage-Text speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveQuoteRejectionText(true)}
-                disabled={savingRejection || rejectionIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={rejection}
+            editor="textarea"
+            rows={8}
+            placeholder={'Guten Tag {kunde}\n\nBesten Dank für Ihre Rückmeldung zu unserer Offerte {offerte}…'}
+            saveLabel="Absage-Text speichern"
+            hint="Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück."
+          />
         </>
       )}
 
@@ -1079,11 +767,7 @@ function OffertenVorlagenPanel() {
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </>
   )
 }
@@ -1091,123 +775,22 @@ function OffertenVorlagenPanel() {
 // Rechnungs-Vorlagen: Zahlungskondition (immer), Skonto-Warnhinweis (nur bei Abrechnung
 // einer Offerte mit Skonto) und Schlusssatz. Je ein eigenes Tenant-Feld + System-Default.
 function RechnungsVorlagenPanel() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast()
+
   // Zahlungskondition ("Zahlbar innert 30 Tagen netto."). Steht auf JEDER Rechnung.
   // 3 Zustände wie beim Schlusssatz; {tage} wird serverseitig beim Rendern durch die
-  // konfigurierte Frist ersetzt (paymentDays = dieselbe Frist, die die Fälligkeit treibt).
-  const [paymentTerms, setPaymentTerms] = useState('')
-  const [paymentTermsSaved, setPaymentTermsSaved] = useState('')
-  const [paymentIsDefault, setPaymentIsDefault] = useState(true)
-  const [paymentDays, setPaymentDays] = useState(30)
-  const [savingPayment, setSavingPayment] = useState(false)
-  // Skonto-Warnhinweis auf der Rechnung ("Ungerechtfertigte Skontoabzüge werden
-  // nachbelastet"). Erscheint bei Abrechnung einer Offerte mit Skonto.
-  const [skontoWarn, setSkontoWarn] = useState('')
-  const [skontoWarnSaved, setSkontoWarnSaved] = useState('')
-  const [skontoWarnIsDefault, setSkontoWarnIsDefault] = useState(true)
-  const [savingSkontoWarn, setSavingSkontoWarn] = useState(false)
-  // Schlusssatz/Dankestext auf der Rechnung (erscheint vor dem QR-Zahlteil). Analog zum
-  // Offerte-Disclaimer: 3 Zustände (Default / eigener Text / bewusst leer). Eigenes Tenant-Feld.
-  const [footerTxt, setFooterTxt] = useState('')
-  const [footerTxtSaved, setFooterTxtSaved] = useState('')
-  const [footerIsDefault, setFooterIsDefault] = useState(true)
-  const [savingFooter, setSavingFooter] = useState(false)
-
-  async function load() {
-    setLoading(true)
-    try {
-      const [payment, skontoW, footer] = await Promise.all([
-        apiFetch('/pwa/admin/invoice-payment-terms') as Promise<{ text: string; is_default: boolean; days: number }>,
-        apiFetch('/pwa/admin/invoice-skonto-warning') as Promise<{ text: string; is_default: boolean }>,
-        apiFetch('/pwa/admin/invoice-footer-text') as Promise<{ text: string; is_default: boolean }>,
-      ])
-      setPaymentTerms(payment.text ?? '')
-      setPaymentTermsSaved(payment.text ?? '')
-      setPaymentIsDefault(payment.is_default)
-      setPaymentDays(payment.days ?? 30)
-      setSkontoWarn(skontoW.text ?? '')
-      setSkontoWarnSaved(skontoW.text ?? '')
-      setSkontoWarnIsDefault(skontoW.is_default)
-      setFooterTxt(footer.text ?? '')
-      setFooterTxtSaved(footer.text ?? '')
-      setFooterIsDefault(footer.is_default)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [])
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
-
-  async function saveInvoicePaymentTerms(reset = false) {
-    setSavingPayment(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer String
-      // ist erlaubt und heisst "bewusst keine Zahlungskondition" (wird gespeichert).
-      const res = await apiFetch('/pwa/admin/invoice-payment-terms', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : paymentTerms }),
-      }) as { text: string; is_default: boolean; days: number }
-      setPaymentTerms(res.text ?? '')
-      setPaymentTermsSaved(res.text ?? '')
-      setPaymentIsDefault(res.is_default)
-      setPaymentDays(res.days ?? paymentDays)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Zahlungskondition gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingPayment(false)
-    }
-  }
-
-  async function saveInvoiceSkontoWarning(reset = false) {
-    setSavingSkontoWarn(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert (leer wird
-      // serverseitig ebenfalls als Reset behandelt).
-      const res = await apiFetch('/pwa/admin/invoice-skonto-warning', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : skontoWarn }),
-      }) as { text: string; is_default: boolean }
-      setSkontoWarn(res.text ?? '')
-      setSkontoWarnSaved(res.text ?? '')
-      setSkontoWarnIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Skonto-Warnhinweis gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingSkontoWarn(false)
-    }
-  }
-
-  async function saveInvoiceFooterText(reset = false) {
-    setSavingFooter(true)
-    setError('')
-    try {
-      // reset => null (Reset auf System-Default); sonst der Editor-Wert. Leerer String
-      // ist erlaubt und heisst "bewusst kein Schlusssatz" (wird gespeichert).
-      const res = await apiFetch('/pwa/admin/invoice-footer-text', {
-        method: 'PATCH',
-        body: JSON.stringify({ text: reset ? null : footerTxt }),
-      }) as { text: string; is_default: boolean }
-      setFooterTxt(res.text ?? '')
-      setFooterTxtSaved(res.text ?? '')
-      setFooterIsDefault(res.is_default)
-      showToast(reset ? 'Auf Standardtext zurückgesetzt' : 'Schlusssatz gespeichert')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Fehler')
-    } finally {
-      setSavingFooter(false)
-    }
-  }
+  // konfigurierte Frist ersetzt (die Response nennt sie im Zusatzfeld `days`).
+  const payment = useTenantText('/pwa/admin/invoice-payment-terms', 'text', {
+    showToast, savedMsg: 'Zahlungskondition gespeichert',
+  })
+  const skontoWarn = useTenantText('/pwa/admin/invoice-skonto-warning', 'text', {
+    showToast, savedMsg: 'Skonto-Warnhinweis gespeichert',
+  })
+  const footer = useTenantText('/pwa/admin/invoice-footer-text', 'text', {
+    showToast, savedMsg: 'Schlusssatz gespeichert',
+  })
+  const loading = [payment, skontoWarn, footer].some(s => s.loading)
+  const paymentDays = typeof payment.meta.days === 'number' ? payment.meta.days : 30
 
   return (
     <>
@@ -1222,149 +805,69 @@ function RechnungsVorlagenPanel() {
         <div className="admin-table-wrap"><div className="admin-loading"><div className="admin-spinner" /> Laden…</div></div>
       ) : (
         <>
-          {error && <div className="admin-form-error" style={{ marginBottom: 12 }}>{error}</div>}
-
-          {/* ── Zahlungskondition (Nettofrist) — steht auf jeder Rechnung ── */}
-          <div className="admin-page-header" style={{ marginTop: 8 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Zahlungskondition</div>
-              <div className="admin-page-subtitle">
+          <TenantTextSetting
+            first
+            title="Zahlungskondition"
+            subtitle={
+              <>
                 Erscheint auf jeder Rechnung unter dem Total — unabhängig vom Skonto.
                 Der Platzhalter <code>{'{tage}'}</code> wird durch die Zahlungsfrist ersetzt
                 ({paymentDays} Tage); nach dieser Frist laufen auch Zahlungserinnerung und Mahnung.
-                {paymentIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-                {!paymentIsDefault && paymentTermsSaved.trim() === '' &&
-                  ' Aktuell ist keine Zahlungskondition gesetzt — die Rechnung nennt dem Kunden keine Frist.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={2}
-              value={paymentTerms}
-              onChange={e => setPaymentTerms(e.target.value)}
-              placeholder="Zahlbar innert {tage} Tagen netto."
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveInvoicePaymentTerms(false)}
-                disabled={savingPayment || paymentTerms === paymentTermsSaved}
-              >
-                {savingPayment ? 'Speichern…' : 'Zahlungskondition speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveInvoicePaymentTerms(true)}
-                disabled={savingPayment || paymentIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Feld leeren und speichern entfernt die Zahlungskondition ganz; „zurücksetzen" stellt den Standardtext wieder her.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={payment}
+            editor="textarea"
+            rows={2}
+            placeholder="Zahlbar innert {tage} Tagen netto."
+            saveLabel="Zahlungskondition speichern"
+            hint={'Feld leeren und speichern entfernt die Zahlungskondition ganz; „zurücksetzen" stellt den Standardtext wieder her.'}
+            emptyStateHint="Aktuell ist keine Zahlungskondition gesetzt — die Rechnung nennt dem Kunden keine Frist."
+          />
 
-          {/* ── Skonto-Warnhinweis auf der Rechnung (für alle Mandanten) ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Warnhinweis (Rechnung)</div>
-              <div className="admin-page-subtitle">
+          <TenantTextSetting
+            title="Skonto-Warnhinweis (Rechnung)"
+            subtitle={
+              <>
                 Erscheint auf der Rechnung unter dem Total, sobald eine Offerte mit Skonto
                 abgerechnet wird — zusammen mit der wiederholten Skonto-Kondition. Standardsatz,
                 falls ein Kunde Skonto abzieht, ohne rechtzeitig zu zahlen.
-                {skontoWarnIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <textarea
-              className="admin-form-input"
-              rows={2}
-              value={skontoWarn}
-              onChange={e => setSkontoWarn(e.target.value)}
-              placeholder="Ungerechtfertigte Skontoabzüge werden nachbelastet."
-              style={{ resize: 'vertical', lineHeight: 1.5 }}
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveInvoiceSkontoWarning(false)}
-                disabled={savingSkontoWarn || skontoWarn === skontoWarnSaved}
-              >
-                {savingSkontoWarn ? 'Speichern…' : 'Warnhinweis speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveInvoiceSkontoWarning(true)}
-                disabled={savingSkontoWarn || skontoWarnIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Leer lassen setzt auf den System-Standardtext zurück.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={skontoWarn}
+            editor="textarea"
+            rows={2}
+            placeholder="Ungerechtfertigte Skontoabzüge werden nachbelastet."
+            saveLabel="Warnhinweis speichern"
+            hint="Leer lassen setzt auf den System-Standardtext zurück."
+          />
 
-          {/* ── Schlusssatz / Dankestext (erscheint vor dem QR-Zahlteil) ── */}
-          <div className="admin-page-header" style={{ marginTop: 24 }}>
-            <div>
-              <div className="admin-page-title" style={{ fontSize: 18 }}>Schlusssatz (Dankestext)</div>
-              <div className="admin-page-subtitle">
+          <TenantTextSetting
+            title="Schlusssatz (Dankestext)"
+            subtitle={
+              <>
                 Erscheint zuunterst auf der Rechnung, direkt vor dem QR-Zahlteil — z.B.
                 „Vielen Dank für Ihr Vertrauen".
-                {footerIsDefault && ' Aktuell wird der System-Standardtext verwendet.'}
-                {!footerIsDefault && footerTxtSaved.trim() === '' &&
-                  ' Aktuell ist kein Schlusssatz gesetzt — die Rechnung zeigt vor dem QR-Teil keinen Text.'}
-              </div>
-            </div>
-          </div>
-          <div className="admin-table-wrap" style={{ padding: 16 }}>
-            <RichTextField
-              rows={3}
-              value={footerTxt}
-              onChange={setFooterTxt}
-              placeholder="Vielen Dank für Ihr Vertrauen und die angenehme Zusammenarbeit."
-            />
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => saveInvoiceFooterText(false)}
-                disabled={savingFooter || footerTxt === footerTxtSaved}
-              >
-                {savingFooter ? 'Speichern…' : 'Schlusssatz speichern'}
-              </button>
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => saveInvoiceFooterText(true)}
-                disabled={savingFooter || footerIsDefault}
-              >
-                Auf Standardtext zurücksetzen
-              </button>
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Feld leeren und speichern entfernt den Schlusssatz ganz; „zurücksetzen" stellt den Standardtext wieder her.
-              </span>
-            </div>
-          </div>
+              </>
+            }
+            state={footer}
+            editor="rich"
+            rows={3}
+            placeholder="Vielen Dank für Ihr Vertrauen und die angenehme Zusammenarbeit."
+            saveLabel="Schlusssatz speichern"
+            hint={'Feld leeren und speichern entfernt den Schlusssatz ganz; „zurücksetzen" stellt den Standardtext wieder her.'}
+            emptyStateHint="Aktuell ist kein Schlusssatz gesetzt — die Rechnung zeigt vor dem QR-Teil keinen Text."
+          />
         </>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </>
   )
 }
 
 type VorlagenTab = 'offerte' | 'rechnung'
 
-// "Vorlagen" bündelt die Offert- und (künftig) Rechnungs-Vorlagen unter einem Tab-Layout
+// "Vorlagen" bündelt die Offert- und Rechnungs-Vorlagen unter einem Tab-Layout
 // analog zum Material-Screen.
 export default function QuoteTemplatesScreen() {
   const [tab, setTab] = useState<VorlagenTab>('offerte')

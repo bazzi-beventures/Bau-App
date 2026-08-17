@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFormFetch } from '../../api/client'
+import { useToast, ToastHost } from '../components/useToast'
 
 interface Supplier {
   id: string
@@ -102,18 +103,13 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
   const [result, setResult] = useState<ImportResult | null>(null)
 
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast(4000)
 
   useEffect(() => {
     apiFetch('/pwa/admin/suppliers')
       .then(s => setSuppliers(s as Supplier[]))
       .catch(() => setSuppliers([]))
   }, [])
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 4000)
-  }
 
   function resetAll() {
     setFile(null)
@@ -533,11 +529,7 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </>
   )
 }

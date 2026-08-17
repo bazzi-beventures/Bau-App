@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { apiFetch } from '../../api/client'
+import { backdropCloseProps } from '../../shared/backdropClose'
 
 interface Props {
   quoteId: number
@@ -35,8 +36,8 @@ export function SendThankyouDialog({ quoteId, header, defaultEmail, onClose, onS
   }
 
   return (
-    <div className="admin-confirm-overlay">
-      <div className="admin-confirm-box" style={{ maxWidth: 440 }}>
+    <div className="admin-confirm-overlay" {...backdropCloseProps(() => { if (!sending) onClose() })}>
+      <div className="admin-confirm-box" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
         <div className="admin-confirm-title">Dankesmail senden</div>
         <div className="admin-confirm-text" style={{ marginBottom: 12 }}>{header}</div>
 

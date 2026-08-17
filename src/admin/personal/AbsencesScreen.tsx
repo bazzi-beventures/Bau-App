@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getAdminAbsences, approveAbsence, rejectAbsence, Absence } from '../../api/admin'
 import AbsenceCalendar from './AbsenceCalendar'
 import { countWorkdays } from '../utils/calendarHelpers'
+import { useToast, ToastHost } from '../components/useToast'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
@@ -26,7 +27,7 @@ export default function AbsencesScreen({ onBadgeChange, canton = 'ZH' }: { onBad
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabType>('requested')
   const [acting, setActing] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const { toast, showToast } = useToast()
 
   const [calendarAbsences, setCalendarAbsences] = useState<Absence[]>([])
   const [calendarLoading, setCalendarLoading] = useState(false)
@@ -57,11 +58,6 @@ export default function AbsencesScreen({ onBadgeChange, canton = 'ZH' }: { onBad
     }
     load()
   }, [tab])
-
-  function showToast(msg: string, type: 'success' | 'error') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleApprove(id: string) {
     setActing(id)
@@ -186,11 +182,7 @@ export default function AbsencesScreen({ onBadgeChange, canton = 'ZH' }: { onBad
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { apiFetch } from '../../api/client'
 import { AuthUser } from './UsersScreen'
 import { assignableRoles, mayAnonymize } from './userRoles'
+import { useToast, ToastHost } from '../components/useToast'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -45,7 +47,7 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
 
   const [confirmAnonymize, setConfirmAnonymize] = useState(false)
   const [acting, setActing] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast(3000)
 
   // Vergebbare Rollen + die bereits gesetzte Rolle: das Backend lässt eine
   // unveränderte Rolle durch, auch wenn der Handelnde sie nicht neu vergeben dürfte.
@@ -55,11 +57,6 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
     if (current && !opts.includes(current)) opts.push(current)
     return opts
   })()
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -269,27 +266,19 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
 
       {/* Bestätigungen */}
       {confirmAnonymize && (
-        <div className="admin-confirm-overlay">
-          <div className="admin-confirm-box">
-            <div className="admin-confirm-title">Benutzer anonymisieren?</div>
-            <div className="admin-confirm-text">
-              Name und E-Mail werden durch «[Anonymisiert]» ersetzt. Arbeitsdaten bleiben für die Buchführung erhalten.
-            </div>
-            <div className="admin-confirm-actions">
-              <button className="admin-btn admin-btn-secondary" onClick={() => setConfirmAnonymize(false)}>Abbrechen</button>
-              <button className="admin-btn admin-btn-danger" onClick={handleAnonymize} disabled={acting}>
-                {acting ? '…' : 'Anonymisieren'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Benutzer anonymisieren?"
+          message="Name und E-Mail werden durch «[Anonymisiert]» ersetzt. Arbeitsdaten bleiben für die Buchführung erhalten."
+          confirmLabel="Anonymisieren"
+          busyLabel="…"
+          busy={acting}
+          variant="danger"
+          onCancel={() => setConfirmAnonymize(false)}
+          onConfirm={() => void handleAnonymize()}
+        />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }
