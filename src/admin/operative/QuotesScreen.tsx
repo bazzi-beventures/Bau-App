@@ -7,7 +7,7 @@ import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { UnsavedChangesDialog } from '../components/UnsavedChangesDialog'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
-import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset, pdfUploadErrorMessage } from './QuoteFormParts'
+import { DescPriceFieldset, DiscountsFieldset, SkontoFieldset, pdfUploadErrorMessage, skontoValidationError } from './QuoteFormParts'
 import { MaterialCombobox } from './MaterialCombobox'
 import { CustomerCombobox } from './CustomerCombobox'
 import type { Customer } from './CustomersScreen'
@@ -221,6 +221,9 @@ interface QuoteDraft {
   laborDiscount: string
   materialDiscount: string
   fixedPrice: string
+  // Optional: Entwürfe aus der Zeit vor dem Skonto-Häkchen kennen das Feld nicht —
+  // applyDraft leitet es dann aus skontoPct ab (siehe dort).
+  skontoActive?: boolean
   skontoPct: string
   skontoDays: string
   notes: string
@@ -258,6 +261,10 @@ export function quoteDraftHasContent(
     // niemand etwas eingegeben hat).
     (d.skontoPct ?? '').trim() !== skontoDefaults.pct ||
     (d.skontoDays ?? '').trim() !== skontoDefaults.days ||
+    // Auch das Abwählen des Häkchens ist eine Eingabe: die Felder bleiben dabei
+    // gefüllt, ohne diese Zeile wäre der Entwurf "unverändert" und das Formular
+    // stünde beim nächsten Öffnen wieder mit angehaktem Skonto da.
+    (d.skontoActive ?? !!(d.skontoPct ?? '').trim()) !== (skontoDefaults.pct !== '') ||
     (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
   )
 }
@@ -300,8 +307,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   // ersetzt er den Material-Rabattsatz — das Backend leitet den Rabatt daraus ab.
   const [fixedPrice, setFixedPrice] = useState('')
   // Skonto = Abzug bei früher Zahlung; nur Hinweistext auf der Offerte (Total bleibt gleich).
+  // Skonto-Häkchen. Startet aus, wird von der Mandanten-Vorgabe (Offert-Vorlagen)
+  // eingeschaltet — wer eine Vorgabe pflegt, will Skonto auf jeder Offerte.
+  const [skontoActive, setSkontoActive] = useState(false)
   const [skontoPct, setSkontoPct] = useState('')
   const [skontoDays, setSkontoDays] = useState('')
+  // Meldung unter dem Skonto-Feld; wird beim Absenden gesetzt und beim Tippen geräumt.
+  const [skontoError, setSkontoError] = useState('')
   // Vorgabe aus den Offert-Vorlagen (tenants.quote_skonto_default_pct/_days). Belegt die
   // beiden Felder beim Öffnen vor und dient als Nullpunkt für den Entwurfs-Vergleich.
   const [skontoDefaults, setSkontoDefaults] = useState<SkontoDefaults>(NO_SKONTO_DEFAULTS)
@@ -400,6 +412,7 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         if (draftApplied.current) return
         setSkontoPct(prev => (prev === '' ? pct : prev))
         setSkontoDays(prev => (prev === '' ? days : prev))
+        if (pct !== '') setSkontoActive(true)
       })
       .catch(() => {})
     // Sonderpositionen sind tenant-spezifisch (Feature-Flag); Sektion nur laden wenn aktiv.
@@ -420,8 +433,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     return {
       projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, fixedPrice, skontoPct, skontoDays, notes, productDescription,
-      useStandardNotes,
+      materialDiscount, fixedPrice, skontoActive, skontoPct, skontoDays, notes,
+      productDescription, useStandardNotes,
     }
   }
 
@@ -447,6 +460,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     setFixedPrice(d.fixedPrice ?? '')
     setSkontoPct(d.skontoPct ?? '')
     setSkontoDays(d.skontoDays ?? '')
+    // Altentwurf ohne das Feld: gefüllter %-Satz hiess damals "Skonto an".
+    setSkontoActive(d.skontoActive ?? !!(d.skontoPct ?? '').trim())
     if (d.notes != null) setNotes(d.notes)
     setProductDescription(d.productDescription ?? '')
     setUseStandardNotes(d.useStandardNotes ?? true)
@@ -482,8 +497,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey, projectName, laborRows, materialRows, extraProducts, extraCharges,
       includeTravelCost, installationRows, specialRows, laborDiscount,
-      materialDiscount, fixedPrice, skontoPct, skontoDays, notes, productDescription,
-      useStandardNotes, stdNotes, skontoDefaults])
+      materialDiscount, fixedPrice, skontoActive, skontoPct, skontoDays, notes,
+      productDescription, useStandardNotes, stdNotes, skontoDefaults])
 
   // Verlassen (✕ / Esc / Abbrechen): bei Inhalt erst fragen, ob der Entwurf
   // bleiben soll. Ein leeres Formular schliesst sofort — und räumt dabei einen
@@ -711,6 +726,12 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       setError('Mindestens eine Position erforderlich')
       return
     }
+    // Skonto angehakt, aber nicht ausgefüllt: früher wurde das still zu "kein Skonto"
+    // und die Offerte ging ohne Hinweis zum Kunden. Der Server prüft dieselbe Regel
+    // (resolve_quote_skonto) — hier nur, damit die Meldung beim Feld steht.
+    const skontoMsg = skontoValidationError(skontoActive, skontoPct, skontoDays)
+    if (skontoMsg) { setSkontoError(skontoMsg); setError(skontoMsg); return }
+    setSkontoError('')
 
     setSaving(true)
     setError('')
@@ -767,8 +788,11 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         // wieder entfernt werden kann (0 wäre für das Backend dasselbe, null ist
         // die ehrlichere Aussage "keiner").
         fixed_price: fixedPrice.trim() ? parseNum(fixedPrice) : null,
-        skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
-        skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
+        // Ohne Häkchen kein Skonto — die Felder dürfen dabei gefüllt bleiben,
+        // damit ein erneutes Anhaken die Werte zurückbringt.
+        skonto_active: skontoActive,
+        skonto_pct: skontoActive && skontoPct.trim() ? parseNum(skontoPct) : null,
+        skonto_days: skontoActive && skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
         product_description: productDescription.trim() || null,
         quote_type: quoteType,
@@ -1148,10 +1172,13 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       />
 
       <SkontoFieldset
+        skontoActive={skontoActive}
         skontoPct={skontoPct}
         skontoDays={skontoDays}
-        onPctChange={setSkontoPct}
-        onDaysChange={setSkontoDays}
+        error={skontoError}
+        onActiveChange={v => { setSkontoActive(v); setSkontoError('') }}
+        onPctChange={v => { setSkontoPct(v); setSkontoError('') }}
+        onDaysChange={v => { setSkontoDays(v); setSkontoError('') }}
       />
 
       {/* Product description */}
@@ -1264,8 +1291,12 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
   const [materialDiscount, setMaterialDiscount] = useState(String(quote.material_discount_pct || ''))
   // Fixpreis (brutto inkl. MwSt). Leer = keiner; gesetzt ersetzt er den Material-Rabattsatz.
   const [fixedPrice, setFixedPrice] = useState(quote.fixed_price != null ? String(quote.fixed_price) : '')
+  // Gespeicherter %-Satz = Skonto war an. Ein eigenes DB-Feld braucht es dafür nicht:
+  // quotes.skonto_pct IS NULL ist seit jeher die Aussage "kein Skonto".
+  const [skontoActive, setSkontoActive] = useState(quote.skonto_pct != null)
   const [skontoPct, setSkontoPct] = useState(quote.skonto_pct != null ? String(quote.skonto_pct) : '')
   const [skontoDays, setSkontoDays] = useState(quote.skonto_days != null ? String(quote.skonto_days) : '')
+  const [skontoError, setSkontoError] = useState('')
   const [notes, setNotes] = useState(quote.notes || '')
   const [productDescription, setProductDescription] = useState(quote.product_description || '')
   // Kunde der Offerte: beim Erstellen vom Projekt übernommen, hier unabhängig davon
@@ -1310,8 +1341,8 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
   // Render taugt darum als Vergleichswert.
   const editSnapshot = JSON.stringify({
     laborRows, materialRows, extraProducts, extraCharges, travelRows, installationRows,
-    specialRows, laborDiscount, materialDiscount, fixedPrice, skontoPct, skontoDays,
-    notes, productDescription, customerId,
+    specialRows, laborDiscount, materialDiscount, fixedPrice, skontoActive, skontoPct,
+    skontoDays, notes, productDescription, customerId,
   })
   // useState statt useRef: der Startwert wird nur beim ersten Render berechnet
   // und darf im Render gelesen werden.
@@ -1398,6 +1429,11 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
   }
 
   async function handleSave() {
+    // Wie im Erstell-Formular: angehaktes, aber leeres Skonto ist ein Fehler, kein
+    // stilles "kein Skonto". Vor setSaving, damit der Knopf nicht kurz blockiert.
+    const skontoMsg = skontoValidationError(skontoActive, skontoPct, skontoDays)
+    if (skontoMsg) { setSkontoError(skontoMsg); setError(skontoMsg); return }
+    setSkontoError('')
     setSaving(true)
     setError('')
     try {
@@ -1444,8 +1480,9 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
         // wieder entfernt werden kann (0 wäre für das Backend dasselbe, null ist
         // die ehrlichere Aussage "keiner").
         fixed_price: fixedPrice.trim() ? parseNum(fixedPrice) : null,
-        skonto_pct: skontoPct.trim() ? parseNum(skontoPct) : null,
-        skonto_days: skontoDays.trim() ? parseNum(skontoDays) : null,
+        skonto_active: skontoActive,
+        skonto_pct: skontoActive && skontoPct.trim() ? parseNum(skontoPct) : null,
+        skonto_days: skontoActive && skontoDays.trim() ? parseNum(skontoDays) : null,
         notes: notes || null,
         product_description: productDescription.trim() || null,
         // Immer mitschicken: das Backend vergleicht gegen die gespeicherte ID und
@@ -1743,10 +1780,13 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: { quot
       />
 
       <SkontoFieldset
+        skontoActive={skontoActive}
         skontoPct={skontoPct}
         skontoDays={skontoDays}
-        onPctChange={setSkontoPct}
-        onDaysChange={setSkontoDays}
+        error={skontoError}
+        onActiveChange={v => { setSkontoActive(v); setSkontoError('') }}
+        onPctChange={v => { setSkontoPct(v); setSkontoError('') }}
+        onDaysChange={v => { setSkontoDays(v); setSkontoError('') }}
       />
 
       {/* Product description */}

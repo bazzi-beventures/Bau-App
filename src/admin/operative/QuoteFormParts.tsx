@@ -110,29 +110,84 @@ export function DiscountsFieldset({
 }
 
 interface SkontoFieldsetProps {
+  skontoActive: boolean
   skontoPct: string
   skontoDays: string
+  onActiveChange: (v: boolean) => void
   onPctChange: (v: string) => void
   onDaysChange: (v: string) => void
+  error?: string
+}
+
+// Prüft die Skonto-Eingaben, sobald das Häkchen gesetzt ist. Gibt die Meldung zurück
+// (null = in Ordnung). Reine Funktion, damit beide Formulare — Erstellen und
+// Bearbeiten — dieselbe Regel benutzen und sie unit-testbar bleibt.
+//
+// Ohne Häkchen wird NICHT geprüft: die Felder dürfen dann stehenbleiben (ein erneutes
+// Anhaken bringt die Werte zurück), gespeichert wird trotzdem kein Skonto.
+//
+// Die Grenzen spiegeln services/quote_service.py::normalize_skonto — weichen sie
+// auseinander, meldet entweder das Formular etwas, das der Server akzeptiert, oder
+// der Server lehnt etwas ab, das das Formular durchgelassen hat.
+export function skontoValidationError(active: boolean, pct: string, days: string): string | null {
+  if (!active) return null
+  const p = pct.trim()
+  if (!p) return 'Skonto ist aktiviert — bitte den Prozentsatz eintragen oder das Häkchen entfernen.'
+  const pNum = Number(p.replace(',', '.'))
+  if (!Number.isFinite(pNum) || pNum <= 0 || pNum > 100) {
+    return 'Skonto-Prozentsatz muss eine Zahl über 0 und höchstens 100 sein.'
+  }
+  const d = days.trim()
+  if (!d) return 'Skonto ist aktiviert — bitte die Zahlungsfrist in Tagen eintragen oder das Häkchen entfernen.'
+  const dNum = Number(d.replace(',', '.'))
+  if (!Number.isFinite(dNum) || dNum < 0) return 'Zahlungsfrist muss eine Zahl ab 0 Tagen sein.'
+  return null
 }
 
 // Skonto = Abzug bei früher Zahlung. Reiner Hinweis auf der Offerte (ändert das Total
-// NICHT). Sind beide Felder leer/0, erscheint kein Hinweis im PDF. Der konkrete Satz
-// wird aus dem Begleittext der Offert-Vorlagen ({prozent}/{tage}/{betrag}) gebildet.
-export function SkontoFieldset({ skontoPct, skontoDays, onPctChange, onDaysChange }: SkontoFieldsetProps) {
+// NICHT). Der konkrete Satz wird aus dem Begleittext der Offert-Vorlagen
+// ({prozent}/{tage}/{betrag}) gebildet.
+//
+// Das Häkchen ersetzt die frühere Regel "leeres Feld = kein Skonto": die schluckte eine
+// vergessene Eingabe wortlos, und die Offerte ging ohne Hinweis zum Kunden. Jetzt ist
+// die Absicht explizit und ein angehaktes, aber leeres Feld ein Fehler.
+export function SkontoFieldset({
+  skontoActive, skontoPct, skontoDays, onActiveChange, onPctChange, onDaysChange, error,
+}: SkontoFieldsetProps) {
   return (
     <fieldset style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
       <legend style={{ fontWeight: 600, padding: '0 8px' }}>Skonto</legend>
-      <div style={{ display: 'flex', gap: 16 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={skontoActive}
+          onChange={e => onActiveChange(e.target.checked)}
+        />
+        <span>Skonto auf dieser Offerte ausweisen</span>
+      </label>
+      <div style={{ display: 'flex', gap: 16, opacity: skontoActive ? 1 : 0.5 }}>
         <div style={{ flex: 1 }}>
           <label className="admin-form-label" title="Abzug bei Zahlung innerhalb der Frist. Nur ein Hinweis auf der Offerte — das Total bleibt unverändert.">Skonto (%)</label>
-          <input className="admin-form-input" placeholder="0" value={skontoPct} onChange={e => onPctChange(e.target.value)} />
+          <input
+            className="admin-form-input" placeholder="0" value={skontoPct}
+            disabled={!skontoActive}
+            onChange={e => onPctChange(e.target.value)}
+          />
         </div>
         <div style={{ flex: 1 }}>
           <label className="admin-form-label" title="Zahlungsfrist in Tagen, innerhalb der der Skonto gilt">Frist (Tage)</label>
-          <input className="admin-form-input" placeholder="z.B. 10" value={skontoDays} onChange={e => onDaysChange(e.target.value)} />
+          <input
+            className="admin-form-input" placeholder="z.B. 10" value={skontoDays}
+            disabled={!skontoActive}
+            onChange={e => onDaysChange(e.target.value)}
+          />
         </div>
       </div>
+      {error && (
+        <p role="alert" style={{ fontSize: '0.85rem', color: 'var(--danger, #c0392b)', margin: '8px 8px 0' }}>
+          {error}
+        </p>
+      )}
       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted, #888)', margin: '8px 8px 0' }}>
         Nur ein Hinweis auf der Offerte — das Total bleibt unverändert. Der Begleittext stammt aus den Offert-Vorlagen.
       </p>

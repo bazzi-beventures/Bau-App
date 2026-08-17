@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QuoteCreateForm } from './QuotesScreen'
 import { apiFetch } from '../../api/client'
 
@@ -85,5 +86,57 @@ describe('QuoteCreateForm — Skonto-Vorgabe', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Etwas')).toBeInTheDocument())
     expect(skontoFelder().pct.value).toBe('')
     expect(skontoFelder().days.value).toBe('')
+  })
+})
+
+// Das Häkchen macht die Absicht explizit. Vorher hiess "Feld leer" stillschweigend
+// "kein Skonto" — eine vergessene Eingabe ging unbemerkt zum Kunden.
+describe('QuoteCreateForm — Skonto-Häkchen', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mockFetch.mockReset()
+  })
+
+  function skontoHaken() {
+    const fieldset = screen.getByText('Skonto', { selector: 'legend' }).closest('fieldset') as HTMLElement
+    return within(fieldset).getByRole('checkbox') as HTMLInputElement
+  }
+
+  it('setzt das Häkchen, wenn der Mandant eine Vorgabe gepflegt hat', async () => {
+    routeApi({ pct: 2, days: 10 })
+    render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} />)
+
+    await waitFor(() => expect(skontoHaken()).toBeChecked())
+    expect(skontoFelder().pct).toBeEnabled()
+  })
+
+  it('lässt das Häkchen ohne Vorgabe aus und sperrt die Felder', async () => {
+    routeApi({ pct: null, days: null })
+    render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} />)
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledWith('/pwa/admin/quote-skonto-defaults'))
+    expect(skontoHaken()).not.toBeChecked()
+    expect(skontoFelder().pct).toBeDisabled()
+    expect(skontoFelder().days).toBeDisabled()
+  })
+
+  it('meldet einen Fehler und speichert nicht, wenn das Häkchen gesetzt und das Feld leer ist', async () => {
+    // Vorgabe setzt das Häkchen; der Anwender leert den Satz und will speichern.
+    routeApi({ pct: 2, days: 10 })
+    const user = userEvent.setup()
+    render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} lockedProjectName="Projekt A" lockedProjectId="p-1" />)
+
+    await waitFor(() => expect(skontoHaken()).toBeChecked())
+    await user.clear(skontoFelder().pct)
+
+    // Eine Position, damit nicht schon «Mindestens eine Position erforderlich» greift.
+    await user.click(screen.getByRole('button', { name: '+ Freie Position' }))
+    await user.type(screen.getByPlaceholderText('Beschreibung'), 'Montage')
+
+    mockFetch.mockClear()
+    await user.click(screen.getByRole('button', { name: /Offerte erstellen/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Prozentsatz/i)
+    expect(mockFetch).not.toHaveBeenCalledWith('/pwa/admin/quotes', expect.anything())
   })
 })

@@ -7,7 +7,7 @@
 
 import { SK } from './storageKeys'
 
-export const APP_DATA_VERSION = 19
+export const APP_DATA_VERSION = 20
 const STORAGE_VERSION_KEY = 'app_data_version'
 
 // Zentrale Whitelist: Keys, die als "aktiv genutzt" gelten. Alles andere
@@ -280,7 +280,19 @@ const migration_18_to_19: Migration = {
   },
 }
 
-const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17, migration_17_to_18, migration_18_to_19]
+// v19 → v20: QuoteDraft bekommt `skontoActive` (Häkchen "Skonto ausweisen" auf der
+// Offerte). Rein additiv und optional — applyDraft leitet den Wert bei fehlendem Feld
+// aus skontoPct ab (gefüllter Satz hiess in der Vorversion "Skonto an"), es geht also
+// kein Entwurf verloren. No-op dient als Tripwire für Fallback-Wipes auf älteren Clients.
+const migration_19_to_20: Migration = {
+  from: 19,
+  to: 20,
+  run: () => {
+    // no-op
+  },
+}
+
+const MIGRATIONS: Migration[] = [migration_0_to_1, migration_1_to_2, migration_2_to_3, migration_3_to_4, migration_4_to_5, migration_5_to_6, migration_6_to_7, migration_7_to_8, migration_8_to_9, migration_9_to_10, migration_10_to_11, migration_11_to_12, migration_12_to_13, migration_13_to_14, migration_14_to_15, migration_15_to_16, migration_16_to_17, migration_17_to_18, migration_18_to_19, migration_19_to_20]
 
 function readVersion(): number {
   const raw = localStorage.getItem(STORAGE_VERSION_KEY)
