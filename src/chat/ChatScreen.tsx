@@ -218,6 +218,32 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingQuoteQuestion(true)
       setPendingConfirm(false)
       setPendingDisambiguation(false)
+    } else if (res.action_taken === 'save_failed') {
+      // Der Server hat den erfassten Rapport BEHALTEN (Speichern schlug vorüber-
+      // gehend fehl, z.B. DB-Timeout). Also zurück in den Bestätigungsschritt,
+      // statt den Monteur mit einer Fehlermeldung und ohne «Speichern»-Knopf
+      // stehen zu lassen. Die gesammelten Zusatz-Positionen bleiben, wie sie sind —
+      // sie wurden mit demselben Aufruf noch nicht gebucht.
+      setPendingConfirm(true)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
+    } else if (res.action_taken === 'no_pending_report') {
+      // Gegenstück: der Server kennt den Rapport nicht mehr (abgelaufen oder vor
+      // dem Neustart erfasst und nie gespeichert). Dann ist auch der Entwurf hier
+      // tot — aufräumen, sonst warnt «Rapport erstellen» im nächsten Projekt vor
+      // einem «nicht gespeicherten Rapport», den niemand mehr speichern kann.
+      setPendingConfirm(false)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
+      setPendingProject(null)
+      setKleinCollected(false)
+      setErsatzCollected(false)
+      setCollectedKlein(null)
+      setCollectedErsatz([])
+      setWorkTypesCollected(false)
+      setCollectedWorkTypes([])
+      setSuggestedWorkTypes([])
+      setSummaryItems([])
     } else if (res.action_taken === 'report_saved' && res.report_id) {
       setPendingSignReportId(Number(res.report_id))
       setReportSigned(false)
@@ -332,7 +358,13 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       handleActionState(res)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
-      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler beim Speichern. Bitte erneut versuchen.', timestamp: now() })
+      // Der Aufruf kam nicht durch (Funkloch, Timeout) — der Rapport liegt
+      // serverseitig unverändert weiter (confirm_report leert den Puffer erst nach
+      // erfolgreichem Speichern). Also zurück in den Bestätigungsschritt, damit
+      // «Speichern» ein zweites Mal möglich ist, statt den erfassten Einsatz in
+      // einer Fehlermeldung enden zu lassen.
+      setPendingConfirm(true)
+      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung — dein Rapport bleibt gespeichert, bitte gleich nochmal auf «Speichern» tippen.' : 'Fehler beim Speichern. Bitte erneut versuchen — dein Rapport ist noch da.', timestamp: now() })
     } finally {
       setLoading(false)
     }

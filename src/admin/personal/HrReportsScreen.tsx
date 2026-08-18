@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { acknowledgeArgViolation, getHrTimesheet, listArgViolations } from '../../api/admin/hr'
+import type {
+  ArgViolation as DbViolation, HrLaborHour as LaborHour, HrOvertimeInfo as OvertimeInfo,
+  HrSession as Session, HrTimesheet as TimesheetData, StaffRoleName as StaffRole,
+} from '../../api/admin/hr'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import MultiDropdown from '../kpis/components/MultiDropdown'
 import '../kpis/kpi-dashboard.css'
@@ -7,56 +11,6 @@ import { useToast, ToastHost } from '../components/useToast'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const LS_SHOW_MANAGEMENT = 'hr_reports_show_management'
-
-type StaffRole = 'management' | 'superadmin' | 'admin' | 'user' | 'user_light' | null
-
-interface Session {
-  id: string
-  staff_name: string
-  staff_role?: StaffRole
-  date: string
-  clock_in: string
-  clock_out: string | null
-  break_minutes: number
-  total_minutes: number | null
-  violations?: string[]
-}
-
-interface LaborHour {
-  staff_name: string
-  project_name: string
-  hours: number
-  date: string
-}
-
-interface OvertimeInfo {
-  total_net_hours: number
-  soll_hours: number
-  saldo: number
-  absence_days: number
-}
-
-interface TimesheetData {
-  sessions: Session[]
-  labor_hours: LaborHour[]
-  overtime_by_staff: Record<string, OvertimeInfo>
-  soll_stunden_woche: number
-  staff_roles?: Record<string, StaffRole>
-  currently_clocked_in?: string[]
-}
-
-interface DbViolation {
-  id: string
-  staff_name: string
-  staff_role?: StaffRole
-  violation_date: string
-  violation_type: string
-  description: string
-  severity: string
-  acknowledged: boolean
-  acknowledged_by: string | null
-  acknowledged_at: string | null
-}
 
 const MANAGEMENT_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>(['management', 'superadmin'])
 
@@ -127,10 +81,7 @@ export default function HrReportsScreen() {
   async function load(background = false) {
     if (!background) setLoading(true)
     try {
-      const result = await apiFetch(
-        `/pwa/admin/hr/timesheet?date_from=${dateFrom}&date_to=${dateTo}`
-      ) as TimesheetData
-      setData(result)
+      setData(await getHrTimesheet(dateFrom, dateTo))
     } catch {
       if (!background) setData(null)
     } finally {
@@ -141,10 +92,7 @@ export default function HrReportsScreen() {
   async function loadViolations(background = false) {
     if (!background) setViolationsLoading(true)
     try {
-      const result = await apiFetch(
-        `/pwa/admin/hr/violations?date_from=${dateFrom}&date_to=${dateTo}`
-      ) as DbViolation[]
-      setViolations(result)
+      setViolations(await listArgViolations(dateFrom, dateTo))
     } catch {
       if (!background) setViolations([])
     } finally {
@@ -155,7 +103,7 @@ export default function HrReportsScreen() {
   async function acknowledgeViolation(id: string) {
     setAcknowledging(id)
     try {
-      await apiFetch(`/pwa/admin/hr/violations/${id}/acknowledge`, { method: 'PATCH' })
+      await acknowledgeArgViolation(id)
       setViolations(vs => vs.map(v => v.id === id ? { ...v, acknowledged: true } : v))
     } catch {
       showToast('Fehler beim Bestätigen', 'error')

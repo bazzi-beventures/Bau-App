@@ -5,7 +5,7 @@ import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalenda
 import { type SchedulingConfig } from '../../api/admin'
 import { getWeekDays, toDateStr } from '../utils/calendarHelpers'
 import { scheduledDayIsoSet, pillClass } from './scheduleShared'
-import type { Project } from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 
 vi.mock('../../api/admin', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/admin')>()

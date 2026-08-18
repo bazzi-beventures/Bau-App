@@ -14,6 +14,14 @@ interface ConfirmDialogProps {
   children?: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  // Dritter Weg zwischen Abbrechen und Bestätigen — für Rückfragen mit zwei
+  // unterschiedlichen Ja-Antworten (z.B. „nur dieser Termin" vs. „ganze Serie").
+  // Ohne diese Option bauten solche Dialoge ihr Overlay-Markup selbst.
+  extraAction?: {
+    label: string
+    onClick: () => void
+    variant?: 'danger' | 'primary' | 'success'
+  }
   onConfirm: () => void
   onCancel: () => void
   busy?: boolean
@@ -34,6 +42,7 @@ export function ConfirmDialog({
   children,
   confirmLabel = 'Bestätigen',
   cancelLabel = 'Abbrechen',
+  extraAction,
   onConfirm,
   onCancel,
   busy = false,
@@ -43,9 +52,9 @@ export function ConfirmDialog({
   maxWidth,
   scrollable = false,
 }: ConfirmDialogProps) {
-  const btnClass = variant === 'danger'
+  const btnClass = (v: 'danger' | 'primary' | 'success') => v === 'danger'
     ? 'admin-btn admin-btn-danger'
-    : variant === 'success'
+    : v === 'success'
       ? 'admin-btn admin-btn-success'
       : 'admin-btn admin-btn-primary'
 
@@ -82,7 +91,16 @@ export function ConfirmDialog({
         {children}
         <div className="admin-confirm-actions">
           <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
-          <button className={btnClass} onClick={onConfirm} disabled={busy || confirmDisabled}>
+          {extraAction && (
+            <button
+              className={btnClass(extraAction.variant ?? 'primary')}
+              onClick={extraAction.onClick}
+              disabled={busy}
+            >
+              {extraAction.label}
+            </button>
+          )}
+          <button className={btnClass(variant)} onClick={onConfirm} disabled={busy || confirmDisabled}>
             {busy && busyLabel ? busyLabel : confirmLabel}
           </button>
         </div>

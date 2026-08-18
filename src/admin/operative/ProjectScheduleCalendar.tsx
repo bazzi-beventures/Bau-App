@@ -1,5 +1,5 @@
 ﻿import { Fragment, useEffect, useRef, useState } from 'react'
-import { Project } from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 import {
   SCHEDULING_VIEWS,
   type SchedulingConfig, type SchedulingViewKey,
@@ -21,9 +21,10 @@ import {
 } from '../utils/ganttGrid'
 import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
-  crewMembers, entryTitle, fmtTime, fmtTimeRange, kindSymbol, pairKey, pillBg, pillClass, pillExtraLines,
-  projectCoversDay, projectMonteurNames, readDragPayload, scheduledDayIsoSet, setDragPayload,
-  useHoverCard, useScheduleDistances,
+  crewMembers, entryTitle, fmtTime, fmtTimeRange, hasUnassignedEntries, kindSymbol,
+  neededDistancePairs, overlapConflictIds, pillBg, pillClass, pillExtraLines,
+  projectCoversDay, projectMonteurNames, readDragPayload, rowEntries, scheduledDayIsoSet,
+  setDragPayload, useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
@@ -577,54 +578,17 @@ function PlantafelView({
   const staffIds = new Set(staff.map(s => s.id))
 
   // Einträge einer Zelle: rowId = Monteur-Zeile, null = «Ohne Monteur».
-  // Ganztägige zuerst, danach chronologisch.
+  // Ganztägige zuerst, danach chronologisch. Geteilt mit der Gantt-Ansicht.
   function cellEntries(rowId: string | null, day: Date): CalendarEntry[] {
-    return projects
-      .filter(p => projectCoversDay(p, day) && (
-        rowId === null
-          ? !(p.monteur_ids || []).some(id => staffIds.has(id))
-          : (p.monteur_ids || []).includes(rowId)
-      ))
-      .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+    return rowEntries(projects, staffIds, rowId, day)
   }
 
-  const hasUnassigned = days.some(d => cellEntries(null, d).length > 0)
+  const hasUnassigned = hasUnassignedEntries(projects, staffIds, days)
 
-  // Aufeinanderfolgende GETAKTETE Einsätze einer Zelle mit verschiedenen
-  // Objektadressen — nur zwischen denen ergibt eine Fahrdistanz Sinn
-  // (Ganztägige haben keine Reihenfolge, «Ohne Monteur» keine Route).
-  const neededPairs: string[] = []
-  if (showDistances) {
-    for (const s of rowStaff) {
-      for (const d of days) {
-        const timed = cellEntries(s.id, d).filter(p => p.start_time)
-        for (let i = 0; i + 1 < timed.length; i++) {
-          const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
-          if (k) neededPairs.push(k)
-        }
-      }
-    }
-  }
-  const distBetween = useScheduleDistances(neededPairs)
+  const distBetween = useScheduleDistances(
+    showDistances ? neededDistancePairs(projects, staffIds, rowStaff, days) : [],
+  )
 
-  // Doppelbuchung: getaktete Einsätze desselben Monteurs am selben Tag, die sich
-  // zeitlich überschneiden (ohne Endzeit zählt 1 h). Nur echte Ressourcen-
-  // Konflikte — die Sammelzeile «Ohne Monteur» bleibt aussen vor.
-  function conflictIds(entries: CalendarEntry[]): Set<string> {
-    const timed = entries.filter(p => p.start_time)
-    const out = new Set<string>()
-    for (let i = 0; i < timed.length; i++) {
-      for (let j = i + 1; j < timed.length; j++) {
-        const a = timed[i], b = timed[j]
-        const aS = hhmmToMin(a.start_time!)
-        const aE = a.end_time ? hhmmToMin(a.end_time) : aS + 60
-        const bS = hhmmToMin(b.start_time!)
-        const bE = b.end_time ? hhmmToMin(b.end_time) : bS + 60
-        if (aS < bE && bS < aE) { out.add(a.id); out.add(b.id) }
-      }
-    }
-    return out
-  }
 
   function handleDrop(e: React.DragEvent, day: Date, rowId: string | null) {
     e.preventDefault()
@@ -690,7 +654,7 @@ function PlantafelView({
           const dayISO = toDateStr(d)
           const cellKey = `${dayISO}|${rowId ?? ''}`
           const entries = cellEntries(rowId, d)
-          const conflicts = rowId !== null ? conflictIds(entries) : new Set<string>()
+          const conflicts = rowId !== null ? overlapConflictIds(entries) : new Set<string>()
           return (
             <div
               key={dayISO}

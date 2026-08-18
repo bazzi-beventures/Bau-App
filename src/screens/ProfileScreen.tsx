@@ -13,13 +13,22 @@ interface Props {
   onLoggedOut: () => void
 }
 
+// Anzeigenamen der fünf Rollen (agents/routers/admin_users.py ALL_ROLES,
+// Bedeutung in docs/Admin_Handbuch.md §12). Vorher fehlten drei davon und
+// 'manager' stand für eine Rolle, die es nie gab: `user_light`, `management` und
+// `superadmin` sahen im eigenen Profil den technischen Schlüssel.
+const ROLE_LABELS: Record<string, string> = {
+  user_light: 'Mitarbeiter (Zeiterfassung)',
+  user: 'Mitarbeiter',
+  admin: 'Administrator',
+  management: 'Geschäftsleitung',
+  superadmin: 'Superadmin',
+}
+
 function roleLabel(role: string): string {
-  switch (role) {
-    case 'admin': return 'Administrator'
-    case 'manager': return 'Manager'
-    case 'user': return 'Mitarbeiter'
-    default: return role
-  }
+  // Unbekannter Wert (neue Rolle im Backend, alte PWA) → Schlüssel zeigen statt
+  // eine leere Zeile: im Support-Fall ist «user_xy» brauchbarer als nichts.
+  return ROLE_LABELS[role] ?? role
 }
 
 function pushLabel(state: PushState | 'loading', busy: boolean): string {

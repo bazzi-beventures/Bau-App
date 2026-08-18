@@ -1,18 +1,19 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QuoteEditForm, QuoteDetail } from './QuotesScreen'
+import { QuoteEditForm } from './QuoteEditForm'
+import type { QuoteDetail } from './quoteTypes'
 
 // Die Bearbeiten-Maske hat keinen localStorage-Entwurf: was hier steht, lebt nur
 // im State. Der Projekt-Dialog braucht darum eine verlässliche Dirty-Meldung,
 // bevor ein Klick neben das Fenster die Maske schliesst.
-vi.mock('../../api/client', () => ({
+vi.mock('../../../api/client', () => ({
   apiFetch: vi.fn(async () => []),
   apiFormFetch: vi.fn(async () => ({})),
   apiUrl: (p: string) => p,
   ApiError: class ApiError extends Error {},
 }))
-vi.mock('../../api/auth', () => ({ getMe: vi.fn(async () => ({ feature_flags: {} })) }))
-vi.mock('../../api/modules', () => ({ isFeatureEnabled: () => false }))
+vi.mock('../../../api/auth', () => ({ getMe: vi.fn(async () => ({ feature_flags: {} })) }))
+vi.mock('../../../api/modules', () => ({ isFeatureEnabled: () => false }))
 
 function quote(over: Partial<QuoteDetail> = {}): QuoteDetail {
   return {

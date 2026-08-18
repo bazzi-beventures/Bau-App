@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import {
+  addCustomerComment, checkCustomerName, deleteCustomer, deleteCustomerComment,
+  getCustomerComments, listCustomers, saveCustomer, updateCustomerComment,
+} from '../../api/admin/customers'
+import type {
+  AdditionalEmail, Customer, CustomerComment, CustomerNameMatch, CustomersListResponse,
+} from '../../api/admin/customers'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { AddressAutocomplete } from '../../shared/AddressAutocomplete'
@@ -9,14 +15,6 @@ import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
 import { formatDateTime } from '../utils/format'
 import { useToast, ToastHost } from '../components/useToast'
-
-interface CustomerComment {
-  id: string
-  author_name: string | null
-  text: string
-  created_at: string
-  updated_at?: string | null
-}
 
 function CustomerComments({ customerId }: { customerId: string }) {
   const [comments, setComments] = useState<CustomerComment[]>([])
@@ -33,8 +31,7 @@ function CustomerComments({ customerId }: { customerId: string }) {
   async function load() {
     setLoading(true)
     try {
-      const data = await apiFetch(`/pwa/admin/customers/${customerId}/comments`) as CustomerComment[]
-      setComments(data)
+      setComments(await getCustomerComments(customerId))
     } catch {
       setComments([])
     } finally {
@@ -48,10 +45,7 @@ function CustomerComments({ customerId }: { customerId: string }) {
     if (!newComment.trim()) return
     setAdding(true); setError('')
     try {
-      await apiFetch(`/pwa/admin/customers/${customerId}/comments`, {
-        method: 'POST',
-        body: JSON.stringify({ text: newComment.trim() }),
-      })
+      await addCustomerComment(customerId, newComment.trim())
       setNewComment('')
       await load()
     } catch {
@@ -75,10 +69,7 @@ function CustomerComments({ customerId }: { customerId: string }) {
     if (!editingId || !editingText.trim()) return
     setSavingEdit(true); setError('')
     try {
-      await apiFetch(`/pwa/admin/customers/${customerId}/comments/${editingId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ text: editingText.trim() }),
-      })
+      await updateCustomerComment(customerId, editingId, editingText.trim())
       cancelEdit()
       await load()
     } catch {
@@ -92,9 +83,7 @@ function CustomerComments({ customerId }: { customerId: string }) {
     if (!confirmDeleteId) return
     setDeleting(true); setError('')
     try {
-      await apiFetch(`/pwa/admin/customers/${customerId}/comments/${confirmDeleteId}`, {
-        method: 'DELETE',
-      })
+      await deleteCustomerComment(customerId, confirmDeleteId)
       setComments(prev => prev.filter(c => c.id !== confirmDeleteId))
       setConfirmDeleteId(null)
     } catch {
@@ -211,41 +200,6 @@ function CustomerComments({ customerId }: { customerId: string }) {
 }
 
 // Zusatz-E-Mail-Adresse (reine Stammdaten — kein Versand-Feature; Hauptadresse bleibt email).
-export interface AdditionalEmail {
-  email: string
-  label: string | null
-}
-
-export interface Customer {
-  id: string
-  name: string
-  company: string | null
-  email: string | null
-  additional_emails: AdditionalEmail[] | null
-  phone: string | null
-  phone_landline: string | null
-  address: string | null
-  billing_name: string | null
-  billing_address: string | null
-  object_address: string | null
-  local_contact_name: string | null
-  local_contact_phone: string | null
-  owner_contact_name: string | null
-  owner_contact_phone: string | null
-  notes: string | null
-  created_at: string
-}
-
-// Treffer des Dubletten-Checks (GET /pwa/admin/customers/name-check) — bewusst
-// schlanker als Customer: der Hinweis zeigt nur, wer den Namen schon trägt.
-interface NameMatch {
-  id: string
-  name: string
-  company: string | null
-  address: string | null
-  billing_address: string | null
-}
-
 function CustomerForm({
   initial,
   onSave,
@@ -279,7 +233,7 @@ function CustomerForm({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [nameMatches, setNameMatches] = useState<NameMatch[]>([])
+  const [nameMatches, setNameMatches] = useState<CustomerNameMatch[]>([])
   const rootRef = useRef<HTMLDivElement>(null)
   const nameCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -300,10 +254,7 @@ function CustomerForm({
     }
     nameCheckRef.current = setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ name: needle })
-        if (initial?.id) params.set('exclude_id', initial.id)
-        const res = await apiFetch(`/pwa/admin/customers/name-check?${params}`) as { matches?: NameMatch[] }
-        setNameMatches(res?.matches ?? [])
+        setNameMatches(await checkCustomerName(needle, initial?.id))
       } catch {
         // Rein informativ — ein fehlgeschlagener Check darf das Formular nicht stören.
         setNameMatches([])
@@ -324,33 +275,28 @@ function CustomerForm({
     setError('')
     setSaving(true)
     try {
-      const method = isNew ? 'POST' : 'PATCH'
-      const url = isNew ? '/pwa/admin/customers' : `/pwa/admin/customers/${initial!.id}`
-      await apiFetch(url, {
-        method,
-        body: JSON.stringify({
-          name: name.trim(),
-          company: company.trim() || null,
-          email: email || null,
-          // Immer senden (auch []), damit Entfernen aller Zusatzadressen gespeichert wird.
-          additional_emails: additionalEmails
-            .map(a => ({ email: a.email.trim(), label: a.label.trim() || null }))
-            .filter(a => a.email),
-          phone: phone || null,
-          phone_landline: phoneLandline || null,
-          address: address || null,
-          billing_name: billingDiffers ? (billingName.trim() || null) : null,
-          billing_address: billingDiffers ? (billingAddress || null) : null,
-          object_address: objectAddress || null,
-          local_contact_name: localContactName.trim() || null,
-          local_contact_phone: localContactPhone.trim() || null,
-          ...(showOwnerContact ? {
-            owner_contact_name: ownerContactName.trim() || null,
-            owner_contact_phone: ownerContactPhone.trim() || null,
-          } : {}),
-          notes: notes || null,
-        }),
-      })
+      await saveCustomer({
+        name: name.trim(),
+        company: company.trim() || null,
+        email: email || null,
+        // Immer senden (auch []), damit Entfernen aller Zusatzadressen gespeichert wird.
+        additional_emails: additionalEmails
+          .map(a => ({ email: a.email.trim(), label: a.label.trim() || null }))
+          .filter(a => a.email),
+        phone: phone || null,
+        phone_landline: phoneLandline || null,
+        address: address || null,
+        billing_name: billingDiffers ? (billingName.trim() || null) : null,
+        billing_address: billingDiffers ? (billingAddress || null) : null,
+        object_address: objectAddress || null,
+        local_contact_name: localContactName.trim() || null,
+        local_contact_phone: localContactPhone.trim() || null,
+        ...(showOwnerContact ? {
+          owner_contact_name: ownerContactName.trim() || null,
+          owner_contact_phone: ownerContactPhone.trim() || null,
+        } : {}),
+        notes: notes || null,
+      }, isNew ? undefined : initial!.id)
       onSave()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
@@ -562,13 +508,6 @@ function CustomerForm({
   )
 }
 
-interface CustomersListResponse {
-  rows: Customer[]
-  total: number
-  page: number
-  page_size: number
-}
-
 const PAGE_SIZE = 50
 
 export default function CustomersScreen() {
@@ -594,10 +533,7 @@ export default function CustomersScreen() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      const res = await apiFetch(`/pwa/admin/customers/list?${params.toString()}`) as CustomersListResponse
-      setData(res)
+      setData(await listCustomers({ page, pageSize: PAGE_SIZE, search: debouncedSearch }))
     } catch {
       setData({ rows: [], total: 0, page: 1, page_size: PAGE_SIZE })
     } finally {
@@ -613,7 +549,7 @@ export default function CustomersScreen() {
     if (!confirmDelete) return
     setDeleting(true)
     try {
-      await apiFetch(`/pwa/admin/customers/${confirmDelete.id}`, { method: 'DELETE' })
+      await deleteCustomer(confirmDelete.id)
       showToast(`«${confirmDelete.name}» gelöscht`)
       setConfirmDelete(null)
       load()

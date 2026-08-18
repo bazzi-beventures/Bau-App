@@ -4,7 +4,7 @@ import type { CategoryPricingRow, SupplierPricingRow, InstallationTemplateRow, C
 import KpiCards from '../components/KpiCards'
 import DataTable from '../components/DataTable'
 import BiBarChart from '../components/BiBarChart'
-import { apiFetch } from '../../../api/client'
+import { listSuppliers } from '../../../api/admin/suppliers'
 
 interface SupplierLite { id: string; name: string }
 type SupplierPricingRowWithName = SupplierPricingRow & { supplier_name: string }
@@ -38,8 +38,8 @@ export default function PricingTab() {
   const [suppliers, setSuppliers] = useState<SupplierLite[] | null>(null)
   useEffect(() => {
     let cancelled = false
-    apiFetch('/pwa/admin/suppliers')
-      .then((rows) => { if (!cancelled) setSuppliers(rows as SupplierLite[]) })
+    listSuppliers()
+      .then((rows) => { if (!cancelled) setSuppliers(rows) })
       .catch(() => { if (!cancelled) setSuppliers([]) })
     return () => { cancelled = true }
   }, [])

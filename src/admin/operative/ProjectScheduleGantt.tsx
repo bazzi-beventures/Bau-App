@@ -7,14 +7,16 @@
 // Drag-Payload in scheduleShared.ts.
 
 import { useEffect, useRef, useState } from 'react'
-import { Project } from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 import {
   CalendarEntry, StaffLite,
-  addressLocality, crewShortLabels, useHoverCard, entryTitle, fmtTimeRange, kindSymbol,
-  pairKey, pillBg, pillClass, projectCoversDay, readDragPayload, setDragPayload, useScheduleDistances,
+  addressLocality, crewShortLabels, useHoverCard, entryTitle, fmtTimeRange,
+  hasUnassignedEntries, kindSymbol, neededDistancePairs, overlapConflictIds,
+  pillBg, pillClass, projectCoversDay, readDragPayload, rowEntries, setDragPayload,
+  useScheduleDistances,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
-import { diffDays, hhmmToMin, isToday, toDateStr } from '../utils/calendarHelpers'
+import { diffDays, isToday, toDateStr } from '../utils/calendarHelpers'
 import { computeWeekHours } from '../utils/weekGrid'
 import {
   GANTT_BAR_H, GANTT_DIST_MIN_GAP_PX, GANTT_LANE_GAP, GANTT_ROW_PAD,
@@ -89,34 +91,16 @@ export default function ProjectScheduleGantt({
   }, [])
 
   // Einträge einer Zeile an einem Tag. rowId null = «Ohne Monteur».
+  // Geteilt mit der Plantafel.
   function cellEntries(rowId: string | null, day: Date): CalendarEntry[] {
-    return projects
-      .filter(p => projectCoversDay(p, day) && (
-        rowId === null
-          ? !(p.monteur_ids || []).some(id => staffIds.has(id))
-          : (p.monteur_ids || []).includes(rowId)
-      ))
-      .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+    return rowEntries(projects, staffIds, rowId, day)
   }
 
-  const hasUnassigned = days.some(d => cellEntries(null, d).length > 0)
+  const hasUnassigned = hasUnassignedEntries(projects, staffIds, days)
 
-  // Aufeinanderfolgende GETAKTETE Einsätze einer Zeile mit verschiedenen
-  // Objektadressen — nur dazwischen ergibt eine Fahrdistanz Sinn. Wie in der
-  // Plantafel bleibt «Ohne Monteur» aussen vor: das ist niemandes Route.
-  const neededPairs: string[] = []
-  if (showDistances) {
-    for (const s of rowStaff) {
-      for (const d of days) {
-        const timed = cellEntries(s.id, d).filter(p => p.start_time)
-        for (let i = 0; i + 1 < timed.length; i++) {
-          const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
-          if (k) neededPairs.push(k)
-        }
-      }
-    }
-  }
-  const distBetween = useScheduleDistances(neededPairs)
+  const distBetween = useScheduleDistances(
+    showDistances ? neededDistancePairs(projects, staffIds, rowStaff, days) : [],
+  )
 
   // Rastergrenzen über ALLE sichtbaren Tage — sonst würde jeder Tag eine andere
   // Breite bekommen und die Achse wäre nicht mehr durchgehend lesbar.
@@ -299,24 +283,6 @@ export default function ProjectScheduleGantt({
     )
   }
 
-  // Doppelbuchung: getaktete Einsätze desselben Mitarbeiters am selben Tag mit
-  // zeitlicher Überschneidung (ohne Endzeit zählt 1 h). Die Sammelzeile «Ohne
-  // Monteur» bleibt aussen vor — dort ist niemand gebunden.
-  function conflictIds(entries: CalendarEntry[]): Set<string> {
-    const timed = entries.filter(p => p.start_time)
-    const out = new Set<string>()
-    for (let i = 0; i < timed.length; i++) {
-      for (let j = i + 1; j < timed.length; j++) {
-        const a = timed[i], b = timed[j]
-        const aS = hhmmToMin(a.start_time!)
-        const aE = a.end_time ? hhmmToMin(a.end_time) : aS + 60
-        const bS = hhmmToMin(b.start_time!)
-        const bE = b.end_time ? hhmmToMin(b.end_time) : bS + 60
-        if (aS < bE && bS < aE) { out.add(a.id); out.add(b.id) }
-      }
-    }
-    return out
-  }
 
   function renderRow(rowId: string | null, label: string) {
     const perDay = days.map(d => cellEntries(rowId, d))
@@ -376,7 +342,7 @@ export default function ProjectScheduleGantt({
           {days.map((d, i) => {
             const dayISO = toDateStr(d)
             const entries = perDay[i]
-            const conflicts = rowId !== null ? conflictIds(entries) : new Set<string>()
+            const conflicts = rowId !== null ? overlapConflictIds(entries) : new Set<string>()
             const lanes = lanesPerDay[i]
             const timed = rowId !== null && showDistances ? entries.filter(p => p.start_time) : []
             return [

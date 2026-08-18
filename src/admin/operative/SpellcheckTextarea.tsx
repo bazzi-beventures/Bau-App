@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { apiFetch } from '../../api/client'
+import { checkSpelling } from '../../api/admin/spellcheck'
 
 interface Props {
   value: string
@@ -48,10 +48,7 @@ export function SpellcheckTextarea({ value, onChange, placeholder, rows = 5 }: P
     setError('')
     setNoErrors(false)
     try {
-      const res = await apiFetch('/pwa/admin/spellcheck', {
-        method: 'POST',
-        body: JSON.stringify({ text: value }),
-      }) as { corrected: string; changed: boolean }
+      const res = await checkSpelling(value)
       if (res.changed && res.corrected.trim() !== value.trim()) {
         setOriginal(value)
         setSuggestion(res.corrected)

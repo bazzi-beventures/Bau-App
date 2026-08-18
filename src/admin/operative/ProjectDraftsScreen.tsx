@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
-import { apiFetch } from '../../api/client'
+import { listAllCustomers, saveCustomer } from '../../api/admin/customers'
 import {
   ProjectDraft, getAdminProjectDrafts,
   convertProjectDraft, rejectProjectDraft,
@@ -186,9 +186,8 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
 
   useEffect(() => {
     if (!isOpen) return
-    apiFetch('/pwa/admin/customers')
-      .then(d => {
-        const list = d as CustomerLite[]
+    listAllCustomers()
+      .then(list => {
         setCustomers(list)
         // Nur der exakt gleiche Name wird vorausgewählt. Ein bloss ähnlicher
         // Treffer erscheint als Vorschlagsbanner und braucht einen Klick —
@@ -238,15 +237,12 @@ function DraftDetailModal({ draft, onClose, onConverted, onRejected }: DetailPro
     try {
       // Bei 'new' zuerst Kunde anlegen, dann ID weiterreichen
       if (customerMode === 'new') {
-        const newCust = await apiFetch('/pwa/admin/customers', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: newCustName.trim(),
-            email: newCustEmail.trim() || null,
-            phone: newCustPhone.trim() || null,
-            address: newCustAddress.trim() || null,
-          }),
-        }) as CustomerLite
+        const newCust = await saveCustomer({
+          name: newCustName.trim(),
+          email: newCustEmail.trim() || null,
+          phone: newCustPhone.trim() || null,
+          address: newCustAddress.trim() || null,
+        })
         customerId = newCust.id
       }
 

@@ -1,86 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch, ApiError, apiFormFetch, apiUrl, isNetworkError } from '../api/client'
+import { apiFetch, ApiError, isNetworkError } from '../api/client'
+import {
+  listProjectFiles, projectFileUrl, renameProjectFile, uploadProjectFile,
+} from '../api/projectFiles'
 import { deleteOwnRapport, downloadRapportPdf, fetchProjectReports, ProjectReport } from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import SignaturePad from '../chat/SignaturePad'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
+import {
+  QueuedTaskToggle, enqueueTaskToggle, loadTaskQueue, reconcileTaskQueue, saveTaskQueue, taskKey,
+} from './projekte/taskQueue'
 import { sortProjectsChronologically } from './projekte/sortProjects'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 import { mapsUrl } from '../shared/mapsLink'
+import { DownloadIcon } from '../shared/DownloadIcon'
+import { formatDateTime } from '../shared/datetime'
+import { CATEGORY_LABELS, PROJECT_KIND_LABELS } from '../shared/projectDetail/types'
+import type {
+  EmbeddedCustomer, Kontakt, ProjectComment, ProjectFile, ProjectFileCategory, ProjectKind,
+} from '../shared/projectDetail/types'
 
-// Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle).
-// Siehe ProjektEntwurfScreen für das gleiche Muster (zeit_/projektEntwurf_queue).
-const TASK_QUEUE_KEY = 'hinweise_offline_queue'
-const MAX_DRAIN_ATTEMPTS = 10
+// Alles, was der Monteur am Projekt sieht, teilt sich die Form mit der
+// Verwaltungs-Ansicht (Charge H5): Kontakte, Kunden-Embed, Dateien, Kommentare
+// und die Kategorie-Beschriftungen stehen in shared/projectDetail/types, die
+// Datei-Aufrufe in api/projectFiles — dort mit `/pwa` statt `/pwa/admin` davor.
+const SCOPE = '/pwa' as const
 
-interface QueuedTaskToggle {
-  project_id: string
-  task_id: string
-  is_done: boolean
-  queued_at: string
-  attempts?: number
-}
-
-function loadTaskQueue(): QueuedTaskToggle[] {
-  try { return JSON.parse(localStorage.getItem(TASK_QUEUE_KEY) || '[]') } catch { return [] }
-}
-
-function saveTaskQueue(q: QueuedTaskToggle[]) {
-  localStorage.setItem(TASK_QUEUE_KEY, JSON.stringify(q))
-}
-
-// Mehrfaches Togglen derselben Aufgabe kollabiert auf den letzten Stand —
-// nur der zuletzt gewünschte is_done-Wert muss synchronisiert werden.
-function enqueueTaskToggle(item: QueuedTaskToggle) {
-  const q = loadTaskQueue().filter(it => it.task_id !== item.task_id)
-  q.push(item)
-  saveTaskQueue(q)
-}
-
-// Identität eines Queue-Eintrags. task_id allein reicht nicht: wird eine
-// Aufgabe während des Drains neu getoggelt, ersetzt enqueueTaskToggle den alten
-// Eintrag durch einen mit neuem queued_at — beide unterscheiden sich nur darüber.
-const taskKey = (it: QueuedTaskToggle) => `${it.task_id}|${it.queued_at}`
-
-interface Kontakt {
-  name: string
-  kommentar: string
-  telefon: string
-  email: string
-  is_site_contact?: boolean
-  // Vom Backend gesetzt, wenn das Projekt keine eigene Ansprechperson hat und der
-  // Kundenstamm eingesprungen ist (db.project_contacts_with_customer_fallback).
-  // Nicht persistiert — kommt bei jedem Request frisch aus dem Kunden-Embed.
-  from_customer?: boolean
-}
-
-interface EmbeddedCustomer {
-  id: string
-  name: string | null
-  billing_name: string | null
-  address: string | null
-  billing_address: string | null
-  object_address: string | null
-  email: string | null
-  phone: string | null
-}
-
-type ProjectKind =
-  | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
-  | 'weiterbildung' | 'reservation' | 'blocker' | 'sonstiges'
-
-const KIND_LABELS: Record<ProjectKind, string> = {
-  project: 'Projekt',
-  teamsitzung: 'Teamsitzung',
-  lagerarbeit: 'Lagerarbeit',
-  werkstatt: 'Werkstatt',
-  weiterbildung: 'Weiterbildung',
-  reservation: 'Reservation',
-  blocker: 'Blocker',
-  sonstiges: 'Sonstiges',
-}
-
+// Farben der Einsatz-Arten: eigene Palette der Monteur-PWA. Die Beschriftungen
+// (PROJECT_KIND_LABELS) sind geteilt, die Farben nicht — die Verwaltung zeichnet
+// ihre Pillen aus den --kind-*-Variablen der Tenant-Config.
 const KIND_COLORS: Record<ProjectKind, string> = {
   project: 'var(--accent-amber)',
   teamsitzung: '#7c3aed',
@@ -91,6 +40,10 @@ const KIND_COLORS: Record<ProjectKind, string> = {
   blocker: '#94a3b8',
   sonstiges: '#475569',
 }
+
+// Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle):
+// Persistenz, Versuchs-Deckel und Reconcile stehen in projekte/taskQueue.ts —
+// hier bleibt nur der Drain-Loop, der die Server-Calls macht.
 
 interface Project {
   id: string
@@ -117,11 +70,12 @@ interface Project {
   projektleiter_name?: string | null
 }
 
-// Kategorien, die ein Mitarbeiter im Feld vergeben darf — Teilmenge der
-// Web-View-Kategorien (siehe admin/operative/projectDetail/tabs.tsx). Aus dem
-// Reiter Lieferantendokumente ist nur "lieferschein" dabei; Angebot Lieferant,
-// Bestellungen und Auftragsbestätigung bleiben dem Admin vorbehalten.
-type FileCategory = 'fotos' | 'masse' | 'lieferschein' | 'rapport' | 'sonstiges'
+// Kategorien, die ein Mitarbeiter im Feld vergeben darf — echte Teilmenge der
+// Kategorien aus shared/projectDetail/types. Aus dem Reiter Lieferantendokumente
+// ist nur "lieferschein" dabei; Angebot Lieferant, Bestellungen und
+// Auftragsbestätigung bleiben dem Admin vorbehalten. `Extract` statt einer
+// zweiten Aufzählung: eine hier erfundene Kategorie fällt sofort auf.
+type FileCategory = Extract<ProjectFileCategory, 'fotos' | 'masse' | 'lieferschein' | 'rapport' | 'sonstiges'>
 
 // Der Lieferschein fehlt hier bewusst: er hat eine eigene Karte mit eigenem
 // Hochladen-Knopf (siehe LIEFERSCHEIN_CATEGORY), analog zum Teilordner
@@ -141,36 +95,6 @@ const FILE_CATEGORIES: { key: FileCategory; label: string }[] = [
 // der Liste (ADMIN_ONLY_FILE_CATEGORIES in agents/routers/_deps.py), diese Karte
 // zeigt also nie mehr, als die API ohnehin liefert.
 const LIEFERSCHEIN_CATEGORY: FileCategory = 'lieferschein'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  fotos: 'Fotos',
-  masse: 'Masse',
-  lieferschein: 'Lieferschein',
-  rapport: 'Rapport',
-  sonstiges: 'Sonstiges',
-  bestellungen: 'Bestellungen',
-  auftragsbestaetigung: 'Auftragsbestätigung',
-  // Vom Admin im Offerten-Reiter hochgeladen (Papier-/Fremdsystem-Offerte). Der
-  // Monteur kann sie nicht hochladen, sieht sie aber in der Dateiliste.
-  offerte: 'Offerte',
-}
-
-interface ProjectFile {
-  id: string
-  filename: string
-  file_url: string | null
-  storage_path?: string | null
-  mime_type: string | null
-  category: string | null
-  created_at: string
-}
-
-interface ProjectComment {
-  id: string
-  author_name: string | null
-  text: string
-  created_at: string
-}
 
 interface Props {
   logoUrl?: string
@@ -203,11 +127,6 @@ function formatDateRange(p: { start_date: string | null; end_date: string | null
   if (!p.start_date) return ''
   if (!p.end_date || p.end_date === p.start_date) return formatDate(p.start_date)
   return `${formatDate(p.start_date)} – ${formatDate(p.end_date)}`
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 // Adresse als Kartenlink. Fällt auf reinen Text zurück, wenn nichts Brauchbares
@@ -297,7 +216,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     setReports([])
     setLoadingDetail(true)
     Promise.all([
-      apiFetch(`/pwa/projects/${selected.id}/files`).catch(() => []) as Promise<ProjectFile[]>,
+      listProjectFiles(SCOPE, selected.id).catch(() => [] as ProjectFile[]),
       apiFetch(`/pwa/projects/${selected.id}/comments`).catch(() => []) as Promise<ProjectComment[]>,
       apiFetch(`/pwa/projects/${selected.id}/tasks`).catch(() => []) as Promise<ProjectTask[]>,
       fetchProjectReports(selected.id).catch(() => [] as ProjectReport[]),
@@ -334,18 +253,11 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
         }
       }
     } finally {
-      // Reconcile gegen den aktuellen Stand statt blind zu überschreiben: ein
-      // während des Drains erfolgtes Re-Toggle (enqueueTaskToggle) darf nicht
-      // verlorengehen, und Fehlversuche müssen ihre attempts behalten.
-      const failedByTask = new Map(remaining.map(it => [it.task_id, it]))
-      const merged = loadTaskQueue().flatMap(it => {
-        if (sent.has(taskKey(it))) return []            // erfolgreich → raus
-        const failed = failedByTask.get(it.task_id)
-        // Gleicher Eintrag fehlgeschlagen → attempts-erhöhte Version; anderes
-        // queued_at heißt: während des Drains neu getoggelt → dieser gilt.
-        return [failed && failed.queued_at === it.queued_at ? failed : it]
-      })
-      saveTaskQueue(merged)
+      // Reconcile gegen den aktuellen Stand statt blind zu überschreiben — und
+      // MIT Versuchs-Deckel: Einträge, die MAX_DRAIN_ATTEMPTS erreicht haben
+      // (gelöschte Aufgabe → 404, CORS-Dauerfehler), fliegen raus statt bei
+      // jedem online-Event erneut versucht zu werden. Details in taskQueue.ts.
+      saveTaskQueue(reconcileTaskQueue(loadTaskQueue(), sent, remaining))
       drainingRef.current = false
     }
   }, [])
@@ -391,13 +303,9 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     try {
       // Backend nimmt eine Datei pro Request → sequentiell hochladen
       for (const file of filesToUpload) {
-        const form = new FormData()
-        form.append('file', file)
-        form.append('category', category)
-        await apiFormFetch(`/pwa/projects/${selected.id}/files`, form)
+        await uploadProjectFile(SCOPE, selected.id, file, category)
       }
-      const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
-      setFiles(updated)
+      setFiles(await listProjectFiles(SCOPE, selected.id))
     } catch {
       // silently ignore upload errors in user view
     } finally {
@@ -410,12 +318,8 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     const name = renameValue.trim()
     if (!selected || !name) { setRenamingFileId(null); return }
     try {
-      await apiFetch(`/pwa/projects/${selected.id}/files/${fileId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ filename: name }),
-      })
-      const updated = await apiFetch(`/pwa/projects/${selected.id}/files`) as ProjectFile[]
-      setFiles(updated)
+      await renameProjectFile(SCOPE, selected.id, fileId, name)
+      setFiles(await listProjectFiles(SCOPE, selected.id))
     } catch {
       // silently ignore rename errors in user view
     } finally {
@@ -516,7 +420,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
         ) : (
           <span className="projekte-detail-value" style={{ flex: 1 }}>
             {(f.storage_path || f.file_url)
-              ? <a href={apiUrl(`/pwa/projects/${projectId}/files/${f.id}/download`)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
+              ? <a href={projectFileUrl(SCOPE, projectId, f.id)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>{f.filename}</a>
               : f.filename
             }
             <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted, #888)', marginTop: 1 }}>
@@ -528,18 +432,14 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             Zum Speichern braucht es `?download=1` (erzwingt `attachment`). */}
         {renamingFileId !== f.id && (f.storage_path || f.file_url) && (
           <a
-            href={apiUrl(`/pwa/projects/${projectId}/files/${f.id}/download?download=1`)}
+            href={projectFileUrl(SCOPE, projectId, f.id, { download: true })}
             download={f.filename}
             className="projekte-kontakt-link-btn"
             style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
             title="Herunterladen"
             aria-label={`${f.filename} herunterladen`}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'block' }}>
-              <path d="M12 3v12" />
-              <path d="m7 11 5 5 5-5" />
-              <path d="M4 20h16" />
-            </svg>
+            <DownloadIcon />
           </a>
         )}
         {renamingFileId !== f.id && (
@@ -578,7 +478,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                     className="projekte-detail-badge"
                     style={{ background: KIND_COLORS[k], color: '#fff' }}
                   >
-                    {KIND_LABELS[k]}
+                    {PROJECT_KIND_LABELS[k]}
                   </span>
                 </div>
               )
@@ -1167,7 +1067,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                             <div className="projekte-tile-name">{p.name}</div>
                             <div className="projekte-tile-sub" style={isInternal ? { color: tileColor, fontWeight: 600 } : undefined}>
                               {isInternal
-                                ? KIND_LABELS[kind]
+                                ? PROJECT_KIND_LABELS[kind]
                                 : (p.art_der_arbeit?.length ? p.art_der_arbeit.join(', ') : (p.customer?.billing_name || p.customer?.name || '—'))}
                             </div>
                             {p.bemerkung && (

@@ -12,6 +12,35 @@ export interface ProjectTask {
   created_at: string
 }
 
+// ─── Admin-Seite (Checkliste verwalten) ─────────────────────────────────────
+// Anlegen/Ändern/Löschen darf nur der Admin; der Monteur hakt bloss ab. Die
+// vier Aufrufe leben hier statt inline im Screen, weil sie inzwischen an zwei
+// Stellen gebraucht werden: Projektmaske (Tab «Aufgaben») und Planungs-Panel
+// der Einsatzplanung.
+
+export async function listAdminProjectTasks(projectId: string): Promise<ProjectTask[]> {
+  const d = await apiFetch(`/pwa/admin/projects/${projectId}/tasks`)
+  return Array.isArray(d) ? d as ProjectTask[] : []
+}
+
+export async function addAdminProjectTask(projectId: string, text: string): Promise<void> {
+  await apiFetch(`/pwa/admin/projects/${projectId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
+}
+
+export async function updateAdminProjectTask(projectId: string, taskId: string, text: string): Promise<void> {
+  await apiFetch(`/pwa/admin/projects/${projectId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ text }),
+  })
+}
+
+export async function deleteAdminProjectTask(projectId: string, taskId: string): Promise<void> {
+  await apiFetch(`/pwa/admin/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' })
+}
+
 // Hakt eine Aufgabe ab bzw. setzt sie zurück. Geteilt zwischen direktem Klick
 // und dem Offline-Queue-Drain, damit die Call-Logik nur an einer Stelle lebt.
 // doneAt = echter Abhak-Zeitpunkt (ISO). Wichtig für offline gepufferte Aktionen,

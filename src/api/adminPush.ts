@@ -25,8 +25,8 @@ export async function sendAdminPush(
   title: string,
   body: string,
 ): Promise<PushSendResult> {
-  return apiFetch('/pwa/superadmin/push/send', {
+  return apiFetch<PushSendResult>('/pwa/superadmin/push/send', {
     method: 'POST',
     body: JSON.stringify({ targets, title, body }),
-  }) as Promise<PushSendResult>
+  })
 }

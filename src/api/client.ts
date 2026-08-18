@@ -90,7 +90,12 @@ export interface ApiFetchOptions extends RequestInit {
   timeoutMs?: number
 }
 
-export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<unknown> {
+// `T` ist die erwartete Antwortform: `apiFetch<Project[]>('/pwa/admin/projects')`.
+// Das ersetzt den früheren nachgestellten `as Promise<…>`-Cast — beides ist
+// dieselbe Zusicherung (geprüft wird zur Laufzeit nichts), aber die Zusicherung
+// steht jetzt am Aufruf statt hinter ihm, und ohne Default `unknown` fällt auf,
+// wo sie fehlt. Wer die Form nicht kennt, lässt `T` weg und bekommt `unknown`.
+export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { timeoutMs, ...init } = options
   const controller = timeoutMs !== undefined ? new AbortController() : null
   const timer = controller !== null ? setTimeout(() => controller.abort(), timeoutMs) : null
@@ -236,7 +241,8 @@ export async function* apiStreamFetch(
   }
 }
 
-export async function apiFormFetch(path: string, form: FormData): Promise<unknown> {
+// Multipart-Gegenstück zu apiFetch — `T` bedeutet dasselbe (erwartete Antwortform).
+export async function apiFormFetch<T = unknown>(path: string, form: FormData): Promise<T> {
   // No Content-Type header — browser sets it with the multipart boundary
   try {
     const res = await fetch(`${BASE_URL}${path}`, {

@@ -1,25 +1,7 @@
-export type ProjectFileCategory =
-  | 'fotos'
-  | 'masse'
-  | 'sonstiges'
-  | 'angebot_lieferant'
-  | 'bestellungen'
-  | 'auftragsbestaetigung'
-  | 'lieferschein'
-  | 'anhang'
-  | 'prospekt' // Altbestand: frühere Kategorie der Offerten-Anhänge, wird unter 'anhang' angezeigt
-  | 'rapport'  // eingescanntes Papier-Blatt oder Rapport aus einem Fremdsystem (z.B. Sorba)
-  | 'offerte'  // eingescannte/externe Offerte, die nicht im System erstellt wurde
-
-export interface ProjectFile {
-  id: string
-  filename: string
-  file_url: string | null
-  storage_path?: string | null
-  mime_type: string | null
-  category: ProjectFileCategory | null
-  created_at: string
-}
+// Dateien am Projekt sind in beiden Sichten dieselben Zeilen (Charge H5) — der
+// Typ steht in shared/projectDetail/types, hier nur die Wiederausfuhr, damit die
+// Reiter ihn wie bisher aus './types' beziehen.
+export type { ProjectFile, ProjectFileCategory } from '../../../shared/projectDetail/types'
 
 export interface ProjectQuote {
   id: number
@@ -74,15 +56,9 @@ export interface ProjectReport {
   is_warranty?: boolean | null
 }
 
-export interface ProjectTask {
-  id: string
-  text: string
-  is_done: boolean
-  done_at: string | null
-  done_by_name: string | null
-  created_by_name?: string | null
-  created_at: string
-}
+// Aufgaben/Hinweise am Projekt: dieselbe Zeile, die die Monteur-PWA abhakt
+// (api/projectTasks trägt auch die Aufrufe beider Seiten) — Charge H5.
+export type { ProjectTask } from '../../../api/projectTasks'
 
 export interface ProjectApproval {
   id: string

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setNewProjectPrefill, takeNewProjectPrefill, NewProjectPrefill } from './newProjectPrefill'
-import { initialProjectForm, isProjectFormDirty } from './ProjectDetailScreen'
+import { initialProjectForm, isProjectFormDirty } from './projectDetail/projectForm'
 import { diffAppointments } from './projectAppointments'
-import type { Project } from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 
 // Übergabe «Zeitfenster im Kalender aufgezogen → + Neues Projekt anlegen»:
 // die Neu-Maske soll Uhrzeit und Monteur schon mitbringen.

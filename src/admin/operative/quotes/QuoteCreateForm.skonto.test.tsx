@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QuoteCreateForm } from './QuotesScreen'
-import { apiFetch } from '../../api/client'
+import { QuoteCreateForm } from './QuoteCreateForm'
+import { apiFetch } from '../../../api/client'
 
 // Skonto-Satz und -Frist sind pro Firma praktisch immer gleich. Die Vorgabe aus den
 // Offert-Vorlagen belegt die beiden Felder vor, statt sie jedes Mal eintippen zu lassen.
-vi.mock('../../api/client', () => ({
+vi.mock('../../../api/client', () => ({
   apiFetch: vi.fn(),
   apiFormFetch: vi.fn(async () => ({})),
   apiUrl: (p: string) => p,
   ApiError: class ApiError extends Error {},
 }))
-vi.mock('../../api/auth', () => ({ getMe: vi.fn(async () => ({ feature_flags: {} })) }))
-vi.mock('../../api/modules', () => ({ isFeatureEnabled: () => false }))
+vi.mock('../../../api/auth', () => ({ getMe: vi.fn(async () => ({ feature_flags: {} })) }))
+vi.mock('../../../api/modules', () => ({ isFeatureEnabled: () => false }))
 
 const mockFetch = vi.mocked(apiFetch)
 

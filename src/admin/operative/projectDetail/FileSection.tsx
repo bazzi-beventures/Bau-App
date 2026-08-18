@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { apiUrl } from '../../../api/client'
 import { formatDateTime } from '../../utils/format'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../../../shared/projectFileTypes'
+import { DownloadIcon } from '../../../shared/DownloadIcon'
 import type { ProjectFile, ProjectFileCategory } from './types'
 
 export const PROJECT_DOC_SECTIONS: { key: ProjectFileCategory; title: string; legacyFallback?: boolean }[] = [
@@ -50,19 +51,8 @@ const ALL_CATEGORY_KEYS = new Set<ProjectFileCategory>(
 // unter "Sonstiges" auftauchen.
 ALL_CATEGORY_KEYS.add('prospekt')
 
-export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
-  fotos: 'Fotos',
-  masse: 'Masse',
-  sonstiges: 'Sonstiges',
-  angebot_lieferant: 'Angebote Lieferant',
-  bestellungen: 'Bestellungen',
-  auftragsbestaetigung: 'Auftragsbestätigung',
-  lieferschein: 'Lieferschein',
-  anhang: 'Anhang',
-  prospekt: 'Prospekt',
-  rapport: 'Rapport',
-  offerte: 'Offerte',
-}
+// Die Beschriftungen teilen sich beide Sichten (Charge H5).
+export { CATEGORY_LABELS } from '../../../shared/projectDetail/types'
 
 interface FileSectionsProps {
   files: ProjectFile[]
@@ -82,28 +72,6 @@ interface FileSectionProps {
   onUpload: (category: ProjectFileCategory, files: File[]) => void
   onDelete: (fileId: string) => void
   onRename: (fileId: string, filename: string) => Promise<void>
-}
-
-// Kleines Download-Symbol (Pfeil auf die Ablage) für den Knopf neben jeder Datei.
-function DownloadIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      style={{ display: 'block' }}
-    >
-      <path d="M12 3v12" />
-      <path d="m7 11 5 5 5-5" />
-      <path d="M4 20h16" />
-    </svg>
-  )
 }
 
 // Eine Datei-Sektion (z.B. "Fotos") mit Drag-&-Drop-Feld + Hochladen-Button.

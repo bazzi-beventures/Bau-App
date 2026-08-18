@@ -36,19 +36,19 @@ export interface ProjectDraft extends ProjectDraftPayload {
 }
 
 export async function createProjectDraft(payload: ProjectDraftPayload): Promise<ProjectDraft> {
-  return apiFetch('/pwa/project-drafts', {
+  return apiFetch<ProjectDraft>('/pwa/project-drafts', {
     method: 'POST',
     body: JSON.stringify(payload),
     // Entwurf hat eine Offline-Queue: im Funkloch lieber nach 15s abbrechen
     // und queuen, als minutenlang im Spinner zu hängen.
     timeoutMs: 15_000,
-  }) as Promise<ProjectDraft>
+  })
 }
 
 export async function getAdminProjectDrafts(
   status: 'open' | 'converted' | 'rejected' | 'all' = 'open',
 ): Promise<ProjectDraft[]> {
-  return apiFetch(`/pwa/admin/project-drafts?status=${status}`) as Promise<ProjectDraft[]>
+  return apiFetch<ProjectDraft[]>(`/pwa/admin/project-drafts?status=${status}`)
 }
 
 export interface ConvertDraftPayload {
@@ -69,14 +69,21 @@ export interface ConvertDraftPayload {
   end_date?: string | null
 }
 
+// Ergebnis der Umwandlung: das angelegte Projekt (id/name) oder ein Fehlerstatus.
+export interface ConvertDraftResult {
+  status: string
+  project_id: string | null
+  project_name: string
+}
+
 export async function convertProjectDraft(
   draftId: string,
   payload: ConvertDraftPayload,
-): Promise<{ status: string; project_id: string | null; project_name: string }> {
-  return apiFetch(`/pwa/admin/project-drafts/${draftId}/convert`, {
+): Promise<ConvertDraftResult> {
+  return apiFetch<ConvertDraftResult>(`/pwa/admin/project-drafts/${draftId}/convert`, {
     method: 'POST',
     body: JSON.stringify(payload),
-  }) as Promise<{ status: string; project_id: string | null; project_name: string }>
+  })
 }
 
 export async function rejectProjectDraft(draftId: string, note?: string | null): Promise<void> {

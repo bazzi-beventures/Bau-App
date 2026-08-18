@@ -3,7 +3,9 @@ import {
   scanMaterialCleanup, bulkSetMaterialStatus, bulkSetMaterialStatusAll,
   MaterialCleanupScan, MaterialCleanupRow, MaterialSzenario,
 } from '../../api/admin'
-import { apiFetch, isOfflineError } from '../../api/client'
+import { isOfflineError } from '../../api/client'
+import { getMaterialsMeta } from '../../api/admin/materials'
+import { listSuppliers } from '../../api/admin/suppliers'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // SAP-klassische Status-Benennung — an EINER Stelle, damit der Begriff
@@ -52,10 +54,10 @@ export default function MaterialCleanupScreen() {
     (async () => {
       try {
         const [sups, meta] = await Promise.all([
-          apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
+          listSuppliers(),
           // include_inactive: dieses Tool arbeitet auf archivierten Artikeln — ohne den
           // Parameter fehlen Kategorien, in denen bereits alles auf Loeschvormerkung steht.
-          apiFetch('/pwa/admin/materials/meta?include_inactive=1') as Promise<{ categories: string[] }>,
+          getMaterialsMeta({ includeInactive: true }),
         ])
         setSuppliers(sups)
         setCategories(meta.categories ?? [])

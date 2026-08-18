@@ -17,21 +17,21 @@ export interface UserInfo {
 }
 
 export async function lookupUser(tenantSlug: string, displayName: string): Promise<{ authorized_user_id: string; display_name: string }> {
-  return apiFetch('/pwa/auth/lookup-user', {
+  return apiFetch<{ authorized_user_id: string; display_name: string }>('/pwa/auth/lookup-user', {
     method: 'POST',
     body: JSON.stringify({ tenant_slug: tenantSlug, display_name: displayName }),
-  }) as Promise<{ authorized_user_id: string; display_name: string }>
+  })
 }
 
 export async function validatePin(tenantSlug: string, authorizedUserId: string, pin: string): Promise<{ status: string; display_name: string }> {
-  return apiFetch('/pwa/auth/validate-pin', {
+  return apiFetch<{ status: string; display_name: string }>('/pwa/auth/validate-pin', {
     method: 'POST',
     body: JSON.stringify({ tenant_slug: tenantSlug, authorized_user_id: authorizedUserId, pin }),
-  }) as Promise<{ status: string; display_name: string }>
+  })
 }
 
 export async function getMe(): Promise<UserInfo> {
-  return apiFetch('/pwa/me') as Promise<UserInfo>
+  return apiFetch<UserInfo>('/pwa/me')
 }
 
 export async function logout(): Promise<void> {
@@ -58,5 +58,5 @@ export interface TenantInfo {
 }
 
 export async function getTenantInfo(tenantSlug: string): Promise<TenantInfo> {
-  return apiFetch(`/pwa/tenant-info?tenant_slug=${encodeURIComponent(tenantSlug)}`) as Promise<TenantInfo>
+  return apiFetch<TenantInfo>(`/pwa/tenant-info?tenant_slug=${encodeURIComponent(tenantSlug)}`)
 }

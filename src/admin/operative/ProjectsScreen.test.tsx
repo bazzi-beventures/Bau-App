@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ProjectsScreen, { Project } from './ProjectsScreen'
+import ProjectsScreen from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 import { apiFetch } from '../../api/client'
 import { resetUnsavedChangesGuard } from '../unsavedChanges'
 

@@ -1,27 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QuoteCreateForm, hasQuoteDraft } from './QuotesScreen'
-import { apiFetch } from '../../api/client'
+import { QuoteCreateForm } from './QuoteCreateForm'
+import { hasQuoteDraft } from './quoteDraft'
+import { apiFetch } from '../../../api/client'
 
 // Der Auto-Entwurf ist der einzige Prüfgegenstand: beim Öffnen wird ein
 // vorhandener Entwurf ohne Rückfrage übernommen, die Entscheidung
 // (behalten/verwerfen) fällt erst beim Verlassen.
 
-vi.mock('../../api/client', () => ({
+vi.mock('../../../api/client', () => ({
   apiFetch: vi.fn(),
   apiFormFetch: vi.fn(),
   apiUrl: (p: string) => p,
   ApiError: class ApiError extends Error {},
 }))
 
-vi.mock('../../api/auth', () => ({
+vi.mock('../../../api/auth', () => ({
   getMe: vi.fn(async () => ({ feature_flags: {} })),
 }))
 
 // Portale/getBoundingClientRect sind im jsdom nicht sinnvoll bedienbar — der
 // Kontrakt (value ⇄ onChange) bleibt erhalten. Vgl. ReportCreateForm.test.
-vi.mock('./MaterialCombobox', () => ({
+vi.mock('../MaterialCombobox', () => ({
   MaterialCombobox: ({ value, onChange }: { value: string; onChange: (a: string) => void }) => (
     <select aria-label="Material" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">— Material wählen —</option>

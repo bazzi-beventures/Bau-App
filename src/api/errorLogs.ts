@@ -57,7 +57,7 @@ export function buildErrorLogQuery(params: ErrorLogsParams = {}): string {
 }
 
 export async function getErrorLogs(params: ErrorLogsParams = {}): Promise<ErrorLogsResponse> {
-  return apiFetch(`/pwa/superadmin/error-logs${buildErrorLogQuery(params)}`) as Promise<ErrorLogsResponse>
+  return apiFetch<ErrorLogsResponse>(`/pwa/superadmin/error-logs${buildErrorLogQuery(params)}`)
 }
 
 /**

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
-import { apiFetch, apiFormFetch } from '../../api/client'
+import { adjustStock } from '../../api/admin/inventory'
+import {
+  deleteMaterialImage, getMaterialsMeta, listMaterials, saveMaterial, uploadMaterialImage,
+} from '../../api/admin/materials'
+import type {
+  Material, MaterialSortKey, MaterialsListResponse,
+} from '../../api/admin/materials'
+import { listSuppliers } from '../../api/admin/suppliers'
+import type { Supplier } from '../../api/admin/suppliers'
+import { createUnit } from '../../api/admin/units'
 import FrequentMaterialsPanel from './FrequentMaterialsPanel'
 import MaterialVkBulkPanel from './MaterialVkBulkPanel'
 import ImportScreen from '../system/ImportScreen'
@@ -9,29 +18,6 @@ import { isFeatureEnabled } from '../../api/modules'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
 import { vkFromEk } from '../utils/quotePricing'
-
-interface Supplier {
-  id: string
-  name: string
-  prefix: string
-}
-
-interface Material {
-  id: string
-  art_nr: string
-  name: string
-  supplier_id: string | null
-  category: string | null
-  unit: string | null
-  unit_price: number | null   // fixer VK-Override (nur noch Fallback ohne EK)
-  cost_price: number | null   // EK (Einkaufspreis)
-  markup_pct: number | null   // Per-Artikel-Aufschlag % auf EK (null = Lieferanten-Default)
-  calc_vk: number | null      // berechneter VK (EK x Aufschlag bzw. Override)
-  is_active: boolean
-  image_path: string | null   // Objektpfad im privaten Bucket (nur intern)
-  image_url?: string | null   // transient: frisch signierte URL zum Anzeigen
-  inventory: { quantity: number; min_quantity: number | null }[]
-}
 
 interface StockModalProps {
   material: Material
@@ -56,10 +42,7 @@ function StockModal({ material, onClose, onSaved }: StockModalProps) {
     setSaving(true)
     setError('')
     try {
-      await apiFetch('/pwa/admin/inventory/adjust', {
-        method: 'POST',
-        body: JSON.stringify({ art_nr: material.art_nr, quantity_delta: num, movement_type: 'adjustment', note: note || null }),
-      })
+      await adjustStock(material.art_nr, num, { note: note || null })
       onSaved()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler')
@@ -226,34 +209,26 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
       // Ohne EK: kein Aufschlag berechenbar → Ziel-VK als fixer unit_price speichern.
       const markup_pct = hasEk ? (markupPct !== '' ? round2(parseFloat(markupPct)) : null) : null
       const unit_price = hasEk ? 0 : (targetVk ? round2(parseFloat(targetVk)) : 0)
-      const method = isNew ? 'POST' : 'PATCH'
-      const url = isNew ? '/pwa/admin/materials' : `/pwa/admin/materials/${encodeURIComponent(artNr)}`
-      await apiFetch(url, {
-        method,
-        body: JSON.stringify({
-          art_nr: artNr.trim(),
-          name: name.trim(),
-          category: category || null,
-          unit: trimmedUnit || null,
-          unit_price,
-          cost_price: costPrice ? parseFloat(costPrice) : null,
-          markup_pct,
-          supplier_id: supplierId || null,
-        }),
-      })
+      await saveMaterial({
+        art_nr: artNr.trim(),
+        name: name.trim(),
+        category: category || null,
+        unit: trimmedUnit || null,
+        unit_price,
+        cost_price: costPrice ? parseFloat(costPrice) : null,
+        markup_pct,
+        supplier_id: supplierId || null,
+      }, isNew ? undefined : artNr)
       // Bild nach dem Speichern der Stammdaten verarbeiten (art_nr steht jetzt fest,
       // Artikel existiert auch bei Neuanlage). Fehler hier nicht verschlucken.
-      const artNrEnc = encodeURIComponent(artNr.trim())
       if (imageFile) {
-        const fd = new FormData()
-        fd.append('file', imageFile)
-        await apiFormFetch(`/pwa/admin/materials/${artNrEnc}/image`, fd)
+        await uploadMaterialImage(artNr.trim(), imageFile)
       } else if (removeImage) {
-        await apiFetch(`/pwa/admin/materials/${artNrEnc}/image`, { method: 'DELETE' })
+        await deleteMaterialImage(artNr.trim())
       }
       // Neue Einheit best-effort ins Vokabular aufnehmen (409 = existiert schon → egal).
       if (trimmedUnit && !existingUnits.includes(trimmedUnit)) {
-        try { await apiFetch('/pwa/admin/units', { method: 'POST', body: JSON.stringify({ code: trimmedUnit }) }) } catch { /* ignore */ }
+        try { await createUnit(trimmedUnit) } catch { /* ignore */ }
       }
       onSaved()
     } catch (err: unknown) {
@@ -390,15 +365,7 @@ function MaterialModal({ material, onClose, onSaved, existingCategories, existin
 
 // Nur echte DB-Spalten sind serverseitig sortierbar. VK-Preis (berechnet) und
 // Bestand (separate inventory-Tabelle) sind es nicht — siehe MaterialsListResponse.
-type MaterialSortKey = 'art_nr' | 'name' | 'category' | 'unit' | 'cost_price'
 type SortDir = 'asc' | 'desc'
-
-interface MaterialsListResponse {
-  rows: Material[]
-  total: number
-  page: number
-  page_size: number
-}
 
 const PAGE_SIZE = 50
 
@@ -432,10 +399,7 @@ function MaterialInventoryPanel() {
   // (paginierten) Liste ableitbar → separat laden, nach jedem Speichern auffrischen.
   const loadMeta = useCallback(async () => {
     try {
-      const [sups, meta] = await Promise.all([
-        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
-        apiFetch('/pwa/admin/materials/meta') as Promise<{ categories: string[]; units: string[]; next_art_nr: string }>,
-      ])
+      const [sups, meta] = await Promise.all([listSuppliers(), getMaterialsMeta()])
       setSuppliers(sups)
       setCategories(meta.categories ?? [])
       setUnits(meta.units ?? [])
@@ -457,17 +421,15 @@ function MaterialInventoryPanel() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
+      setData(await listMaterials({
         sort: sortKey,
         dir: sortDir,
-        page: String(page),
-        page_size: String(PAGE_SIZE),
-      })
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      if (categoryFilter) params.set('category', categoryFilter)
-      if (supplierFilter) params.set('supplier_id', supplierFilter)
-      const res = await apiFetch(`/pwa/admin/materials/list?${params.toString()}`) as MaterialsListResponse
-      setData(res)
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch,
+        category: categoryFilter,
+        supplierId: supplierFilter,
+      }))
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { addressLocality, crewMembers, crewShortLabels, pairKey, staffShortLabel } from './scheduleShared'
-import type { Project } from './ProjectsScreen'
+import {
+  addressLocality, crewMembers, crewShortLabels, hasUnassignedEntries,
+  neededDistancePairs, overlapConflictIds, pairKey, rowEntries, staffShortLabel,
+} from './scheduleShared'
+import type { CalendarEntry } from './scheduleShared'
+import type { Project } from '../../api/admin/projects'
 
 // Reine Formatier-Helfer der Einsatzplanung — ohne DOM testbar.
 
@@ -103,5 +107,118 @@ describe('pairKey', () => {
     expect(pairKey('A-Weg 1', 'A-Weg 1')).toBeNull()
     expect(pairKey('', 'A-Weg 1')).toBeNull()
     expect(pairKey('A-Weg 1', null)).toBeNull()
+  })
+})
+
+
+// ─── Zeilen-Belegung und Konflikte (H4: vorher in Plantafel UND Gantt) ────────
+
+// Nur die Felder, die rowEntries/overlapConflictIds anfassen.
+function entry(over: Partial<CalendarEntry> & { id: string }): CalendarEntry {
+  return {
+    start_date: '2026-06-08',
+    end_date: '2026-06-08',
+    start_time: null,
+    end_time: null,
+    monteur_ids: [],
+    object_address: null,
+    ...over,
+  } as unknown as CalendarEntry
+}
+
+const DAY = new Date('2026-06-08T00:00:00')
+const OTHER_DAY = new Date('2026-06-09T00:00:00')
+const KNOWN_STAFF = new Set(['s1', 's2'])
+
+describe('rowEntries', () => {
+  it('gibt die Einsätze des Monteurs an diesem Tag, ganztägige zuerst', () => {
+    const projects = [
+      entry({ id: 'a', monteur_ids: ['s1'], start_time: '10:00' }),
+      entry({ id: 'b', monteur_ids: ['s1'] }),                       // ganztägig
+      entry({ id: 'c', monteur_ids: ['s1'], start_time: '08:00' }),
+      entry({ id: 'd', monteur_ids: ['s2'], start_time: '09:00' }),  // anderer Monteur
+      entry({ id: 'e', monteur_ids: ['s1'], start_date: '2026-06-09', end_date: '2026-06-09' }),
+    ]
+    expect(rowEntries(projects, KNOWN_STAFF, 's1', DAY).map(p => p.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('sammelt in der Zeile «Ohne Monteur» nur Einsätze ohne bekannten Mitarbeiter', () => {
+    const projects = [
+      entry({ id: 'a', monteur_ids: [] }),
+      entry({ id: 'b', monteur_ids: ['s1'] }),
+      // Verwaiste ID (gelöschtes Konto): gehört in die Sammelzeile, sonst wäre der
+      // Einsatz in keiner Ansicht sichtbar.
+      entry({ id: 'c', monteur_ids: ['weg'] }),
+    ]
+    expect(rowEntries(projects, KNOWN_STAFF, null, DAY).map(p => p.id)).toEqual(['a', 'c'])
+  })
+})
+
+describe('hasUnassignedEntries', () => {
+  it('meldet einen Einsatz ohne Monteur an einem der Tage', () => {
+    const projects = [entry({ id: 'a', monteur_ids: [], start_date: '2026-06-09', end_date: '2026-06-09' })]
+    expect(hasUnassignedEntries(projects, KNOWN_STAFF, [DAY])).toBe(false)
+    expect(hasUnassignedEntries(projects, KNOWN_STAFF, [DAY, OTHER_DAY])).toBe(true)
+  })
+})
+
+describe('neededDistancePairs', () => {
+  const staff = [{ id: 's1', name: 'Marvin Walser' }]
+
+  it('paart aufeinanderfolgende getaktete Einsätze mit verschiedenen Adressen', () => {
+    const projects = [
+      entry({ id: 'a', monteur_ids: ['s1'], start_time: '08:00', object_address: 'A-Weg 1' }),
+      entry({ id: 'b', monteur_ids: ['s1'], start_time: '10:00', object_address: 'B-Weg 2' }),
+      entry({ id: 'c', monteur_ids: ['s1'], start_time: '13:00', object_address: 'C-Weg 3' }),
+    ]
+    expect(neededDistancePairs(projects, KNOWN_STAFF, staff, [DAY])).toEqual([
+      pairKey('A-Weg 1', 'B-Weg 2'),
+      pairKey('B-Weg 2', 'C-Weg 3'),
+    ])
+  })
+
+  it('lässt ganztägige Einsätze und identische Adressen aus', () => {
+    const projects = [
+      entry({ id: 'a', monteur_ids: ['s1'], object_address: 'A-Weg 1' }),               // ganztägig
+      entry({ id: 'b', monteur_ids: ['s1'], start_time: '10:00', object_address: 'B-Weg 2' }),
+      entry({ id: 'c', monteur_ids: ['s1'], start_time: '13:00', object_address: 'B-Weg 2' }),
+    ]
+    expect(neededDistancePairs(projects, KNOWN_STAFF, staff, [DAY])).toEqual([])
+  })
+})
+
+describe('overlapConflictIds', () => {
+  it('findet beide Seiten einer Überschneidung', () => {
+    const ids = overlapConflictIds([
+      entry({ id: 'a', start_time: '08:00', end_time: '10:00' }),
+      entry({ id: 'b', start_time: '09:00', end_time: '11:00' }),
+      entry({ id: 'c', start_time: '11:00', end_time: '12:00' }),
+    ])
+    expect([...ids].sort()).toEqual(['a', 'b'])
+  })
+
+  it('rechnet ohne Endzeit mit einer Stunde', () => {
+    expect([...overlapConflictIds([
+      entry({ id: 'a', start_time: '08:00' }),
+      entry({ id: 'b', start_time: '08:30' }),
+    ])].sort()).toEqual(['a', 'b'])
+    expect([...overlapConflictIds([
+      entry({ id: 'a', start_time: '08:00' }),
+      entry({ id: 'b', start_time: '09:00' }),
+    ])]).toEqual([])
+  })
+
+  it('zählt Anschluss ohne Überlappung nicht als Konflikt', () => {
+    expect([...overlapConflictIds([
+      entry({ id: 'a', start_time: '08:00', end_time: '10:00' }),
+      entry({ id: 'b', start_time: '10:00', end_time: '11:00' }),
+    ])]).toEqual([])
+  })
+
+  it('ignoriert ganztägige Einsätze', () => {
+    expect([...overlapConflictIds([
+      entry({ id: 'a' }),
+      entry({ id: 'b' }),
+    ])]).toEqual([])
   })
 })

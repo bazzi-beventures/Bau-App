@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { apiFetch } from '../../api/client'
-import { AuthUser } from './UsersScreen'
+import { anonymizeUser, saveUser, setUserPassword } from '../../api/admin/users'
+import type { AuthUser } from '../../api/admin/users'
 import { assignableRoles, mayAnonymize } from './userRoles'
 import { useToast, ToastHost } from '../components/useToast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -65,15 +65,12 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
     setSaving(true)
     try {
       if (isNew) {
-        await apiFetch('/pwa/admin/users', {
-          method: 'POST',
-          body: JSON.stringify({ email: email || null, display_name: displayName || null, role }),
-        })
+        await saveUser({ email: email || null, display_name: displayName || null, role })
       } else {
-        await apiFetch(`/pwa/admin/users/${user!.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ email: email || null, display_name: displayName || null, role, is_active: isActive }),
-        })
+        await saveUser(
+          { email: email || null, display_name: displayName || null, role, is_active: isActive },
+          user!.id,
+        )
       }
       onSaved()
     } catch (err: unknown) {
@@ -89,10 +86,7 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
     setSettingPassword(true)
     setError('')
     try {
-      await apiFetch(`/pwa/admin/users/${user.id}/set-password`, {
-        method: 'POST',
-        body: JSON.stringify({ new_password: newPassword }),
-      })
+      await setUserPassword(user.id, newPassword)
       setNewPassword('')
       showToast('Passwort gesetzt')
     } catch (err: unknown) {
@@ -107,7 +101,7 @@ export default function UserDetailScreen({ user, actingRole, onClose, onSaved }:
     if (!user) return
     setActing(true)
     try {
-      await apiFetch(`/pwa/admin/users/${user.id}/anonymize`, { method: 'POST' })
+      await anonymizeUser(user.id)
       showToast('Benutzer anonymisiert (DSGVO)')
       setTimeout(onSaved, 1000)
     } catch {

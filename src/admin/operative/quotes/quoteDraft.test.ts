@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { quoteDraftHasContent } from './QuotesScreen'
+import { quoteDraftHasContent } from './quoteDraft'
 
 // Der Auto-Entwurf darf nur anspringen, wenn wirklich etwas eingegeben wurde.
 // Mit der Skonto-Vorgabe (Offert-Vorlagen) startet das Formular nicht mehr leer —

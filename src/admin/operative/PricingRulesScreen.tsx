@@ -1,19 +1,10 @@
 import { useEffect, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
-import { apiFetch } from '../../api/client'
-
-interface PricingRule {
-  id: string
-  markup_pct: number
-  category: string | null
-  suppliers: { name: string; prefix: string } | null
-}
-
-interface Supplier {
-  id: string
-  name: string
-  prefix: string
-}
+import { listAllMaterials } from '../../api/admin/materials'
+import { deletePricingRule, listPricingRules, savePricingRule } from '../../api/admin/pricingRules'
+import type { PricingRule } from '../../api/admin/pricingRules'
+import { listSuppliers } from '../../api/admin/suppliers'
+import type { Supplier } from '../../api/admin/suppliers'
 
 interface EditState {
   supplier_name: string
@@ -37,9 +28,9 @@ export default function PricingRulesScreen() {
     setLoading(true)
     try {
       const [rulesData, suppliersData, materialsData] = await Promise.all([
-        apiFetch('/pwa/admin/pricing-rules') as Promise<PricingRule[]>,
-        apiFetch('/pwa/admin/suppliers') as Promise<Supplier[]>,
-        apiFetch('/pwa/admin/materials') as Promise<{ category: string | null }[]>,
+        listPricingRules(),
+        listSuppliers(),
+        listAllMaterials(),
       ])
       setRules(rulesData)
       setSuppliers(suppliersData)
@@ -79,17 +70,11 @@ export default function PricingRulesScreen() {
     setError('')
     try {
       const isEdit = editing !== 'new' && editing !== null
-      const url = isEdit
-        ? `/pwa/admin/pricing-rules/${(editing as PricingRule).id}`
-        : '/pwa/admin/pricing-rules'
-      await apiFetch(url, {
-        method: isEdit ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          supplier_name: form.supplier_name.trim(),
-          category: form.category.trim() || null,
-          markup_pct: parseFloat(form.markup_pct),
-        }),
-      })
+      await savePricingRule({
+        supplier_name: form.supplier_name.trim(),
+        category: form.category.trim() || null,
+        markup_pct: parseFloat(form.markup_pct),
+      }, isEdit ? (editing as PricingRule).id : undefined)
       setEditing(null)
       setToast('Preisregel gespeichert')
       setTimeout(() => setToast(null), 3000)
@@ -111,7 +96,7 @@ export default function PricingRulesScreen() {
     setSaving(true)
     setError('')
     try {
-      await apiFetch(`/pwa/admin/pricing-rules/${rule.id}`, { method: 'DELETE' })
+      await deletePricingRule(rule.id)
       setEditing(null)
       setToast('Preisregel gelöscht')
       setTimeout(() => setToast(null), 3000)

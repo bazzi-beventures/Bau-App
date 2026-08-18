@@ -1,18 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiFormFetch, apiUrl } from '../../api/client'
-
-// Antwort von GET /pwa/admin/quotes/{id}/send-attachments — steuert, welche
-// Anhang-Quellen der Dialog anbietet. Zwei getrennte Schalter: `enabled` für die
-// Dokumente (Feature prospekt_mit_offerte), `fotos_enabled` für die Projekt-Fotos
-// (Feature fotos_mit_offerte).
-interface SendAttachmentsInfo {
-  enabled: boolean
-  fotos_enabled: boolean
-  project_id: string | null
-  projekt_anhaenge: { id: string; filename: string }[]
-  vorlagen: { id: string; filename: string }[]
-  projekt_fotos: { id: string; filename: string; mime_type: string | null; created_at?: string | null }[]
-}
+import { apiUrl } from '../../api/client'
+import { getQuoteSendAttachments, sendQuote } from '../../api/admin/quotes'
+import type { SendAttachmentsInfo } from '../../api/admin/quotes'
+import { uploadProjectFile } from '../../api/admin/projects'
+import { backdropCloseProps } from '../../shared/backdropClose'
 
 interface Props {
   quoteId: number
@@ -94,9 +85,8 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    apiFetch(`/pwa/admin/quotes/${quoteId}/send-attachments`)
-      .then(res => {
-        const i = res as SendAttachmentsInfo
+    getQuoteSendAttachments(quoteId)
+      .then(i => {
         setInfo(i)
         // Projekt-Anhänge sind standardmässig alle angehakt (einzelne abwählbar);
         // Vorlagen bewusst NICHT vorausgewählt — die wählt der Admin gezielt aus.
@@ -162,26 +152,20 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
       const uploadedIds: string[] = []
       if (info.project_id) {
         for (const f of directFiles) {
-          const form = new FormData()
-          form.append('file', f)
-          form.append('category', 'anhang')
-          const res = await apiFormFetch(`/pwa/admin/projects/${info.project_id}/files`, form) as { file: { id: string } }
-          uploadedIds.push(res.file.id)
+          const res = await uploadProjectFile(info.project_id, f, 'anhang')
+          if (res.file) uploadedIds.push(res.file.id)
         }
       }
-      await apiFetch('/pwa/admin/quotes/send', {
-        method: 'POST',
-        body: JSON.stringify({
-          quote_id: quoteId,
-          recipient_email: email,
-          // Leere Zeilen mitschicken wäre unsauber — wer «+» drückt und nichts
-          // einträgt, hat keinen Empfänger gemeint. Der Server wirft sie ohnehin raus.
-          additional_recipients: extraEmails.map(e => e.trim()).filter(Boolean),
-          cc_recipients: ccEmails.map(e => e.trim()).filter(Boolean),
-          anhang_file_ids: [...selectedAnhaenge, ...uploadedIds],
-          vorlage_attachment_ids: [...selectedVorlagen],
-          foto_file_ids: [...selectedFotos],
-        }),
+      await sendQuote({
+        quoteId,
+        recipientEmail: email,
+        // Leere Zeilen mitschicken wäre unsauber — wer «+» drückt und nichts
+        // einträgt, hat keinen Empfänger gemeint. Der Server wirft sie ohnehin raus.
+        additionalRecipients: extraEmails.map(e => e.trim()).filter(Boolean),
+        ccRecipients: ccEmails.map(e => e.trim()).filter(Boolean),
+        anhangFileIds: [...selectedAnhaenge, ...uploadedIds],
+        vorlageAttachmentIds: [...selectedVorlagen],
+        fotoFileIds: [...selectedFotos],
       })
       onSent(email)
     } catch (err) {
@@ -196,8 +180,10 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
     : info.vorlagen
 
   return (
-    <div className="admin-confirm-overlay">
-      <div className="admin-confirm-box" style={{ maxWidth: 480 }}>
+    // Backdrop-Klick schliesst (drag-sicher, wie im SendThankyouDialog) — während
+    // des Versands bleibt der Dialog stehen.
+    <div className="admin-confirm-overlay" {...backdropCloseProps(() => { if (!sending) onClose() })}>
+      <div className="admin-confirm-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
         <div className="admin-confirm-title">Offerte senden</div>
         <div className="admin-confirm-text" style={{ marginBottom: 12 }}>{header}</div>
 

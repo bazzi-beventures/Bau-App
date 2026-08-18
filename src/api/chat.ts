@@ -77,7 +77,7 @@ export async function* sendMessageStream(text: string, project?: string | null):
 export async function sendVoice(blob: Blob): Promise<ChatResponse> {
   const form = new FormData()
   form.append('audio', blob, 'recording.webm')
-  return apiFormFetch('/pwa/chat/voice', form) as Promise<ChatResponse>
+  return apiFormFetch<ChatResponse>('/pwa/chat/voice', form)
 }
 
 export type ZeitAction =
@@ -92,13 +92,13 @@ export interface ZeitActionOptions {
 }
 
 export async function zeitAction(action: ZeitAction, opts: ZeitActionOptions = {}): Promise<ChatResponse> {
-  return apiFetch(`/pwa/zeit/${action}`, {
+  return apiFetch<ChatResponse>(`/pwa/zeit/${action}`, {
     method: 'POST',
     body: JSON.stringify(opts),
     // Stempel haben eine Offline-Queue: lieber nach 15s abbrechen und queuen,
     // als im Funkloch minutenlang im Spinner zu hängen.
     timeoutMs: 15_000,
-  }) as Promise<ChatResponse>
+  })
 }
 
 export interface CorrectionPayload {
@@ -110,16 +110,23 @@ export interface CorrectionPayload {
 }
 
 export async function submitCorrectionRequest(payload: CorrectionPayload): Promise<ChatResponse> {
-  return apiFetch('/pwa/zeit/correction-request', {
+  return apiFetch<ChatResponse>('/pwa/zeit/correction-request', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }) as Promise<ChatResponse>
+  })
 }
 
-export async function getCorrectionStatus(correctionId: string): Promise<{ status: string; review_note: string; session_date: string }> {
-  return apiFetch(`/pwa/zeit/correction-request/${correctionId}`, {
+// Stand eines Korrekturantrags — die PWA pollt ihn nach dem Absenden.
+export interface CorrectionStatus {
+  status: string
+  review_note: string
+  session_date: string
+}
+
+export async function getCorrectionStatus(correctionId: string): Promise<CorrectionStatus> {
+  return apiFetch<CorrectionStatus>(`/pwa/zeit/correction-request/${correctionId}`, {
     method: 'GET',
-  }) as Promise<{ status: string; review_note: string; session_date: string }>
+  })
 }
 
 export interface ConfirmExtras {
@@ -132,18 +139,18 @@ export interface ConfirmExtras {
 }
 
 export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatResponse> {
-  return apiFetch('/pwa/chat/confirm', {
+  return apiFetch<ChatResponse>('/pwa/chat/confirm', {
     method: 'POST',
     body: JSON.stringify({
       kleinmaterial: extras.kleinmaterial ?? null,
       ersatzteile: extras.ersatzteile ?? [],
       art_der_arbeit: extras.art_der_arbeit ?? null,
     }),
-  }) as Promise<ChatResponse>
+  })
 }
 
 export async function cancelReport(): Promise<ChatResponse> {
-  return apiFetch('/pwa/chat/cancel', { method: 'POST' }) as Promise<ChatResponse>
+  return apiFetch<ChatResponse>('/pwa/chat/cancel', { method: 'POST' })
 }
 
 export async function signReport(reportId: number, signatureBase64: string): Promise<void> {
@@ -181,7 +188,7 @@ export interface ProjectReport {
 }
 
 export async function fetchProjectReports(projectId: string): Promise<ProjectReport[]> {
-  return apiFetch(`/pwa/projects/${projectId}/reports`) as Promise<ProjectReport[]>
+  return apiFetch<ProjectReport[]>(`/pwa/projects/${projectId}/reports`)
 }
 
 // ─── Häufig benutzte Ersatzteile (Rapport-Abschluss) ─────────
@@ -195,7 +202,7 @@ export interface FrequentMaterialOption {
 }
 
 export async function fetchFrequentMaterials(): Promise<FrequentMaterialOption[]> {
-  return apiFetch('/pwa/chat/frequent-materials', { method: 'GET' }) as Promise<FrequentMaterialOption[]>
+  return apiFetch<FrequentMaterialOption[]>('/pwa/chat/frequent-materials', { method: 'GET' })
 }
 
 // ─── Material-Picker / Artikel-Katalog (Rapport-Abschluss) ───
@@ -211,7 +218,7 @@ export interface GalleryMaterialOption {
 
 // Alle aktiven Artikel (mit Bild zuerst, ohne Bild danach) — lazy beim Öffnen des Popups geladen.
 export async function fetchMaterialGallery(): Promise<GalleryMaterialOption[]> {
-  return apiFetch('/pwa/chat/material-gallery', { method: 'GET' }) as Promise<GalleryMaterialOption[]>
+  return apiFetch<GalleryMaterialOption[]>('/pwa/chat/material-gallery', { method: 'GET' })
 }
 
 // Billiges Gating (count-only): entscheidet, ob der Katalog-Button gezeigt wird.
@@ -221,16 +228,16 @@ export async function fetchMaterialGalleryCount(): Promise<number> {
 }
 
 export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse> {
-  return apiFetch('/pwa/chat/disambiguate', {
+  return apiFetch<ChatResponse>('/pwa/chat/disambiguate', {
     method: 'POST',
     body: JSON.stringify({ art_nr }),
-  }) as Promise<ChatResponse>
+  })
 }
 
 export async function uploadPhoto(file: File): Promise<ChatResponse> {
   const form = new FormData()
   form.append('photo', file, file.name)
-  return apiFormFetch('/pwa/chat/photo', form) as Promise<ChatResponse>
+  return apiFormFetch<ChatResponse>('/pwa/chat/photo', form)
 }
 
 export interface MonthlyReportData {
@@ -262,11 +269,11 @@ export interface WeeklyReportData {
 export type ReportData = MonthlyReportData | WeeklyReportData
 
 export async function fetchMonthlyData(): Promise<MonthlyReportData> {
-  return apiFetch('/pwa/report/monthly-data', { method: 'GET' }) as Promise<MonthlyReportData>
+  return apiFetch<MonthlyReportData>('/pwa/report/monthly-data', { method: 'GET' })
 }
 
 export async function fetchWeeklyData(period: 'this_week' | 'last_week'): Promise<WeeklyReportData> {
-  return apiFetch(`/pwa/report/weekly-data?period=${period}`, { method: 'GET' }) as Promise<WeeklyReportData>
+  return apiFetch<WeeklyReportData>(`/pwa/report/weekly-data?period=${period}`, { method: 'GET' })
 }
 
 // ─── Absenzen ──────────────────────────────────────────────
@@ -289,14 +296,14 @@ export interface AbsenceCreatePayload {
 }
 
 export async function fetchMyAbsences(): Promise<UserAbsence[]> {
-  return apiFetch('/pwa/absences', { method: 'GET' }) as Promise<UserAbsence[]>
+  return apiFetch<UserAbsence[]>('/pwa/absences', { method: 'GET' })
 }
 
 export async function createAbsenceRequest(payload: AbsenceCreatePayload): Promise<UserAbsence> {
-  return apiFetch('/pwa/absences', {
+  return apiFetch<UserAbsence>('/pwa/absences', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }) as Promise<UserAbsence>
+  })
 }
 
 export interface VacationEntitlement {
@@ -309,5 +316,5 @@ export interface VacationEntitlement {
 }
 
 export async function fetchVacationEntitlement(): Promise<VacationEntitlement> {
-  return apiFetch('/pwa/vacation-entitlement', { method: 'GET' }) as Promise<VacationEntitlement>
+  return apiFetch<VacationEntitlement>('/pwa/vacation-entitlement', { method: 'GET' })
 }

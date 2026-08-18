@@ -104,6 +104,10 @@ export function useReorder<T>(setRows: Dispatch<SetStateAction<T[]>>) {
   return { moveRow, handleProps, rowProps }
 }
 
+/** Was `useReorder` liefert — als eigener Typ, damit Sektionen es als Prop
+ *  durchreichen können (QuoteFieldsets). */
+export type Reorder = ReturnType<typeof useReorder<never>>
+
 interface RowReorderProps {
   index: number
   count: number

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Customer } from './CustomersScreen'
+import type { Customer } from '../../api/admin/customers'
 import { useIsMobile } from '../useIsMobile'
 
 // Tippbare Kunden-Auswahl mit Live-Filter. Ersetzt das native <select> in der

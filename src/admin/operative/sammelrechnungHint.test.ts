@@ -7,7 +7,7 @@ vi.mock('../../api/client', () => ({
   apiUrl: (p: string) => p,
 }))
 
-import { sammelrechnungHint } from './InvoicesScreen'
+import { sammelrechnungHint } from '../utils/invoiceHints'
 
 // Sammelrechnungs-Hinweis im Erfolgs-Toast: nur bei ≥2 abgedeckten Offerten —
 // der Normalfall (eine Offerte) muss wortgleich zum bisherigen Toast bleiben.

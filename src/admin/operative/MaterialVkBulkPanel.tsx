@@ -3,7 +3,8 @@ import {
   previewVkBulkIncrease, applyVkBulkIncrease,
   VkBulkPreview, VkBulkRow,
 } from '../../api/admin'
-import { apiFetch, isOfflineError } from '../../api/client'
+import { isOfflineError } from '../../api/client'
+import { getMaterialsMeta } from '../../api/admin/materials'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // Massen-VK-Erhöhung für EIGENE Materialien (Artikel ohne Lieferant).
@@ -38,7 +39,7 @@ export default function MaterialVkBulkPanel() {
   useEffect(() => {
     (async () => {
       try {
-        const meta = await apiFetch('/pwa/admin/materials/meta') as { categories: string[] }
+        const meta = await getMaterialsMeta()
         setCategories(meta.categories ?? [])
       } catch { /* nicht blockierend */ }
     })()

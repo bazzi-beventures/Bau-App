@@ -23,5 +23,5 @@ export type KpiCategory =
   | 'material'
 
 export async function fetchKpis(category: KpiCategory): Promise<KpiResponse> {
-  return apiFetch(`/pwa/kpis/${category}`) as Promise<KpiResponse>
+  return apiFetch<KpiResponse>(`/pwa/kpis/${category}`)
 }

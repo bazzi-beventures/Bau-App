@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
-import { apiFetch } from '../../api/client'
+import { createUnit, deleteUnit, listUnits, renameUnit } from '../../api/admin/units'
+import type { Unit } from '../../api/admin/units'
 import { useToast, ToastHost } from '../components/useToast'
-
-interface Unit {
-  id: string
-  code: string
-  sort_order: number
-  is_active: boolean
-  usage_count: number
-}
 
 /**
  * Einheiten-Vokabular pflegen (Tab in den Admin-Tools).
@@ -36,7 +29,7 @@ export default function UnitsPanel() {
   async function load() {
     setLoading(true)
     try {
-      setUnits(await apiFetch('/pwa/admin/units') as Unit[])
+      setUnits(await listUnits())
     } finally {
       setLoading(false)
     }
@@ -64,12 +57,10 @@ export default function UnitsPanel() {
     setError('')
     try {
       if (editing === 'new') {
-        await apiFetch('/pwa/admin/units', { method: 'POST', body: JSON.stringify({ code: trimmed }) })
+        await createUnit(trimmed)
         showToast(`Einheit „${trimmed}" angelegt`)
       } else if (editing) {
-        const res = await apiFetch(`/pwa/admin/units/${editing.id}`, {
-          method: 'PATCH', body: JSON.stringify({ code: trimmed }),
-        }) as { action?: string; migrated?: number }
+        const res = await renameUnit(editing.id, trimmed)
         const n = res.migrated ?? 0
         showToast(
           res.action === 'merge'
@@ -93,7 +84,7 @@ export default function UnitsPanel() {
     setSaving(true)
     setError('')
     try {
-      await apiFetch(`/pwa/admin/units/${unit.id}`, { method: 'DELETE' })
+      await deleteUnit(unit.id)
       setEditing(null)
       showToast(`Einheit „${unit.code}" gelöscht`)
       load()

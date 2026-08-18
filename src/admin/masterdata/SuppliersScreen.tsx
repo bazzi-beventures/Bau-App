@@ -1,34 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { backdropCloseProps } from '../../shared/backdropClose'
-import { apiFetch } from '../../api/client'
+import {
+  deleteSupplier, listSuppliers, lookupSuppliers, saveSupplier,
+} from '../../api/admin/suppliers'
+import type { Supplier, SupplierLookupHit } from '../../api/admin/suppliers'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
 import { useToast, ToastHost } from '../components/useToast'
-
-interface Supplier {
-  id: string
-  name: string
-  prefix: string
-  contact_person?: string | null
-  phone?: string | null
-  email?: string | null
-  website?: string | null
-  street?: string | null
-  zip?: string | null
-  city?: string | null
-  notes?: string | null
-}
-
-interface LookupHit {
-  name: string
-  street: string
-  zip: string
-  city: string
-  phone: string
-  email: string
-  website: string
-  occupation: string
-}
 
 const EMPTY_FORM = {
   name: '',
@@ -54,7 +32,7 @@ export default function SuppliersScreen() {
   const [error, setError] = useState('')
   const { toast, showToast } = useToast()
 
-  const [lookupHits, setLookupHits] = useState<LookupHit[]>([])
+  const [lookupHits, setLookupHits] = useState<SupplierLookupHit[]>([])
   const [lookupOpen, setLookupOpen] = useState(false)
   const [lookupLoading, setLookupLoading] = useState(false)
   const lookupTimer = useRef<number | null>(null)
@@ -62,7 +40,7 @@ export default function SuppliersScreen() {
   async function load() {
     setLoading(true)
     try {
-      setSuppliers(await apiFetch('/pwa/admin/suppliers') as Supplier[])
+      setSuppliers(await listSuppliers())
     } finally {
       setLoading(false)
     }
@@ -119,7 +97,7 @@ export default function SuppliersScreen() {
   async function runLookup(q: string) {
     setLookupLoading(true)
     try {
-      const hits = await apiFetch(`/pwa/admin/suppliers/lookup?q=${encodeURIComponent(q)}`) as LookupHit[]
+      const hits = await lookupSuppliers(q)
       setLookupHits(hits)
       setLookupOpen(hits.length > 0)
     } catch {
@@ -130,7 +108,7 @@ export default function SuppliersScreen() {
     }
   }
 
-  function applyHit(hit: LookupHit) {
+  function applyHit(hit: SupplierLookupHit) {
     setForm(prev => ({
       ...prev,
       name: hit.name || prev.name,
@@ -154,22 +132,18 @@ export default function SuppliersScreen() {
     setSaving(true)
     setError('')
     try {
-      const url = editingId ? `/pwa/admin/suppliers/${editingId}` : '/pwa/admin/suppliers'
-      await apiFetch(url, {
-        method: editingId ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          name: form.name.trim(),
-          prefix: form.prefix.trim().toUpperCase(),
-          contact_person: form.contact_person.trim() || null,
-          phone: form.phone.trim() || null,
-          email: form.email.trim() || null,
-          website: form.website.trim() || null,
-          street: form.street.trim() || null,
-          zip: form.zip.trim() || null,
-          city: form.city.trim() || null,
-          notes: form.notes.trim() || null,
-        }),
-      })
+      await saveSupplier({
+        name: form.name.trim(),
+        prefix: form.prefix.trim().toUpperCase(),
+        contact_person: form.contact_person.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        website: form.website.trim() || null,
+        street: form.street.trim() || null,
+        zip: form.zip.trim() || null,
+        city: form.city.trim() || null,
+        notes: form.notes.trim() || null,
+      }, editingId || undefined)
       setShowForm(false)
       showToast(editingId ? 'Lieferant aktualisiert' : 'Lieferant erstellt')
       load()
@@ -183,7 +157,7 @@ export default function SuppliersScreen() {
   async function handleDelete(s: Supplier) {
     if (!confirm(`Lieferant "${s.name}" wirklich löschen? Zugehörige Preisregeln werden ebenfalls gelöscht.`)) return
     try {
-      await apiFetch(`/pwa/admin/suppliers/${s.id}`, { method: 'DELETE' })
+      await deleteSupplier(s.id)
       showToast('Lieferant gelöscht')
       load()
     } catch (err) {

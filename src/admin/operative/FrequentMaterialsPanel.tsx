@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { listAllMaterials } from '../../api/admin/materials'
+import { listSuppliers } from '../../api/admin/suppliers'
 import {
   getFrequentMaterials, addFrequentMaterial, removeFrequentMaterial, reorderFrequentMaterials,
   FrequentMaterial,
@@ -36,16 +37,20 @@ export default function FrequentMaterialsPanel() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch('/pwa/admin/materials') as Promise<MaterialOption[]>,
+      listAllMaterials(),
       getFrequentMaterials(),
     ])
-      .then(([m, c]) => { setMaterials(m); setCurated(c) })
+      // MaterialOption verlangt unit_price als Zahl, der Materialstamm lässt es
+      // null (kein fixer VK-Override). Bisher steckte dieselbe Behauptung im
+      // `as Promise<MaterialOption[]>` am Aufruf; sie bleibt punktuell hier,
+      // bis MaterialOption mit dem Umzug von ReportCreateForm/Chat nachzieht.
+      .then(([m, c]) => { setMaterials(m as MaterialOption[]); setCurated(c) })
       .catch(() => setError('Laden fehlgeschlagen'))
       .finally(() => setLoading(false))
     // Lieferanten nur für den optionalen Material-Filter — Fehler darf das Panel
     // nicht blockieren (Filter bleibt dann leer). Analog QuoteCreateForm.
-    apiFetch('/pwa/admin/suppliers')
-      .then(s => setSuppliers(s as Supplier[]))
+    listSuppliers()
+      .then(setSuppliers)
       .catch(() => {})
   }, [])
 

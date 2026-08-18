@@ -10,12 +10,15 @@ import { useIsMobile } from '../useIsMobile'
 
 // Strukturell kompatibel zur Material-Zeile aus QuotesScreen — bewusst lokal
 // definiert, um einen Zirkular-Import (QuotesScreen ↔ MaterialCombobox) zu vermeiden.
+// Teilmenge des Material-Stamms (api/admin/materials.Material), die das Dropdown
+// braucht. `unit`/`unit_price` sind dort nullable — ein Artikel ohne Einheit oder
+// ohne fixen VK ist ein realer Datenstand (der Preis kommt dann aus calc_vk).
 export interface MaterialOption {
   art_nr: string
   name: string
-  unit_price: number
+  unit_price: number | null
   calc_vk?: number | null
-  unit: string
+  unit: string | null
   category?: string | null
   supplier_id?: string | null
 }
@@ -39,7 +42,7 @@ const MAX_VISIBLE = 80
 const MIN_MENU_WIDTH = 420
 
 function labelOf(m: MaterialOption): string {
-  return `${m.art_nr} — ${m.name} (${fmtCHF(m.calc_vk ?? m.unit_price)}/${m.unit})`
+  return `${m.art_nr} — ${m.name} (${fmtCHF(m.calc_vk ?? m.unit_price ?? 0)}/${m.unit ?? ''})`
 }
 
 export function MaterialCombobox({ materials, supplierMap, supplierFilter, categoryFilter, value, onChange, className }: Props) {

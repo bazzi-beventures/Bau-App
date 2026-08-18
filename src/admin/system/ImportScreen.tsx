@@ -1,66 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiFormFetch } from '../../api/client'
+import {
+  commitMaterialImport, parseImportFile, previewMaterialImport,
+} from '../../api/admin/materialImport'
+import type {
+  ImportFieldDef as FieldDef, ImportParseResult as ParseResult,
+  ImportPreviewResult as PreviewResult, ImportResult, ImportRowAction as Action,
+  MaterialImportRequest,
+} from '../../api/admin/materialImport'
+import { listSuppliers } from '../../api/admin/suppliers'
+import type { Supplier } from '../../api/admin/suppliers'
 import { useToast, ToastHost } from '../components/useToast'
 
-interface Supplier {
-  id: string
-  name: string
-  prefix: string
-}
-
-interface FieldDef {
-  key: string
-  label: string
-  required: boolean
-}
-
-interface ParseResult {
-  columns: string[]
-  fields: FieldDef[]
-  mapping: Record<string, string | null>
-  supplier_field: { key: string; label: string }
-  supplier_guess: string | null
-  own_fields: FieldDef[]
-  own_mapping: Record<string, string | null>
-  sample_rows: Record<string, string | number | null>[]
-  row_count: number
-}
-
-type Action = 'new' | 'update' | 'unchanged'
 type Mode = 'single' | 'per_row' | 'own'
-
-interface PreviewRow {
-  manufacturer_art_nr: string | null
-  art_nr: string
-  name: string
-  unit: string
-  category: string | null
-  cost_price: number | null
-  old_cost_price: number | null
-  unit_price: number
-  supplier_name: string | null
-  supplier_new: boolean
-  action: Action
-}
-
-interface PreviewResult {
-  preview: true
-  per_row: boolean
-  own_articles?: boolean
-  supplier_name: string | null
-  new_suppliers: string[]
-  rows: PreviewRow[]
-  errors: { row: number; message: string }[]
-  summary: { new: number; update: number; unchanged: number; errors: number }
-}
-
-interface ImportResult {
-  imported: number
-  updated: number
-  skipped: number
-  new_suppliers: string[]
-  errors: { row: number; message: string }[]
-}
 
 interface Props {
   /** Feature-Flag import_eigenartikel — schaltet den Modus „Eigene Artikel" frei. */
@@ -106,8 +57,8 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
   const { toast, showToast } = useToast(4000)
 
   useEffect(() => {
-    apiFetch('/pwa/admin/suppliers')
-      .then(s => setSuppliers(s as Supplier[]))
+    listSuppliers()
+      .then(setSuppliers)
       .catch(() => setSuppliers([]))
   }, [])
 
@@ -148,10 +99,8 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
     setError('')
     setParsing(true)
 
-    const fd = new FormData()
-    fd.append('file', f)
     try {
-      const res = await apiFormFetch('/pwa/admin/import/parse', fd) as ParseResult
+      const res = await parseImportFile(f)
       setParsed(res)
       const fields = own ? res.own_fields : res.fields
       const map = own ? res.own_mapping : res.mapping
@@ -187,20 +136,19 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
     return null
   }
 
-  function buildFormData(preview: boolean): FormData {
-    const fd = new FormData()
-    fd.append('file', file as File)
+  // Die drei Modi unterscheiden sich nur darin, WIE der Lieferant mitkommt:
+  // eigene Artikel gar nicht, «pro Zeile» als Spalten-Zuordnung, sonst als ID.
+  function importRequest(): MaterialImportRequest {
     const mappingToSend: Record<string, string> = { ...mapping }
-    if (own) {
-      fd.append('own_articles', 'true')
-    } else if (perRow && parsed) {
+    if (!own && perRow && parsed) {
       mappingToSend[parsed.supplier_field.key] = supplierColumn
-    } else {
-      fd.append('supplier_id', supplierId)
     }
-    fd.append('mapping', JSON.stringify(mappingToSend))
-    fd.append('preview', preview ? 'true' : 'false')
-    return fd
+    return {
+      file: file as File,
+      mapping: mappingToSend,
+      ...(own ? { ownArticles: true } : {}),
+      ...(!own && !perRow ? { supplierId } : {}),
+    }
   }
 
   async function runPreview() {
@@ -210,8 +158,7 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
     setError('')
     setResult(null)
     try {
-      const res = await apiFormFetch('/pwa/admin/import/materials', buildFormData(true)) as PreviewResult
-      setPreviewData(res)
+      setPreviewData(await previewMaterialImport(importRequest()))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Vorschau fehlgeschlagen')
     } finally {
@@ -223,7 +170,7 @@ export default function ImportScreen({ ownArticleEnabled = false }: Props) {
     setImporting(true)
     setError('')
     try {
-      const res = await apiFormFetch('/pwa/admin/import/materials', buildFormData(false)) as ImportResult
+      const res = await commitMaterialImport(importRequest())
       setResult(res)
       const supMsg = res.new_suppliers.length ? ` · ${res.new_suppliers.length} Lieferant(en) neu` : ''
       showToast(`${res.imported} neu · ${res.updated} aktualisiert${supMsg}`)

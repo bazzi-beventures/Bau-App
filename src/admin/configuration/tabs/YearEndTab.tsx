@@ -1,17 +1,7 @@
-import { apiFetch } from '../../../api/client'
+import { getOvertimeResetSettings, saveOvertimeResetSettings } from '../../../api/admin/hr'
+import type { OvertimeSettings } from '../../../api/admin/hr'
 import { useTenantSetting } from '../useTenantSetting'
 import { useToast, ToastHost } from '../../components/useToast'
-
-interface OvertimeSettings {
-  overtime_reset_month: number
-  overtime_reset_day: number
-  overtime_reset_policy: 'full_reset' | 'carry_all' | 'carry_max_hours'
-  overtime_carry_max_hours: number
-  soll_stunden_woche: number
-  vacation_default_days: number
-  vacation_50plus_days: number
-  vacation_age_threshold: number
-}
 
 const MONTHS_DE = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -23,12 +13,9 @@ export function YearEndTab() {
   const {
     value: settings, setValue: setSettings, loading, saving, dirty, reload, persist,
   } = useTenantSetting<OvertimeSettings>({
-    load: () => apiFetch('/pwa/admin/hr/overtime-reset-settings') as Promise<OvertimeSettings>,
+    load: getOvertimeResetSettings,
     save: async (s) => {
-      await apiFetch('/pwa/admin/hr/overtime-reset-settings', {
-        method: 'PUT',
-        body: JSON.stringify(s),
-      })
+      await saveOvertimeResetSettings(s)
       return s
     },
     onToast: showToast,

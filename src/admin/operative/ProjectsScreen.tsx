@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { getProject, listProjects } from '../../api/admin/projects'
+import { projectCustomerName } from '../utils/project'
+import type { Project, ProjectsListResponse } from '../../api/admin/projects'
+import { getAdminStaff } from '../../api/admin/staff'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import ProjectDetailScreen from './ProjectDetailScreen'
@@ -8,120 +11,6 @@ import { beschaffungStep } from '../constants/beschaffungSteps'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
-
-export interface Kontakt {
-  name: string
-  kommentar: string
-  telefon: string
-  email: string
-  is_site_contact?: boolean
-}
-
-// Eigentümer des Objekts — eigene Rolle, getrennt vom Auftraggeber (customer),
-// Rechnungsempfänger (customer.billing_*) und Baustellenkontakt (kontakte).
-export interface Eigentuemer {
-  name: string
-  adresse: string
-  telefon: string
-  email: string
-}
-
-export interface DisposalDetails {
-  material: string
-  menge: string
-  entsorger: string
-  nachweis_url: string
-  bemerkung: string
-}
-
-export interface EmbeddedCustomer {
-  id: string
-  name: string | null
-  billing_name: string | null
-  address: string | null
-  billing_address: string | null
-  object_address: string | null
-  email: string | null
-  phone: string | null
-}
-
-export interface ProjectInvoiceSummary {
-  invoice_number: string
-  total_amount: number
-  status: string
-  created_at: string
-  pdf_url: string | null
-}
-
-export interface ProjectQuoteSummary {
-  quote_number: string
-  total_amount: number
-  status: string
-  created_at: string
-  pdf_url: string | null
-}
-
-export type ProjectKind =
-  | 'project' | 'teamsitzung' | 'lagerarbeit' | 'werkstatt'
-  | 'weiterbildung' | 'reservation' | 'blocker' | 'sonstiges'
-
-export const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
-  project: 'Projekt',
-  teamsitzung: 'Teamsitzung',
-  lagerarbeit: 'Lagerarbeit',
-  werkstatt: 'Werkstatt',
-  weiterbildung: 'Weiterbildung',
-  // Vormerkung eines Monteurs, ohne dass schon feststeht wofür — belegt
-  // Kapazität wie jeder andere interne Einsatz.
-  reservation: 'Reservation',
-  // Provisorisch geplante Arbeit, deren Projektzuordnung noch offen ist
-  // ("evtl. Baustelle Müller"). Belegt Zeit, wird aber schraffiert gezeichnet.
-  blocker: 'Blocker',
-  sonstiges: 'Sonstiges',
-}
-
-export interface Project {
-  id: string
-  project_id_text: string | null
-  name: string
-  kind: ProjectKind
-  customer_id: string | null
-  customer: EmbeddedCustomer | null
-  object_name: string | null
-  object_address: string | null
-  // Abweichende Rechnungsadresse NUR für dieses Projekt — hat auf Offerte/Rechnung
-  // Vorrang vor customer.billing_*/name/address, ändert den Kundenstamm nicht.
-  billing_name?: string | null
-  billing_address?: string | null
-  art_der_arbeit: string[] | null
-  projektleiter_id: string | null
-  monteur_ids: string[]
-  kontakte: Kontakt[]
-  eigentuemer: Eigentuemer | null
-  disposal_details: DisposalDetails | null
-  is_warranty?: boolean
-  wartung_interval_months?: number | null
-  wartung_last_at?: string | null
-  wartung_next_due_at?: string | null
-  status: ProjectStatus
-  // Beschaffungs-Arbeitsschritt (Feature `beschaffungsstatus`) — NICHT der Lebenszyklus
-  // oben, sondern "wo stehe ich im Beschaffungsablauf". null = nichts bestellt.
-  workflow_status?: string | null
-  workflow_status_at?: string | null
-  workflow_status_source?: string | null
-  is_closed: boolean
-  created_at: string
-  created_by: string | null
-  created_by_id: string | null
-  bemerkung: string | null
-  geruestfach: number | null
-  start_date: string | null
-  end_date: string | null
-  start_time: string | null
-  end_time: string | null
-  invoice?: ProjectInvoiceSummary | null
-  quote?: ProjectQuoteSummary | null
-}
 
 const DOC_STATUS_BADGE: Record<string, string> = {
   ausstehend: 'admin-badge-open',
@@ -136,19 +25,6 @@ const DOC_STATUS_BADGE: Record<string, string> = {
 
 type ProjectSortKey = 'project_id_text' | 'name' | 'customer_name' | 'status' | 'workflow' | 'created_at'
 
-export function projectCustomerName(p: { customer?: EmbeddedCustomer | null }): string {
-  const c = p.customer
-  return c?.billing_name || c?.name || ''
-}
-
-export function projectCustomerEmail(p: { customer?: EmbeddedCustomer | null }): string {
-  return p.customer?.email || ''
-}
-
-export function projectBillingAddress(p: { customer?: EmbeddedCustomer | null }): string {
-  const c = p.customer
-  return c?.billing_address || c?.address || ''
-}
 type SortDir = 'asc' | 'desc'
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -169,24 +45,7 @@ interface ProjectsScreenProps {
   onConsumedProjectId?: () => void
 }
 
-interface ProjectsListResponse {
-  rows: Project[]
-  total: number
-  open_count: number
-  closed_count: number
-  archived_count: number
-  page: number
-  page_size: number
-}
-
 const PAGE_SIZE = 50
-
-/** Ein einzelnes Projekt in Listen-Form. Bewusst hier und nicht in api/admin.ts:
- *  dort steht ein schlankerer Project-Typ für Dropdowns, der der Projektmaske
- *  nicht genügt. */
-function fetchProject(id: string): Promise<Project> {
-  return apiFetch(`/pwa/admin/projects/${id}`) as Promise<Project>
-}
 
 export default function ProjectsScreen({
   openNew, onConsumedNew, openProjectId, onConsumedProjectId,
@@ -218,9 +77,8 @@ export default function ProjectsScreen({
   const [showBeschaffungCol, setShowBeschaffungCol] = useState(false)
 
   useEffect(() => {
-    apiFetch('/pwa/admin/staff')
-      .then(res => {
-        const staff = res as { id: string; name: string; projektleiter: boolean }[]
+    getAdminStaff()
+      .then(staff => {
         setStaffNameById(Object.fromEntries(staff.map(s => [s.id, s.name])))
         setProjektleiterOptions(
           staff
@@ -262,7 +120,7 @@ export default function ProjectsScreen({
     if (!openProjectId) { jumpedToRef.current = null; return }
     if (jumpedToRef.current === openProjectId) return
     jumpedToRef.current = openProjectId
-    fetchProject(openProjectId)
+    getProject(openProjectId)
       .then(p => { setShowNew(false); setSelected(p) })
       .catch(() => {})
       .finally(() => onConsumedProjectId?.())
@@ -285,17 +143,15 @@ export default function ProjectsScreen({
     try {
       // Archiv-Ansicht hat Vorrang; sonst offen (Default) bzw. offen+geschlossen.
       const statusParam = showArchived ? 'archived' : (showClosed ? 'all' : 'open')
-      const params = new URLSearchParams({
+      setData(await listProjects({
         status: statusParam,
         sort: sortKey,
         dir: sortDir,
-        page: String(page),
-        page_size: String(PAGE_SIZE),
-      })
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      if (projektleiterFilter) params.set('projektleiter_id', projektleiterFilter)
-      const res = await apiFetch(`/pwa/admin/projects/list?${params.toString()}`) as ProjectsListResponse
-      setData(res)
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch,
+        projektleiterId: projektleiterFilter ?? undefined,
+      }))
     } finally {
       setLoading(false)
     }

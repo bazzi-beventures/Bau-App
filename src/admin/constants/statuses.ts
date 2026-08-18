@@ -1,4 +1,9 @@
-export type ProjectStatus = 'offen' | 'abgeschlossen' | 'archiviert'
+// Der Typ beschreibt die API-Antwort und steht deshalb seit Charge H1 in
+// api/admin/projects.ts; hier bleiben die Beschriftungen. Re-Export, damit die
+// bestehenden `from '../constants/statuses'`-Importe gültig bleiben.
+import type { ProjectStatus } from '../../api/admin/projects'
+
+export type { ProjectStatus }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   offen: 'Offen',

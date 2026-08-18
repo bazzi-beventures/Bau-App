@@ -3,7 +3,7 @@
 // Komponenten und Helfern in einer Datei).
 
 import { createPortal } from 'react-dom'
-import { projectCustomerName } from './ProjectsScreen'
+import { projectCustomerName } from '../utils/project'
 import {
   crewMembers, entryTitle, fmtRange, kindSymbol, pillBg,
   type HoverState, type StaffLite,

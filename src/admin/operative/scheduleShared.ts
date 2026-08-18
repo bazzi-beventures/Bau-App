@@ -7,8 +7,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { resolveScheduleDistances } from '../../api/admin'
-import { Project, projectCustomerName } from './ProjectsScreen'
-import { diffDays, parseDateStr, shiftISO, toDateStr } from '../utils/calendarHelpers'
+import type { Project } from '../../api/admin/projects'
+import { projectCustomerName } from '../utils/project'
+import { diffDays, hhmmToMin, parseDateStr, shiftISO, toDateStr } from '../utils/calendarHelpers'
 
 export interface StaffLite {
   id: string
@@ -295,6 +296,85 @@ export function useHoverCard() {
 // Kanonischer Cache-Key für ein Adresspaar — gleiche Normalisierung wie das
 // Backend (getrimmt, lexikografisch sortiert), Trenner ist ein Steuerzeichen,
 // das in Adressen nicht vorkommt. null = leer/identisch → keine Distanz nötig.
+// ─── Zeilen-Belegung und Konflikte ───────────────────────────────────────────
+// Beides brauchen Plantafel UND Tagesplan/Gantt identisch. Solange die Funktionen
+// zweimal dastanden, wirkte ein Konflikt-Bugfix nur in einer der beiden Ansichten
+// (Charge H, H4 Punkt 1).
+
+/**
+ * Einträge einer Zeile an einem Tag. `rowId = null` ist die Sammelzeile «Ohne
+ * Monteur»: Einsätze, denen kein Mitarbeiter aus `staffIds` zugewiesen ist —
+ * `staffIds` sind die im Mandanten bekannten Mitarbeiter, damit eine verwaiste
+ * ID aus einem gelöschten Konto den Einsatz nicht unsichtbar macht.
+ *
+ * Sortierung nach Startzeit; ganztägige Einsätze (ohne `start_time`) stehen damit
+ * vorne, weil der Leerstring vor jeder Uhrzeit sortiert.
+ */
+export function rowEntries(
+  projects: CalendarEntry[], staffIds: Set<string>, rowId: string | null, day: Date,
+): CalendarEntry[] {
+  return projects
+    .filter(p => projectCoversDay(p, day) && (
+      rowId === null
+        ? !(p.monteur_ids || []).some(id => staffIds.has(id))
+        : (p.monteur_ids || []).includes(rowId)
+    ))
+    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+}
+
+/** Hat mindestens einer der Tage einen Einsatz ohne zugewiesenen Monteur? */
+export function hasUnassignedEntries(
+  projects: CalendarEntry[], staffIds: Set<string>, days: Date[],
+): boolean {
+  return days.some(d => rowEntries(projects, staffIds, null, d).length > 0)
+}
+
+/**
+ * Aufeinanderfolgende GETAKTETE Einsätze je Zeile und Tag mit verschiedenen
+ * Objektadressen — nur dazwischen ergibt eine Fahrdistanz Sinn. Ganztägige haben
+ * keine Reihenfolge, «Ohne Monteur» keine Route, deshalb laufen hier nur die
+ * Mitarbeiter-Zeilen durch.
+ */
+export function neededDistancePairs(
+  projects: CalendarEntry[], staffIds: Set<string>, rowStaff: StaffLite[], days: Date[],
+): string[] {
+  const out: string[] = []
+  for (const s of rowStaff) {
+    for (const d of days) {
+      const timed = rowEntries(projects, staffIds, s.id, d).filter(p => p.start_time)
+      for (let i = 0; i + 1 < timed.length; i++) {
+        const k = pairKey(timed[i].object_address, timed[i + 1].object_address)
+        if (k) out.push(k)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Doppelbuchung innerhalb einer Zeile: getaktete Einsätze, die sich zeitlich
+ * überschneiden (ohne Endzeit zählt 1 h). Rückgabe sind die Termin-IDs beider
+ * Seiten jeder Überschneidung.
+ *
+ * Aufrufen nur mit den Einträgen EINER Mitarbeiter-Zeile — über die Sammelzeile
+ * «Ohne Monteur» ist keine Aussage möglich, dort ist niemand gebunden.
+ */
+export function overlapConflictIds(entries: CalendarEntry[]): Set<string> {
+  const timed = entries.filter(p => p.start_time)
+  const out = new Set<string>()
+  for (let i = 0; i < timed.length; i++) {
+    for (let j = i + 1; j < timed.length; j++) {
+      const a = timed[i], b = timed[j]
+      const aS = hhmmToMin(a.start_time!)
+      const aE = a.end_time ? hhmmToMin(a.end_time) : aS + 60
+      const bS = hhmmToMin(b.start_time!)
+      const bE = b.end_time ? hhmmToMin(b.end_time) : bS + 60
+      if (aS < bE && bS < aE) { out.add(a.id); out.add(b.id) }
+    }
+  }
+  return out
+}
+
 export const PAIR_SEP = '\u0001'
 
 export function pairKey(a: string | null | undefined, b: string | null | undefined): string | null {

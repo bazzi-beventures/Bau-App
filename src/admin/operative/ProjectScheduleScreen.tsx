@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { apiBlobFetch, apiFetch } from '../../api/client'
 import {
   upsertProject, getSchedulingConfig, SchedulingConfig,
   ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS, AppointmentRecurrence,
   listAppointments, createAppointment, updateAppointment, deleteAppointment,
 } from '../../api/admin'
+import {
+  ProjectTask,
+  listAdminProjectTasks, addAdminProjectTask, updateAdminProjectTask, deleteAdminProjectTask,
+} from '../../api/projectTasks'
+import {
+  apptToDraft, draftPayload, emptyDraft, validateDraft,
+  type AppointmentDraft,
+} from './projectAppointments'
 import { AdminScreen } from '../useAdminNav'
-import { Project, ProjectKind, PROJECT_KIND_LABELS, projectCustomerName } from './ProjectsScreen'
+import { downloadSchedulePdf, getProject, getScheduleProjects } from '../../api/admin/projects'
+import type { Project, ProjectKind } from '../../api/admin/projects'
+import { listAllCustomers } from '../../api/admin/customers'
+import { getAdminStaff } from '../../api/admin/staff'
+import { PROJECT_KIND_LABELS, projectCustomerName } from '../utils/project'
 import ProjectScheduleCalendar, { CalendarEntry } from './ProjectScheduleCalendar'
 import { setNewProjectPrefill } from './newProjectPrefill'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { shiftISO, hhmmToMin, minToHHMM, toDateStr } from '../utils/calendarHelpers'
 import { useToast, ToastHost } from '../components/useToast'
-import { backdropCloseProps } from '../../shared/backdropClose'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 interface StaffLite {
   id: string
@@ -69,17 +80,13 @@ function repeatToRecurrence(preset: RepeatPreset, until: string): AppointmentRec
 }
 
 // Editor für EINEN Termin (id = null → neuer Termin).
-interface ApptFormState {
-  id: string | null
-  startDate: string
-  endDate: string
-  startTime: string
-  endTime: string
-  kind: AppointmentKind
-  label: string
-  // Eigenes Team nur für diesen Termin; aus = Projekt-Team gilt.
-  ownTeam: boolean
-  monteurIds: string[]
+//
+// Das Termin-Modell ist `AppointmentDraft` aus projectAppointments.ts — dasselbe,
+// das der Projekt-Detail-Editor nutzt (Charge H, H4 Punkt 2). Vorher stand hier
+// ein zweites, feldgleiches Modell; Payload-Bau und Validierung liefen doppelt.
+// Hinzu kommen nur die Felder, die es im Detail-Editor nicht gibt: Serien und die
+// Monteur-Pflicht beim Aufziehen im Kalender.
+type ApptFormState = AppointmentDraft & {
   // Beim Aufziehen eines neuen Termins gesetzt: mind. ein Monteur ist Pflicht.
   requireMonteur?: boolean
   // Serie, zu der dieser Termin gehört (null = Einzeltermin). Nur bei einem
@@ -124,40 +131,23 @@ function projectToForm(p: Project): FormState {
 }
 
 function apptToForm(a: ProjectAppointment): ApptFormState {
-  return {
-    id: a.id,
-    startDate: a.start_date?.slice(0, 10) ?? '',
-    endDate: a.end_date?.slice(0, 10) ?? '',
-    startTime: a.start_time?.slice(0, 5) ?? '',
-    endTime: a.end_time?.slice(0, 5) ?? '',
-    kind: a.kind,
-    label: a.label ?? '',
-    ownTeam: !!(a.monteur_ids && a.monteur_ids.length),
-    monteurIds: a.monteur_ids ?? [],
-    seriesId: a.series_id ?? null,
-    ...EMPTY_SERIES_FIELDS,
-  }
+  return { ...apptToDraft(a), seriesId: a.series_id ?? null, ...EMPTY_SERIES_FIELDS }
 }
 
 function emptyApptForm(kind: AppointmentKind = 'montage'): ApptFormState {
-  return {
-    id: null, startDate: '', endDate: '', startTime: '', endTime: '',
-    kind, label: '', ownTeam: false, monteurIds: [],
-    seriesId: null, ...EMPTY_SERIES_FIELDS,
-  }
+  return { ...emptyDraft(kind), seriesId: null, ...EMPTY_SERIES_FIELDS }
 }
 
 function slotToApptForm(slot: PendingSlot, kind: AppointmentKind = 'montage'): ApptFormState {
   return {
-    id: null,
+    ...emptyDraft(kind),
     startDate: slot.startDate,
     endDate: slot.endDate,
     startTime: slot.startTime,
     endTime: slot.endTime,
-    kind,
-    label: '',
     ownTeam: slot.monteurIds.length > 0,
     monteurIds: [...slot.monteurIds],
+    // Ein aufgezogener Slot ohne Monteur wäre ein Termin, den niemand sieht.
     requireMonteur: true,
     seriesId: null,
     ...EMPTY_SERIES_FIELDS,
@@ -219,6 +209,14 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
   const [exporting, setExporting] = useState(false)
   const [projektleiterFilter, setProjektleiterFilter] = useState<string | null>(null)
 
+  // Aufgaben (Checkliste) des im Panel geöffneten Projekts
+  const [tasks, setTasks] = useState<ProjectTask[]>([])
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [newTaskText, setNewTaskText] = useState('')
+  const [taskBusy, setTaskBusy] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTaskText, setEditingTaskText] = useState('')
+
   // Picker-State
   const [pickerSearch, setPickerSearch] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -235,10 +233,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         // Projekte gefiltert und ohne Offerten-/Rechnungs-Embeds. Vorher kamen
         // alle je angelegten Projekte samt beider Beleg-Tabellen über die
         // Leitung, nur damit die Zeile hier gleich wieder wegfiel.
-        apiFetch('/pwa/admin/projects/schedule') as Promise<Project[]>,
+        getScheduleProjects(),
         listAppointments(shiftISO(todayIso, -400), shiftISO(todayIso, 600)).catch(() => [] as ProjectAppointment[]),
-        apiFetch('/pwa/admin/staff') as Promise<StaffLite[]>,
-        apiFetch('/pwa/admin/customers') as Promise<CustomerLite[]>,
+        getAdminStaff(),
+        listAllCustomers(),
         // Anzeige-Config ist optional — Fehler darf den Kalender nicht blockieren.
         // Aber nicht stumm: ohne sie gelten die System-Defaults (alle Ansichten,
         // keine Sperrstunde), der Planer sähe also klammheimlich einen anderen
@@ -281,15 +279,81 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [pickerOpen])
 
-  // Escape schliesst die Serien-Rückfrage (wie bei ConfirmDialog).
+  // Escape und Backdrop-Klick der Serien-Rückfrage kommen vom ConfirmDialog.
+
+  // ─── Aufgaben ─────────────────────────────────────────────────────────────
+  // Die Checkliste hängt am einzelnen Projekt und wird deshalb erst beim Öffnen
+  // im Panel geladen — nicht in loadAll, das den ganzen Kalender füllt.
   useEffect(() => {
-    if (!seriesDeletePrompt) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setSeriesDeletePrompt(null)
+    setEditingTaskId(null)
+    setEditingTaskText('')
+    setNewTaskText('')
+    const pid = form?.id
+    if (!panelOpen || !pid) {
+      setTasks([])
+      return
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [seriesDeletePrompt])
+    let cancelled = false
+    setTasksLoading(true)
+    listAdminProjectTasks(pid)
+      .then(t => { if (!cancelled) setTasks(t) })
+      .catch(() => { if (!cancelled) setTasks([]) })
+      .finally(() => { if (!cancelled) setTasksLoading(false) })
+    return () => { cancelled = true }
+  }, [form?.id, panelOpen])
+
+  async function reloadTasks() {
+    if (!form?.id) return
+    try {
+      setTasks(await listAdminProjectTasks(form.id))
+    } catch { /* Liste bleibt wie sie ist */ }
+  }
+
+  async function handleAddTask() {
+    const text = newTaskText.trim()
+    if (!form?.id || !text || taskBusy) return
+    setTaskBusy(true)
+    try {
+      await addAdminProjectTask(form.id, text)
+      setNewTaskText('')
+      await reloadTasks()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Aufgabe konnte nicht angelegt werden.', 'error')
+    } finally {
+      setTaskBusy(false)
+    }
+  }
+
+  async function handleSaveTaskEdit() {
+    const text = editingTaskText.trim()
+    if (!form?.id || !editingTaskId || !text || taskBusy) return
+    setTaskBusy(true)
+    try {
+      await updateAdminProjectTask(form.id, editingTaskId, text)
+      setEditingTaskId(null)
+      setEditingTaskText('')
+      await reloadTasks()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Aufgabe konnte nicht gespeichert werden.', 'error')
+    } finally {
+      setTaskBusy(false)
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!form?.id || taskBusy) return
+    if (!window.confirm('Aufgabe wirklich löschen?')) return
+    setTaskBusy(true)
+    try {
+      await deleteAdminProjectTask(form.id, taskId)
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+      if (editingTaskId === taskId) { setEditingTaskId(null); setEditingTaskText('') }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Aufgabe konnte nicht gelöscht werden.', 'error')
+    } finally {
+      setTaskBusy(false)
+    }
+  }
 
   // Nächster (ab heute) Termin eines Projekts als Editor-State; ohne künftigen
   // Termin der letzte vergangene, ohne Termine null.
@@ -456,15 +520,17 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       setError('Titel ist erforderlich.'); return
     }
     if (apptForm) {
+      // Ein leeres Formular für einen NEUEN Termin ist kein Fehler — es wird beim
+      // Speichern übersprungen (siehe unten). Nur ein bestehender Termin darf sein
+      // Datum nicht verlieren; dafür gibt es das ✕ in der Liste.
       if (apptForm.id && !apptForm.startDate) {
         setError('Startdatum des Termins fehlt — zum Entfernen das ✕ in der Terminliste nutzen.'); return
       }
-      if (apptForm.startDate && apptForm.endDate && apptForm.endDate < apptForm.startDate) {
-        setError('Enddatum muss nach Startdatum liegen.'); return
-      }
-      if (apptForm.startTime && apptForm.endTime && (!apptForm.endDate || apptForm.endDate === apptForm.startDate)
-          && apptForm.endTime < apptForm.startTime) {
-        setError('Endzeit muss nach Startzeit liegen.'); return
+      // Datums-/Zeit-Konsistenz kommt aus validateDraft — dieselbe Prüfung wie im
+      // Projekt-Detail-Editor.
+      if (apptForm.startDate) {
+        const err = validateDraft(apptForm)
+        if (err) { setError(err); return }
       }
       const effectiveTeam = apptForm.ownTeam ? apptForm.monteurIds : form.monteurIds
       if (apptForm.requireMonteur && effectiveTeam.length === 0) {
@@ -501,16 +567,10 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       }) as unknown as { project?: { id?: string } } & { id?: string }
       const targetId = form.id || saved.project?.id || saved.id
       if (apptForm && apptForm.startDate && targetId) {
-        const payload: Partial<ProjectAppointment> = {
-          start_date: apptForm.startDate,
-          end_date: apptForm.endDate || '',
-          start_time: apptForm.startTime || '',
-          end_time: apptForm.endTime || '',
-          kind: apptForm.kind,
-          label: apptForm.label || '',
-          // Eigenes Team aus → [] (löscht ein evtl. gesetztes Termin-Team).
-          monteur_ids: apptForm.ownTeam ? apptForm.monteurIds : [],
-        }
+        // Payload wie im Detail-Editor: '' leert ein Feld explizit (Partial-PATCH
+        // kann mit null nichts löschen), monteur_ids [] gibt das Projekt-Team
+        // zurück, und die Bezeichnung geht nur bei kind 'sonstiges' mit.
+        const payload = draftPayload(apptForm)
         if (apptForm.id) {
           await updateAppointment(
             apptForm.id, payload,
@@ -531,7 +591,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
       if (targetId) {
         // Nur das eine gespeicherte Projekt nachladen — die ganze Liste dafür zu
         // holen war schon vor dem Umbau reine Verschwendung.
-        const fresh = await (apiFetch(`/pwa/admin/projects/${targetId}`) as Promise<Project>).catch(() => null)
+        const fresh = await getProject(targetId).catch(() => null)
         if (fresh) setForm(projectToForm(fresh))
       }
       setApptForm(null)
@@ -683,12 +743,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
     try {
       // staff_ids nur senden, wenn der Monteure-Filter aktiv ist — sonst nimmt
       // das Backend automatisch alle Monteure mit Einsatz in dieser Woche.
-      const staffParam = visibleStaffIds === null
-        ? ''
-        : `&staff_ids=${encodeURIComponent(visibleStaffIds.join(','))}`
-      const { blob, filename } = await apiBlobFetch(
-        `/pwa/admin/projects/schedule.pdf?week_start=${visibleWeekIso}${staffParam}`
-      )
+      const { blob, filename } = await downloadSchedulePdf(visibleWeekIso, visibleStaffIds)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -1241,6 +1296,124 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                   />
                 </label>
 
+                {/* ── Aufgaben (Checkliste) ────────────────────────── */}
+                <div className="project-schedule-divider" />
+
+                <div className="project-schedule-field">
+                  <div className="project-schedule-field-head">
+                    <span>Aufgaben</span>
+                    {tasks.length > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        {tasks.filter(t => t.is_done).length}/{tasks.length} erledigt
+                      </span>
+                    )}
+                  </div>
+
+                  {!form.id ? (
+                    // Aufgaben brauchen eine Projekt-ID — die entsteht erst beim
+                    // ersten Speichern (neuer interner Einsatz).
+                    <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                      Nach dem Speichern lassen sich hier Aufgaben erfassen.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          className="admin-input"
+                          style={{ flex: 1 }}
+                          value={newTaskText}
+                          onChange={e => setNewTaskText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); void handleAddTask() }
+                          }}
+                          placeholder="Neue Aufgabe… (z.B. Schlüssel beim Hauswart abholen)"
+                        />
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary admin-btn-sm"
+                          onClick={handleAddTask}
+                          disabled={taskBusy || !newTaskText.trim()}
+                        >
+                          + Aufgabe
+                        </button>
+                      </div>
+
+                      {tasksLoading && tasks.length === 0 && (
+                        <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>Lade Aufgaben…</div>
+                      )}
+                      {!tasksLoading && tasks.length === 0 && (
+                        <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>
+                          Noch keine Aufgaben. Der Monteur hakt sie in der App ab.
+                        </div>
+                      )}
+
+                      {tasks.map(t => (
+                        <div key={t.id} className="project-schedule-task-row">
+                          {editingTaskId === t.id ? (
+                            <>
+                              <input
+                                className="admin-input"
+                                style={{ flex: 1, minWidth: 0 }}
+                                value={editingTaskText}
+                                onChange={e => setEditingTaskText(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); void handleSaveTaskEdit() }
+                                  if (e.key === 'Escape') { setEditingTaskId(null); setEditingTaskText('') }
+                                }}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                className="project-schedule-mini-btn"
+                                onClick={handleSaveTaskEdit}
+                                disabled={taskBusy || !editingTaskText.trim()}
+                              >
+                                {/* Bewusst nicht «Speichern»: das steht unten am
+                                    Panel und meint die Projekt-Stammdaten. */}
+                                Übernehmen
+                              </button>
+                              <button
+                                type="button"
+                                className="project-schedule-mini-btn"
+                                onClick={() => { setEditingTaskId(null); setEditingTaskText('') }}
+                                disabled={taskBusy}
+                              >
+                                Abbrechen
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span
+                                className={`project-schedule-task-text${t.is_done ? ' done' : ''}`}
+                                title={t.is_done && t.done_by_name ? `Erledigt von ${t.done_by_name}` : t.text}
+                              >
+                                {t.is_done ? '✓ ' : ''}{t.text}
+                              </span>
+                              <button
+                                type="button"
+                                className="project-schedule-mini-btn"
+                                onClick={() => { setEditingTaskId(t.id); setEditingTaskText(t.text) }}
+                                disabled={taskBusy}
+                              >
+                                Bearbeiten
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn-icon danger"
+                                title="Aufgabe löschen"
+                                onClick={() => void handleDeleteTask(t.id)}
+                                disabled={taskBusy}
+                              >
+                                ✕
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+
                 {error && <div className="project-schedule-error">{error}</div>}
 
                 <div className="project-schedule-actions">
@@ -1269,46 +1442,28 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         )}
       </div>
 
-      {/* Drei Möglichkeiten (dieser / Serie / abbrechen) — ConfirmDialog kennt nur
-          zwei, deshalb hier direkt mit dessen Klassen aufgebaut statt die
-          gemeinsame Komponente für einen Einzelfall aufzubohren. */}
+      {/* Drei Möglichkeiten (dieser / Serie / abbrechen) — der mittlere Knopf ist
+          die extraAction des ConfirmDialog. */}
       {seriesDeletePrompt && (
-        <div
-          className="admin-confirm-overlay"
-          {...backdropCloseProps(() => { if (!saving) setSeriesDeletePrompt(null) })}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Serientermin entfernen"
-        >
-          <div className="admin-confirm-box" onClick={e => e.stopPropagation()}>
-            <div className="admin-confirm-title">Serientermin entfernen</div>
-            <div className="admin-confirm-text">
+        <ConfirmDialog
+          title="Serientermin entfernen"
+          message={
+            <>
               <strong>{fmtApptRow(seriesDeletePrompt)}</strong> gehört zu einer Serie.
               Soll nur dieser Termin entfernt werden oder die ganze Serie?
-            </div>
-            <div className="admin-confirm-warning">
-              «Ganze Serie» entfernt auch die bereits vergangenen Termine der Serie
-              und lässt sich nicht rückgängig machen.
-            </div>
-            <div className="admin-confirm-actions">
-              <button
-                className="admin-btn admin-btn-secondary"
-                onClick={() => setSeriesDeletePrompt(null)}
-                disabled={saving}
-              >Abbrechen</button>
-              <button
-                className="admin-btn admin-btn-primary"
-                onClick={() => void handleDeleteAppt(seriesDeletePrompt, 'single')}
-                disabled={saving}
-              >Nur dieser Termin</button>
-              <button
-                className="admin-btn admin-btn-danger"
-                onClick={() => void handleDeleteAppt(seriesDeletePrompt, 'series')}
-                disabled={saving}
-              >Ganze Serie</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          warning="«Ganze Serie» entfernt auch die bereits vergangenen Termine der Serie und lässt sich nicht rückgängig machen."
+          extraAction={{
+            label: 'Nur dieser Termin',
+            onClick: () => void handleDeleteAppt(seriesDeletePrompt, 'single'),
+          }}
+          confirmLabel="Ganze Serie"
+          variant="danger"
+          busy={saving}
+          onConfirm={() => void handleDeleteAppt(seriesDeletePrompt, 'series')}
+          onCancel={() => setSeriesDeletePrompt(null)}
+        />
       )}
 
       <ToastHost toast={toast} />

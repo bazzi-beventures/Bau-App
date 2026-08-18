@@ -30,7 +30,7 @@ export interface HealthStatusResponse {
 }
 
 export async function getHealthStatus(): Promise<HealthStatusResponse> {
-  return apiFetch('/pwa/superadmin/health/status') as Promise<HealthStatusResponse>
+  return apiFetch<HealthStatusResponse>('/pwa/superadmin/health/status')
 }
 
 export interface DayUptime {
@@ -51,5 +51,5 @@ export interface HealthHistoryResponse {
 }
 
 export async function getHealthHistory(days = 90): Promise<HealthHistoryResponse> {
-  return apiFetch(`/pwa/superadmin/health/history?days=${days}`) as Promise<HealthHistoryResponse>
+  return apiFetch<HealthHistoryResponse>(`/pwa/superadmin/health/history?days=${days}`)
 }

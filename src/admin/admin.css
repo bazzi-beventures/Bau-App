@@ -2175,6 +2175,32 @@ button.admin-list-item {
   white-space: nowrap;
 }
 
+/* Aufgaben-Zeilen im Planungs-Panel (Checkliste des Projekts). Wie die
+   Termin-Zeile, aber ohne Klick-Fläche — die Zeile selbst öffnet nichts. */
+.project-schedule-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-top: 4px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.project-schedule-task-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-schedule-task-text.done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 /* ── Kachel «Termine» in der Projektübersicht ────────────────────────────
    Eigene Klassen statt der .project-schedule-*-Regeln oben: die stehen im
    schmalen Planungs-Panel, die Kachel hier in der breiten Projektmaske. */

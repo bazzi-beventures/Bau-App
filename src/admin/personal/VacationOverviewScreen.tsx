@@ -1,17 +1,7 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../../api/client'
-
-interface VacationRow {
-  staff_id: string
-  staff_name: string
-  entitlement: number
-  used: number
-  taken: number
-  planned: number
-  remaining: number
-  source: string
-}
+import { getVacationOverview } from '../../api/admin/hr'
+import type { VacationRow } from '../../api/admin/hr'
 
 const SOURCE_LABEL: Record<string, string> = {
   personal: 'persönlich',
@@ -50,7 +40,7 @@ export default function VacationOverviewScreen() {
     setLoading(true)
     setError(null)
     try {
-      const result = await apiFetch(`/pwa/admin/hr/vacation-overview?year=${year}`) as VacationRow[]
+      const result = await getVacationOverview(year)
       setRows(result)
     } catch {
       setError('Fehler beim Laden.')

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { initialProjectForm, isProjectFormDirty } from './ProjectDetailScreen'
+import { initialProjectForm, isProjectFormDirty } from './projectDetail/projectForm'
 import { emptyDraft } from './projectAppointments'
-import type { Project } from './ProjectsScreen'
+import type { Project } from '../../api/admin/projects'
 
 // Basis für die „ungespeicherte Änderungen"-Abfrage: nur echte Änderungen an den
 // Feldern, die gespeichert werden, dürfen die Maske als geändert markieren —

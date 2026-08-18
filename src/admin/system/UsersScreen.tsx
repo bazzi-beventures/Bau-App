@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { listUsers } from '../../api/admin/users'
 import UserDetailScreen from './UserDetailScreen'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
@@ -33,7 +33,7 @@ export default function UsersScreen({ actingRole }: Props) {
   async function load() {
     setLoading(true)
     try {
-      setUsers(await apiFetch('/pwa/admin/users') as AuthUser[])
+      setUsers(await listUsers())
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasBillableReport } from './ProjectDetailScreen'
+import { hasBillableReport } from './projectDetail/billingRules'
 
 // Regression zur Billing-Heuristik: ein manuell erfasster Rapport (admin_manual,
 // per Design ohne Unterschrift) muss als Rechnungsbasis zählen — sonst wird

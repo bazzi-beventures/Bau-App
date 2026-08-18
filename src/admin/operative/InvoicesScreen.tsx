@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react'
-import { apiFetch, apiUrl } from '../../api/client'
+import { apiUrl } from '../../api/client'
+import {
+  archiveInvoice, generateInvoice, getInvoiceWorkDescription, listInvoices,
+  markInvoicePaid, markInvoiceSentByPost, sendInvoice as sendInvoiceByMail,
+  unmarkInvoicePaid,
+} from '../../api/admin/invoices'
+import type { Invoice } from '../../api/admin/invoices'
+import { getAdminProjects, setProjectStatus } from '../../api/admin/projects'
+import type { Project } from '../../api/admin/projects'
+import { hasAcceptedQuote as fetchHasAcceptedQuote } from '../../api/admin/quotes'
+import { getAdminStaff } from '../../api/admin/staff'
 import { INVOICE_STATUS_LABELS as STATUS_LABELS, INVOICE_STATUS_BADGE as STATUS_BADGE } from '../constants/statuses'
 import { fmtCHF, fmtDate, todayISO } from '../utils/format'
+import { invoiceWarningHint, sammelrechnungHint } from '../utils/invoiceHints'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
@@ -12,60 +23,12 @@ import { isInvoiceOpen, openInvoicesHint } from '../utils/openInvoices'
 import type { AdminScreen } from '../useAdminNav'
 import { useToast, ToastHost } from '../components/useToast'
 
-interface Invoice {
-  id: number
-  invoice_number: string
-  project_name: string
-  total_amount: number
-  status: string
-  created_at: string
-  paid_at: string | null
-  pdf_url: string | null
-  storage_path?: string | null
-  customer_email?: string | null
-  projektleiter_id: string | null
-  // Projektbezug: nach dem Bezahlen fragt die Übersicht, ob das Projekt
-  // abgeschlossen werden soll — bei einem längst geschlossenen Projekt nicht.
-  project_id: string | null
-  project_status?: string | null
-  project_is_closed?: boolean | null
-}
-
 interface ProjektleiterOption {
   id: string
   name: string
 }
 
-interface Project {
-  id: string
-  name: string
-  // Eindeutige Projektnummer — steht in der Auswahl hinter dem Namen, weil zwei
-  // Projekte gleich heissen dürfen.
-  project_id_text?: string | null
-  customer?: { email?: string | null } | null
-  is_closed?: boolean
-}
-
 const ALL_STATUSES = ['ausstehend', 'offen', 'gesendet', 'bezahlt', 'archiviert', 'inaktiv']
-
-// Sammelrechnung: hat der Kunde mehrere Offerten eines Projekts angenommen
-// ('mehrfach'-Gruppe), deckt EINE Rechnung alle noch unverrechneten ab. Das ist
-// nicht offensichtlich — deshalb im Erfolgs-Toast benennen, welche das waren.
-// Bei genau einer Offerte (Normalfall) bleibt der Text unverändert.
-export function sammelrechnungHint(quoteNumbers?: string[]): string {
-  if (!quoteNumbers || quoteNumbers.length < 2) return ''
-  return ` — Sammelrechnung über ${quoteNumbers.length} Offerten (${quoteNumbers.join(', ')})`
-}
-
-// Hinweise, die den Erfolg NICHT in Frage stellen (heute: ein verrechneter Rapport
-// ist als Garantiefall erfasst). Sie kommen als `warnings` aus dem Backend und
-// werden an die Erfolgsmeldung gehängt — die Rechnung existiert bereits, der
-// Hinweis sagt «nachschauen», nicht «fehlgeschlagen».
-export function invoiceWarningHint(warnings?: unknown): string {
-  if (!Array.isArray(warnings)) return ''
-  const texts = warnings.filter((w): w is string => typeof w === 'string' && !!w.trim())
-  return texts.length > 0 ? ` — ${texts.join(' ')}` : ''
-}
 
 export default function InvoicesScreen({ onBadgeChange, onNav }: {
   onBadgeChange?: () => void
@@ -122,7 +85,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   async function load() {
     setLoading(true)
     try {
-      setInvoices(await apiFetch('/pwa/admin/invoices') as Invoice[])
+      setInvoices(await listInvoices())
     } finally {
       setLoading(false)
     }
@@ -131,9 +94,8 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    apiFetch('/pwa/admin/staff')
-      .then(res => {
-        const staff = res as { id: string; name: string; projektleiter: boolean }[]
+    getAdminStaff()
+      .then(staff => {
         setProjektleiterOptions(
           staff
             .filter(s => s.projektleiter)
@@ -146,7 +108,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
 
   async function openGenerate() {
     try {
-      const p = await apiFetch('/pwa/admin/projects') as Project[]
+      const p = await getAdminProjects()
       setProjects(p.filter(x => !x.is_closed))
     } catch { /* ignore */ }
     setGenProject('')
@@ -164,11 +126,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     setGenProjectName(projectName)
     if (!projectId) { setHasAcceptedQuote(false); setGenWorkDesc(''); return }
     try {
-      const quotes = await apiFetch('/pwa/admin/quotes') as { project_id?: string | null; project_name: string; status: string }[]
-      // Zuordnung über die id; der Name nur für Alt-Offerten ohne project_id.
-      setHasAcceptedQuote(quotes.some(q =>
-        q.status === 'akzeptiert' &&
-        (q.project_id ? q.project_id === projectId : q.project_name === projectName)))
+      setHasAcceptedQuote(await fetchHasAcceptedQuote(projectId, projectName))
     } catch {
       setHasAcceptedQuote(false)
     }
@@ -176,11 +134,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     // die Rechnung entsteht ohne den Block.
     setLoadingWorkDesc(true)
     try {
-      const res = await apiFetch(
-        `/pwa/admin/invoices/work-description?project_name=${encodeURIComponent(projectName)}`
-        + `&project_id=${encodeURIComponent(projectId)}`,
-      ) as { work_description: string }
-      setGenWorkDesc(res.work_description || '')
+      setGenWorkDesc(await getInvoiceWorkDescription(projectName, projectId))
     } catch {
       setGenWorkDesc('')
     } finally {
@@ -192,19 +146,13 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     if (!genProject) return
     setGenerating(true)
     try {
-      const res = await apiFetch('/pwa/admin/invoices/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          project_name: genProjectName,
-          project_id: genProject,
-          use_quote: genUseQuote,
-          work_description: genWorkDesc,
-          remark: genRemark,
-        }),
-      }) as {
-        invoice_number: string; total_amount: number
-        quote_numbers?: string[]; warnings?: unknown
-      }
+      const res = await generateInvoice({
+        project_name: genProjectName,
+        project_id: genProject,
+        use_quote: genUseQuote,
+        work_description: genWorkDesc,
+        remark: genRemark,
+      })
       showToast(
         `Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`
         + sammelrechnungHint(res.quote_numbers)
@@ -233,10 +181,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     if (!sendInvoice || !sendEmail) return
     setSending(true)
     try {
-      await apiFetch('/pwa/admin/invoices/send', {
-        method: 'POST',
-        body: JSON.stringify({ invoice_id: sendInvoice.id, recipient_email: sendEmail }),
-      })
+      await sendInvoiceByMail(sendInvoice.id, sendEmail)
       showToast(`Rechnung an ${sendEmail} gesendet`, 'success')
       setSendInvoice(null)
       load()
@@ -279,10 +224,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   async function handleMarkPaid(inv: Invoice) {
     setActing(inv.id)
     try {
-      await apiFetch(`/pwa/admin/invoices/${inv.id}/mark-paid`, {
-        method: 'POST',
-        body: JSON.stringify({ paid_at: paidDate }),
-      })
+      await markInvoicePaid(inv.id, paidDate)
       showToast('Rechnung als bezahlt markiert', 'success')
       setConfirmPaid(null)
       load()
@@ -300,10 +242,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     if (!inv.project_id) return
     setClosingProject(true)
     try {
-      await apiFetch(`/pwa/admin/projects/${inv.project_id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'abgeschlossen' }),
-      })
+      await setProjectStatus(inv.project_id, 'abgeschlossen')
       showToast('Projekt abgeschlossen', 'success')
       setConfirmCloseProject(null)
       load()
@@ -317,7 +256,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   async function handleArchive(id: number) {
     setActing(id)
     try {
-      await apiFetch(`/pwa/admin/invoices/${id}/archive`, { method: 'POST' })
+      await archiveInvoice(id)
       showToast('Rechnung archiviert — Rapporte wieder verrechenbar', 'success')
       setConfirmArchive(null)
       load()
@@ -337,10 +276,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   async function handleMarkSentByPost(id: number) {
     setActing(id)
     try {
-      await apiFetch(`/pwa/admin/invoices/${id}/mark-sent`, {
-        method: 'POST',
-        body: JSON.stringify({ sent_date: postalDate }),
-      })
+      await markInvoiceSentByPost(id, postalDate)
       showToast('Rechnung als per Post versendet markiert', 'success')
       setConfirmPostal(null)
       load()
@@ -355,7 +291,7 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   async function handleUnmarkPaid(id: number) {
     setActing(id)
     try {
-      await apiFetch(`/pwa/admin/invoices/${id}/unmark-paid`, { method: 'POST' })
+      await unmarkInvoicePaid(id)
       showToast('Zahlung zurückgesetzt', 'success')
       setConfirmUnpay(null)
       load()

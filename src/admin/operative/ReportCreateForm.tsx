@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
-import { apiFetch } from '../../api/client'
+import { listAllMaterials } from '../../api/admin/materials'
+import { getProjectReport, saveProjectReport } from '../../api/admin/reports'
 import { getMe } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { fmtCHF, fmtDate, todayISO } from '../utils/format'
@@ -9,7 +10,7 @@ import { InfoHint } from '../components/InfoHint'
 import { useBackButton } from '../../shared/backButton'
 import { MaterialCombobox, type MaterialOption } from './MaterialCombobox'
 import type { ProjectQuote } from './projectDetail/tabs'
-import type { QuoteDetail } from './QuotesScreen'
+import { getQuoteDetail } from '../../api/admin/quotes'
 
 // Schlankes Formular zum manuellen Erfassen eines Rapports durch den Projektleiter
 // — bewusst analog zu QuoteCreateForm, aber deutlich reduziert: keine KI, keine
@@ -107,7 +108,9 @@ interface FixedMaterialRow {
 // Aufschlag der Artikelgruppe), sonst der Stammpreis. Nur eine ANZEIGE — verrechnet
 // wird beim Rechnungslauf mit dem dann gültigen Katalogpreis (material_usage_vk).
 export function materialUnitPrice(m: MaterialOption): number {
-  return m.calc_vk ?? m.unit_price
+  // Beides null = Artikel ohne Preis im Stamm; die Zeile zeigt dann 0 statt
+  // "NaN CHF". Verrechnet wird ohnehin erst beim Rechnungslauf.
+  return m.calc_vk ?? m.unit_price ?? 0
 }
 
 // Zeilensumme einer Katalog-Materialzeile. Null, solange kein Artikel gewählt ist
@@ -302,7 +305,7 @@ export function ReportCreateForm({
     if (editReportId === undefined) return
     let cancelled = false
     setLoadingExisting(true)
-    apiFetch(`/pwa/admin/projects/${project.id}/reports/${editReportId}`)
+    getProjectReport(project.id, editReportId)
       .then(res => {
         if (cancelled) return
         const r = res as ReportEditPayload
@@ -391,7 +394,10 @@ export function ReportCreateForm({
   function ensureMaterialsLoaded() {
     if (materialsLoaded) return
     setMaterialsLoaded(true)
-    apiFetch('/pwa/admin/materials')
+    listAllMaterials()
+      // MaterialOption verlangt unit_price als Zahl, der Materialstamm lässt es
+      // null (kein fixer VK-Override) — dieselbe Lücke wie im
+      // FrequentMaterialsPanel, sie schliesst sich mit dem MaterialOption-Umzug.
       .then(m => setMaterials(Array.isArray(m) ? (m as MaterialOption[]) : []))
       // Fehler → Flag zurücksetzen, damit der nächste Klick erneut lädt
       // (sonst bleibt die Combobox nach einem einmaligen Fehler dauerhaft leer).
@@ -434,7 +440,7 @@ export function ReportCreateForm({
     setQuoteMaterialError('')
     try {
       const details = await Promise.all(
-        toImport.map(q => apiFetch(`/pwa/admin/quotes/${q.id}`) as Promise<QuoteDetail>),
+        toImport.map(q => getQuoteDetail(q.id)),
       )
       const carried: FixedMaterialRow[] = details.flatMap((detail, i) => {
         const items = Array.isArray(detail.material_items) ? detail.material_items : []
@@ -631,13 +637,9 @@ export function ReportCreateForm({
       }
       // Bearbeiten schickt dieselbe Nutzlast per PUT — der Server ersetzt Stunden
       // und Material vollständig durch das, was hier steht.
-      const url = isEdit
-        ? `/pwa/admin/projects/${project.id}/reports/${editReportId}`
-        : `/pwa/admin/projects/${project.id}/reports`
-      const res = (await apiFetch(url, {
-        method: isEdit ? 'PUT' : 'POST',
-        body: JSON.stringify(payload),
-      })) as { report_id?: number; warnings?: unknown } | null
+      const res = await saveProjectReport(
+        project.id, payload, isEdit ? editReportId : undefined,
+      )
       // 201/200 kann Warnungen enthalten (z.B. nicht abgebuchtes Lager, unbekannte
       // art_nr). Das ist trotzdem Erfolg — kurz sichtbar machen, dann schliessen.
       const warnings = res && Array.isArray(res.warnings)

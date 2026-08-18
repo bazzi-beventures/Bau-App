@@ -1,13 +1,8 @@
 import { useState } from 'react'
-import { apiFetch } from '../../../api/client'
+import { getOvertimeResetSettings, getWeeklyPlan, saveWeeklyPlan } from '../../../api/admin/hr'
+import type { WeeklyPlanEntry } from '../../../api/admin/hr'
 import { useTenantSetting } from '../useTenantSetting'
 import { useToast, ToastHost } from '../../components/useToast'
-
-interface WeeklyPlanEntry {
-  week_number: number
-  target_hours: number
-  note: string
-}
 
 function isoWeeksInYear(year: number): number {
   const jan1 = new Date(year, 0, 1).getDay()
@@ -26,8 +21,8 @@ export function WeeklyPlanTab() {
   } = useTenantSetting<Map<number, WeeklyPlanEntry>>({
     load: async () => {
       const [plan, settings] = await Promise.all([
-        apiFetch(`/pwa/admin/hr/weekly-plan?year=${year}`) as Promise<WeeklyPlanEntry[]>,
-        apiFetch(`/pwa/admin/hr/overtime-reset-settings`) as Promise<{ soll_stunden_woche: number }>,
+        getWeeklyPlan(year),
+        getOvertimeResetSettings(),
       ])
       setDefaultHours(settings.soll_stunden_woche ?? 40)
       const map = new Map<number, WeeklyPlanEntry>()
@@ -35,10 +30,7 @@ export function WeeklyPlanTab() {
       return map
     },
     save: async (map) => {
-      await apiFetch(`/pwa/admin/hr/weekly-plan`, {
-        method: 'PUT',
-        body: JSON.stringify({ year, entries: Array.from(map.values()) }),
-      })
+      await saveWeeklyPlan(year, Array.from(map.values()))
       return map
     },
     onToast: showToast,

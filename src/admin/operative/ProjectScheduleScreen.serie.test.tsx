@@ -233,3 +233,57 @@ describe('Blocker', () => {
     expect(vi.mocked(upsertProject).mock.calls[0][0]).toMatchObject({ kind: 'blocker' })
   })
 })
+
+
+// ─── Termin-Nutzlast (H4: gemeinsames Modell mit dem Detail-Editor) ──────────
+//
+// Seit ApptFormState auf AppointmentDraft zurückgeführt ist, baut die Planung
+// ihre Nutzlast mit draftPayload — demselben Bau wie der Projekt-Detail-Editor.
+// Der sichtbare Unterschied zur früheren, handgebauten Fassung: die Bezeichnung
+// geht nur bei Art 'sonstiges' mit. Wer eine tippt und die Art danach wechselt,
+// schickte vorher einen Namen, den keine Ansicht mehr zeigt (beide rendern
+// `kind === 'sonstiges' && label`).
+
+describe('Termin-Nutzlast', () => {
+  it('schickt die Bezeichnung nur bei Art «sonstiges»', async () => {
+    mockLoad([])
+    const user = userEvent.setup()
+    render(<ProjectScheduleScreen />)
+    await openProject(user)
+
+    await user.click(screen.getByRole('button', { name: '+ Termin' }))
+    await user.type(screen.getByLabelText('Start'), '2026-09-07')
+    await user.selectOptions(screen.getByLabelText('Termin-Typ'), 'sonstiges')
+    await user.type(screen.getByLabelText('Bezeichnung'), 'Besprechung')
+
+    // Art zurückwechseln: die getippte Bezeichnung bleibt im State, darf aber
+    // nicht mehr mitgehen.
+    await user.selectOptions(screen.getByLabelText('Termin-Typ'), 'montage')
+    await user.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(createAppointment).toHaveBeenCalled())
+    expect(vi.mocked(createAppointment).mock.calls[0][1]).toMatchObject({
+      kind: 'montage',
+      label: '',
+    })
+  })
+
+  it('nimmt die Bezeichnung bei «sonstiges» getrimmt mit', async () => {
+    mockLoad([])
+    const user = userEvent.setup()
+    render(<ProjectScheduleScreen />)
+    await openProject(user)
+
+    await user.click(screen.getByRole('button', { name: '+ Termin' }))
+    await user.type(screen.getByLabelText('Start'), '2026-09-07')
+    await user.selectOptions(screen.getByLabelText('Termin-Typ'), 'sonstiges')
+    await user.type(screen.getByLabelText('Bezeichnung'), '  Besprechung  ')
+    await user.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(createAppointment).toHaveBeenCalled())
+    expect(vi.mocked(createAppointment).mock.calls[0][1]).toMatchObject({
+      kind: 'sonstiges',
+      label: 'Besprechung',
+    })
+  })
+})

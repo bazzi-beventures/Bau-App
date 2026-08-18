@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { backdropCloseProps } from '../../shared/backdropClose'
 
 interface UnsavedChangesDialogProps {
   /** Speichern und danach die ausgelöste Aktion (Zurück/Navigation) fortsetzen. */
@@ -46,7 +47,9 @@ export function UnsavedChangesDialog({
   return (
     <div
       className="admin-confirm-overlay"
-      onClick={() => { if (!saving) onCancel() }}
+      // Drag-sicher wie beim ConfirmDialog: ein plain onClick schloss den Dialog
+      // auch, wenn eine Textauswahl ausserhalb der Box endete.
+      {...backdropCloseProps(() => { if (!saving) onCancel() })}
       role="dialog"
       aria-modal="true"
       aria-label={title}

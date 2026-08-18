@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { apiFetch } from '../../api/client'
+import { sendQuoteThankyou } from '../../api/admin/quotes'
 import { backdropCloseProps } from '../../shared/backdropClose'
 
 interface Props {
@@ -24,10 +24,7 @@ export function SendThankyouDialog({ quoteId, header, defaultEmail, onClose, onS
     setSending(true)
     setError('')
     try {
-      const res = await apiFetch(`/pwa/admin/quotes/${quoteId}/send-thankyou`, {
-        method: 'POST',
-        body: JSON.stringify({ recipient_email: email }),
-      }) as { message?: string }
+      const res = await sendQuoteThankyou(quoteId, email)
       onSent(res.message || `Danke-Mail an ${email} gesendet`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Versand fehlgeschlagen')
