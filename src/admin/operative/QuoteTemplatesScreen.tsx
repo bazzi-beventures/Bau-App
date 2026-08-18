@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { AufgabenVorlagenPanel } from './quoteTemplates/AufgabenVorlagenPanel'
 import { OffertenVorlagenPanel } from './quoteTemplates/OffertenVorlagenPanel'
 import { RechnungsVorlagenPanel } from './quoteTemplates/RechnungsVorlagenPanel'
 
-type VorlagenTab = 'offerte' | 'rechnung'
+type VorlagenTab = 'offerte' | 'rechnung' | 'aufgaben'
 
-// "Vorlagen" bündelt die Offert- und Rechnungs-Vorlagen unter einem Tab-Layout
+// "Vorlagen" bündelt die Offert-, Rechnungs- und Aufgaben-Vorlagen unter einem Tab-Layout
 // analog zum Material-Screen. Die Panels und ihre Sektionen liegen in
 // quoteTemplates/ — hier steht nur die Reiter-Schale.
 export default function QuoteTemplatesScreen() {
@@ -27,10 +28,17 @@ export default function QuoteTemplatesScreen() {
         >
           Rechnung
         </button>
+        <button
+          className={`kpi-admin-tab${tab === 'aufgaben' ? ' active' : ''}`}
+          onClick={() => setTab('aufgaben')}
+        >
+          Aufgaben
+        </button>
       </div>
 
       {tab === 'offerte' && <OffertenVorlagenPanel />}
       {tab === 'rechnung' && <RechnungsVorlagenPanel />}
+      {tab === 'aufgaben' && <AufgabenVorlagenPanel />}
     </div>
   )
 }
