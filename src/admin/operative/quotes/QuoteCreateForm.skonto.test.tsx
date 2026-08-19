@@ -90,7 +90,8 @@ describe('QuoteCreateForm — Skonto-Vorgabe', () => {
 })
 
 // Das Häkchen macht die Absicht explizit. Vorher hiess "Feld leer" stillschweigend
-// "kein Skonto" — eine vergessene Eingabe ging unbemerkt zum Kunden.
+// "kein Skonto" — eine vergessene Eingabe ging unbemerkt zum Kunden. Es startet
+// immer abgewählt, auch bei gepflegter Mandanten-Vorgabe.
 describe('QuoteCreateForm — Skonto-Häkchen', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -102,12 +103,30 @@ describe('QuoteCreateForm — Skonto-Häkchen', () => {
     return within(fieldset).getByRole('checkbox') as HTMLInputElement
   }
 
-  it('setzt das Häkchen, wenn der Mandant eine Vorgabe gepflegt hat', async () => {
+  it('lässt das Häkchen auch mit gepflegter Vorgabe aus', async () => {
+    // Skonto ist eine Entscheidung pro Offerte: die Vorgabe füllt nur die Felder,
+    // angehakt wird von Hand. Vorher stand es angehakt da und ging mit, wenn
+    // niemand hinsah.
     routeApi({ pct: 2, days: 10 })
     render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} />)
 
-    await waitFor(() => expect(skontoHaken()).toBeChecked())
+    await waitFor(() => expect(skontoFelder().pct.value).toBe('2'))
+    expect(skontoHaken()).not.toBeChecked()
+    expect(skontoFelder().pct).toBeDisabled()
+  })
+
+  it('gibt die vorbelegten Felder frei, sobald von Hand angehakt wird', async () => {
+    routeApi({ pct: 2, days: 10 })
+    const user = userEvent.setup()
+    render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} />)
+
+    await waitFor(() => expect(skontoFelder().pct.value).toBe('2'))
+    await user.click(skontoHaken())
+
+    expect(skontoHaken()).toBeChecked()
     expect(skontoFelder().pct).toBeEnabled()
+    expect(skontoFelder().pct.value).toBe('2')
+    expect(skontoFelder().days.value).toBe('10')
   })
 
   it('lässt das Häkchen ohne Vorgabe aus und sperrt die Felder', async () => {
@@ -121,12 +140,13 @@ describe('QuoteCreateForm — Skonto-Häkchen', () => {
   })
 
   it('meldet einen Fehler und speichert nicht, wenn das Häkchen gesetzt und das Feld leer ist', async () => {
-    // Vorgabe setzt das Häkchen; der Anwender leert den Satz und will speichern.
+    // Der Anwender hakt an, leert den Satz und will speichern.
     routeApi({ pct: 2, days: 10 })
     const user = userEvent.setup()
     render(<QuoteCreateForm onDone={() => {}} onCancel={() => {}} lockedProjectName="Projekt A" lockedProjectId="p-1" />)
 
-    await waitFor(() => expect(skontoHaken()).toBeChecked())
+    await waitFor(() => expect(skontoFelder().pct.value).toBe('2'))
+    await user.click(skontoHaken())
     await user.clear(skontoFelder().pct)
 
     // Eine Position, damit nicht schon «Mindestens eine Position erforderlich» greift.

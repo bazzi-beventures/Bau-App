@@ -65,7 +65,10 @@ export function OffertenVorlagenPanel() {
   const rejection = useTenantText('/pwa/admin/quote-rejection-text', 'text', {
     showToast, savedMsg: 'Absage-Text gespeichert',
   })
-  const textsLoading = [stdNotes, disc, discR, skontoText, thankyou, rejection].some(s => s.loading)
+  const orderConfirmation = useTenantText('/pwa/admin/quote-order-confirmation-text', 'text', {
+    showToast, savedMsg: 'Auftragsbestätigung gespeichert',
+  })
+  const textsLoading = [stdNotes, disc, discR, skontoText, thankyou, rejection, orderConfirmation].some(s => s.loading)
 
   // Skonto-Vorgabe: beide Felder als String im State (Eingabefeld), Zahl erst beim Speichern.
   const [skontoDefPct, setSkontoDefPct] = useState('')
@@ -317,7 +320,7 @@ export function OffertenVorlagenPanel() {
             onSave={saveQuoteSkontoDefaults}
           />
 
-          <QuoteMailTextSettings thankyou={thankyou} rejection={rejection} />
+          <QuoteMailTextSettings thankyou={thankyou} rejection={rejection} orderConfirmation={orderConfirmation} />
         </>
       )}
 

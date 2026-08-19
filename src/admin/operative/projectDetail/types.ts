@@ -17,6 +17,7 @@ export interface ProjectQuote {
   xlsx_storage_path?: string | null
   customer_email: string | null
   thankyou_sent_at?: string | null
+  order_confirmation_sent_at?: string | null
   rejection_mail_sent_at?: string | null
   variant_group_id?: string | null
   variant_group_kind?: string | null

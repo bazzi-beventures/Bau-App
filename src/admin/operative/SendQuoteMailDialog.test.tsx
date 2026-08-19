@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SendThankyouDialog } from './SendThankyouDialog'
+import { SendOrderConfirmationDialog, SendThankyouDialog } from './SendQuoteMailDialog'
 import { apiFetch } from '../../api/client'
 
 vi.mock('../../api/client', async (importOriginal) => {
@@ -11,8 +11,9 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 const mockFetch = vi.mocked(apiFetch)
 
-// Danke-Mail-Dialog: fragt analog zum Offerten-Versand zuerst die Empfänger-
-// Adresse ab (vorbelegt mit der Kunden-E-Mail) und schickt sie an den Endpoint.
+// Kunden-Mail-Dialoge zu einer Offerte (Danke-Mail, Auftragsbestätigung): fragen
+// analog zum Offerten-Versand zuerst die Empfänger-Adresse ab (vorbelegt mit der
+// Kunden-E-Mail) und schicken sie an den jeweiligen Endpoint.
 
 function renderDialog(onSent = vi.fn()) {
   render(
@@ -79,6 +80,49 @@ describe('SendThankyouDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Dankesmail senden' }))
 
     expect(await screen.findByText('Danke-Mail wurde für diese Offerte bereits versendet.')).toBeInTheDocument()
+    expect(onSent).not.toHaveBeenCalled()
+  })
+})
+
+// ── Auftragsbestätigung ────────────────────────────────────────────────────
+// Gleicher Dialog, anderer Endpoint. Wichtig: der Knopf hängt an keinem Feature —
+// der Dialog selbst kennt darum gar keine Flags, er sendet einfach.
+
+function renderOrderConfirmation(onSent = vi.fn()) {
+  render(
+    <SendOrderConfirmationDialog
+      quoteId={7}
+      header="OF-2026-042"
+      defaultEmail="kunde@example.ch"
+      onClose={vi.fn()}
+      onSent={onSent}
+    />,
+  )
+  return onSent
+}
+
+describe('SendOrderConfirmationDialog', () => {
+  it('sendet an den Auftragsbestätigungs-Endpoint', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue({ status: 'ok', message: 'Auftragsbestätigung gesendet' })
+    const onSent = renderOrderConfirmation()
+
+    await user.click(screen.getByRole('button', { name: 'Auftragsbestätigung senden' }))
+
+    await waitFor(() => expect(onSent).toHaveBeenCalledWith('Auftragsbestätigung gesendet'))
+    const call = mockFetch.mock.calls.find(c => c[0] === '/pwa/admin/quotes/7/send-order-confirmation')!
+    expect(JSON.parse((call[1] as RequestInit).body as string))
+      .toEqual({ recipient_email: 'kunde@example.ch' })
+  })
+
+  it('zeigt den Backend-Fehler an und bleibt offen', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockRejectedValue(new Error('Auftragsbestätigung wurde für diese Offerte bereits versendet.'))
+    const onSent = renderOrderConfirmation()
+
+    await user.click(screen.getByRole('button', { name: 'Auftragsbestätigung senden' }))
+
+    expect(await screen.findByText('Auftragsbestätigung wurde für diese Offerte bereits versendet.')).toBeInTheDocument()
     expect(onSent).not.toHaveBeenCalled()
   })
 })

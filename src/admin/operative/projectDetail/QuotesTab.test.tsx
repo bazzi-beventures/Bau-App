@@ -36,6 +36,7 @@ function renderTab(quotes: ProjectQuote[], onUpdateStatus = vi.fn()) {
       onRegenerate={() => {}}
       onSend={() => {}}
       onSendThankyou={() => {}}
+      onSendOrderConfirmation={() => {}}
       onSendRejection={() => {}}
       onEdit={() => {}}
     />
@@ -93,7 +94,7 @@ describe('QuotesTab — Varianten', () => {
         dankEnabled={false}
         absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
-        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}
+        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}} onSendOrderConfirmation={() => {}}
         onSendRejection={() => {}} onEdit={() => {}}
         addingVariantId={null} onAddVariant={onAddVariant}
       />
@@ -170,7 +171,7 @@ describe('QuotesTab — hochgeladene Offerten', () => {
         dankEnabled={false}
         absageEnabled={false} sendingRejectionId={null}
         onShowCreateForm={() => {}} onResumeDraft={() => {}} onUpdateStatus={() => {}}
-        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}}
+        onRegenerate={() => {}} onSend={() => {}} onSendThankyou={() => {}} onSendOrderConfirmation={() => {}}
         onSendRejection={() => {}} onEdit={() => {}}
         {...props}
       />

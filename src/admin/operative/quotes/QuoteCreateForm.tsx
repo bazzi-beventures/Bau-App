@@ -71,8 +71,10 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
   // Fixpreis (brutto inkl. MwSt): der Endbetrag, den der Kunde zahlen soll. Gesetzt
   // ersetzt er den Material-Rabattsatz — das Backend leitet den Rabatt daraus ab.
   const [fixedPrice, setFixedPrice] = useState('')
-  // Skonto-Häkchen. Startet aus, wird von der Mandanten-Vorgabe (Offert-Vorlagen)
-  // eingeschaltet — wer eine Vorgabe pflegt, will Skonto auf jeder Offerte.
+  // Skonto-Häkchen. Startet IMMER aus — auch wenn der Mandant eine Vorgabe pflegt.
+  // Skonto ist eine Entscheidung pro Offerte, keine Firmenkonstante: vorher stand es
+  // bei gepflegter Vorgabe angehakt da und ging mit, wenn niemand hinsah. Die Vorgabe
+  // belegt weiterhin Satz und Frist vor, damit ein Anhaken sofort stimmt.
   const [skontoActive, setSkontoActive] = useState(false)
   const [skontoPct, setSkontoPct] = useState('')
   const [skontoDays, setSkontoDays] = useState('')
@@ -148,7 +150,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
         if (draftApplied.current) return
         setSkontoPct(prev => (prev === '' ? pct : prev))
         setSkontoDays(prev => (prev === '' ? days : prev))
-        if (pct !== '') setSkontoActive(true)
+        // Das Häkchen bleibt bewusst aus (siehe skontoActive oben) — die Vorgabe
+        // füllt nur die Felder, angehakt wird von Hand.
       })
       .catch(() => {})
   }, [])

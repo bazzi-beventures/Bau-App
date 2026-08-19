@@ -20,6 +20,7 @@ function draft(over: Partial<Draft> = {}): Draft {
     laborDiscount: '',
     materialDiscount: '',
     fixedPrice: '',
+    skontoActive: false,
     skontoPct: '',
     skontoDays: '',
     notes: '',
@@ -56,5 +57,19 @@ describe('quoteDraftHasContent — Skonto-Vorgabe', () => {
 
   it('zählt Skonto ohne Vorgabe weiterhin als Eingabe (Verhalten vor der Vorgabe)', () => {
     expect(quoteDraftHasContent(draft({ skontoPct: '2' }), '')).toBe(true)
+  })
+
+  it('erkennt das Anhaken als Eingabe, auch wenn Satz und Frist auf der Vorgabe stehen', () => {
+    // Das Häkchen startet immer aus — wer es setzt, hat eine Entscheidung getroffen.
+    const d = draft({ skontoActive: true, skontoPct: '2', skontoDays: '10' })
+    expect(quoteDraftHasContent(d, '', { pct: '2', days: '10' })).toBe(true)
+  })
+
+  it('liest einen Altentwurf ohne das Häkchen-Feld aus dem %-Satz', () => {
+    // Vor dem Häkchen hiess ein gefüllter Satz "Skonto an" — der Entwurf darf das
+    // nicht verlieren, sonst stünde er beim Öffnen wieder ohne Skonto da.
+    const d = draft({ skontoPct: '2', skontoDays: '10' })
+    delete (d as { skontoActive?: boolean }).skontoActive
+    expect(quoteDraftHasContent(d, '', { pct: '2', days: '10' })).toBe(true)
   })
 })

@@ -6,7 +6,7 @@ import { fmtCHF, fmtDate } from '../utils/format'
 import { StatusFilterPopover } from '../components/StatusFilterPopover'
 import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { SendQuoteDialog } from './SendQuoteDialog'
-import { SendThankyouDialog } from './SendThankyouDialog'
+import { SendOrderConfirmationDialog, SendThankyouDialog } from './SendQuoteMailDialog'
 import { useToast, ToastHost } from '../components/useToast'
 import { getMe } from '../../api/auth'
 import { getFeature, isFeatureEnabled } from '../../api/modules'
@@ -54,6 +54,9 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
   // Danke-Mail-Dialog (Feature offerte_dank_mail): fragt analog zum Offerten-Versand
   // zuerst die Empfänger-Adresse ab, vorbelegt mit der Kunden-E-Mail der Offerte.
   const [thankyouQuote, setThankyouQuote] = useState<Quote | null>(null)
+  // Auftragsbestätigungs-Dialog: gleiche Empfänger-Abfrage, aber ohne Feature-Bedingung —
+  // der Knopf steht bei jeder angenommenen Offerte bereit.
+  const [orderConfirmationQuote, setOrderConfirmationQuote] = useState<Quote | null>(null)
   // Danke-Mail bei Offerten-Annahme (Feature offerte_dank_mail): steuert den
   // „Dankeschön senden"-Knopf bei angenommenen Offerten (Per-Knopfdruck-Modus bzw.
   // Fallback, falls der Auto-Versand ausblieb).
@@ -141,6 +144,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
     onEdit: handleEdit,
     onSend: setSendQuote,
     onThankyou: setThankyouQuote,
+    onOrderConfirmation: setOrderConfirmationQuote,
     onSendRejection: handleSendRejection,
     onStatus: handleStatus,
   }
@@ -290,6 +294,17 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
           header={<>{thankyouQuote.quote_number} · {fmtCHF(thankyouQuote.total_amount)}<br />Projekt: {thankyouQuote.project_name}</>}
           onClose={() => setThankyouQuote(null)}
           onSent={msg => { showToast(msg, 'success'); setThankyouQuote(null); load() }}
+        />
+      )}
+
+      {/* Dialog: Auftragsbestätigung senden (kein Feature-Flag, siehe QuoteListParts) */}
+      {orderConfirmationQuote && (
+        <SendOrderConfirmationDialog
+          quoteId={orderConfirmationQuote.id}
+          defaultEmail={orderConfirmationQuote.customer_email || ''}
+          header={<>{orderConfirmationQuote.quote_number} · {fmtCHF(orderConfirmationQuote.total_amount)}<br />Projekt: {orderConfirmationQuote.project_name}</>}
+          onClose={() => setOrderConfirmationQuote(null)}
+          onSent={msg => { showToast(msg, 'success'); setOrderConfirmationQuote(null); load() }}
         />
       )}
 

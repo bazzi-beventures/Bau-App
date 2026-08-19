@@ -49,6 +49,22 @@ export async function sendQuoteThankyou(
   })
 }
 
+/**
+ * Auftragsbestätigung zu einer angenommenen Offerte von Hand versenden.
+ *
+ * Hängt bewusst an KEINEM Feature-Flag — anders als Danke-/Absage-Mail steht der
+ * Knopf jedem Mandanten offen. Das Feature `offerte_auftragsbestaetigung` schaltet
+ * nur den automatischen Versand bei jeder Annahme.
+ */
+export async function sendQuoteOrderConfirmation(
+  quoteId: number | string, recipientEmail: string,
+): Promise<{ message?: string }> {
+  return apiFetch<{ message?: string }>(`/pwa/admin/quotes/${quoteId}/send-order-confirmation`, {
+    method: 'POST',
+    body: JSON.stringify({ recipient_email: recipientEmail }),
+  })
+}
+
 /** Vollständige Offerte inklusive aller Positionen. */
 export async function getQuoteDetail(quoteId: number): Promise<QuoteDetail> {
   return apiFetch<QuoteDetail>(`/pwa/admin/quotes/${quoteId}`)
@@ -110,6 +126,7 @@ export interface Quote {
   customer_email?: string | null
   thankyou_sent_at?: string | null
   rejection_mail_sent_at?: string | null
+  order_confirmation_sent_at?: string | null
   sent_at?: string | null
 }
 

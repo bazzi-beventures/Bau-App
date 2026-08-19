@@ -36,6 +36,19 @@ export function UnsavedChangesDialog({
   discardLabel = 'Verwerfen',
   cancelLabel = 'Abbrechen',
 }: UnsavedChangesDialogProps) {
+  // Drei Buttons nebeneinander passen nur, solange die Beschriftungen kurz sind:
+  // von der 380px-Box bleiben nach Polstern und Abständen rund 200px für Text,
+  // also grob 36 Zeichen für alle drei zusammen. Darüber — z.B. «Zurück zum
+  // Formular» + «Entwurf verwerfen» + «Entwurf behalten» — ragten sie aus dem
+  // Dialog heraus, weil .admin-btn weder umbricht noch schrumpft; dann stapeln
+  // wir sie wie im mobilen Bottom-Sheet. savingLabel zählt mit, damit das
+  // Layout beim Klick auf «Speichern» nicht umspringt. Schätzt die Regel
+  // daneben, ist das Ergebnis nur weniger hübsch — herausragen kann nichts
+  // mehr, das fängt flex-wrap im CSS ab.
+  const labelChars =
+    cancelLabel.length + discardLabel.length + Math.max(saveLabel.length, savingLabel.length)
+  const stacked = labelChars > 36
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' && !saving) onCancel()
@@ -57,7 +70,7 @@ export function UnsavedChangesDialog({
       <div className="admin-confirm-box" onClick={e => e.stopPropagation()}>
         <div className="admin-confirm-title">{title}</div>
         <div className="admin-confirm-text">{message}</div>
-        <div className="admin-confirm-actions">
+        <div className={`admin-confirm-actions${stacked ? ' admin-confirm-actions-stacked' : ''}`}>
           <button className="admin-btn admin-btn-secondary" onClick={onCancel} disabled={saving}>
             {cancelLabel}
           </button>

@@ -8,7 +8,7 @@ import type { QuoteDetail } from './quotes/quoteTypes'
 import { hasQuoteDraft } from './quotes/quoteDraft'
 import { useToast, ToastHost } from '../components/useToast'
 import { SendQuoteDialog } from './SendQuoteDialog'
-import { SendThankyouDialog } from './SendThankyouDialog'
+import { SendOrderConfirmationDialog, SendThankyouDialog } from './SendQuoteMailDialog'
 import { ProjectStatus } from '../constants/statuses'
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -124,6 +124,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
   // Danke-Mail-Dialog (Feature offerte_dank_mail): fragt analog zum Offerten-Versand
   // zuerst die Empfänger-Adresse ab, vorbelegt mit der Kunden-E-Mail der Offerte.
   const [thankyouQuote, setThankyouQuote] = useState<ProjectQuote | null>(null)
+  // Auftragsbestätigung: ohne Feature-Bedingung, bei jeder angenommenen Offerte.
+  const [orderConfirmationQuote, setOrderConfirmationQuote] = useState<ProjectQuote | null>(null)
 
   // Aufgaben (Checkliste)
   const tasks = useProjectTasks(project?.id, showToast)
@@ -354,6 +356,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onEditQuote={handleEditQuote}
           onSendQuote={setSendQuote}
           onSendThankyou={setThankyouQuote}
+          onSendOrderConfirmation={setOrderConfirmationQuote}
           onGenerateInvoice={handleGenerateInvoice}
           onShowApprovalForm={() => approvals.setShowForm(true)}
           status={effectiveStatus}
@@ -472,6 +475,20 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           onSent={async msg => {
             showToast(msg)
             setThankyouQuote(null)
+            await billing.reloadQuotes()
+          }}
+        />
+      )}
+
+      {orderConfirmationQuote && (
+        <SendOrderConfirmationDialog
+          quoteId={orderConfirmationQuote.id}
+          defaultEmail={orderConfirmationQuote.customer_email || ''}
+          header={<>{orderConfirmationQuote.quote_number}</>}
+          onClose={() => setOrderConfirmationQuote(null)}
+          onSent={async msg => {
+            showToast(msg)
+            setOrderConfirmationQuote(null)
             await billing.reloadQuotes()
           }}
         />

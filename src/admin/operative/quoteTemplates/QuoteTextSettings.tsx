@@ -79,9 +79,10 @@ export function QuotePdfTextSettings({ stdNotes, disc, discR, skontoText, richto
 
 // Danke-/Absage-Text: immer pflegbar (kein Feature-Flag am Editor, damit man die
 // Texte vor dem Aktivieren der Mail-Features vorbereiten kann).
-export function QuoteMailTextSettings({ thankyou, rejection }: {
+export function QuoteMailTextSettings({ thankyou, rejection, orderConfirmation }: {
   thankyou: UseTenantTextResult
   rejection: UseTenantTextResult
+  orderConfirmation: UseTenantTextResult
 }) {
   return (
     <>
@@ -120,6 +121,28 @@ export function QuoteMailTextSettings({ thankyou, rejection }: {
         rows={8}
         placeholder={'Guten Tag {kunde}\n\nBesten Dank für Ihre Rückmeldung zu unserer Offerte {offerte}…'}
         saveLabel="Absage-Text speichern"
+        hint="Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück."
+      />
+
+      <TenantTextSetting
+        title="Auftragsbestätigung (Offerten-Annahme)"
+        subtitle={
+          <>
+            Inhalt der Auftragsbestätigung an den Kunden. Sie lässt sich bei jeder
+            angenommenen Offerte von Hand senden („Auftragsbestätigung" in der
+            Offerten-Liste) — dafür braucht es kein Feature. Das Feature
+            „Auftragsbestätigung automatisch senden" (unter Konfiguration) schickt sie
+            zusätzlich bei jeder Annahme automatisch. Platzhalter{' '}
+            <code>{'{kunde}'}</code>, <code>{'{offerte}'}</code> und{' '}
+            <code>{'{projekt}'}</code> werden beim Versand aus der Offerte gefüllt.
+            Anrede und Grussformel gehören in den Text.
+          </>
+        }
+        state={orderConfirmation}
+        editor="textarea"
+        rows={8}
+        placeholder={'Guten Tag {kunde}\n\nHiermit bestätigen wir Ihnen die Annahme unserer Offerte {offerte}…'}
+        saveLabel="Auftragsbestätigung speichern"
         hint="Zeilenumbrüche bleiben erhalten. Leer lassen setzt auf den System-Standardtext zurück."
       />
     </>

@@ -50,6 +50,12 @@ export function QuoteStatusCell({ quote: q, flags }: { quote: Quote; flags: Quot
           Absage-Mail gesendet {fmtDate(q.rejection_mail_sent_at)}
         </div>
       )}
+      {/* Ohne Feature-Bedingung: die Auftragsbestätigung steht jedem Mandanten offen. */}
+      {q.order_confirmation_sent_at && (
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+          Auftragsbestätigung gesendet {fmtDate(q.order_confirmation_sent_at)}
+        </div>
+      )}
     </>
   )
 }
@@ -58,6 +64,7 @@ export interface QuoteActionHandlers {
   onEdit: (id: number) => void
   onSend: (quote: Quote) => void
   onThankyou: (quote: Quote) => void
+  onOrderConfirmation: (quote: Quote) => void
   onSendRejection: (id: number) => void
   onStatus: (id: number, status: string) => void
 }
@@ -112,6 +119,19 @@ export function QuoteRowActions({ quote: q, flags, acting, on }: {
           title="Dankesmail an den Kunden senden"
         >
           Dankeschön senden
+        </button>
+      )}
+      {/* Auftragsbestätigung: bewusst ohne Feature-Flag — was der Kunde nach einer
+          Zusage erwartet, darf nicht an einem Schalter hängen. Das Feature
+          `offerte_auftragsbestaetigung` schaltet nur den automatischen Versand. */}
+      {q.status === 'akzeptiert' && !q.order_confirmation_sent_at && (
+        <button
+          className="admin-btn admin-btn-secondary admin-btn-sm"
+          onClick={() => on.onOrderConfirmation(q)}
+          disabled={busy}
+          title="Auftragsbestätigung an den Kunden senden"
+        >
+          Auftragsbestätigung
         </button>
       )}
       {flags.absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (

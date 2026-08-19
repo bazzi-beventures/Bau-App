@@ -721,6 +721,25 @@ select.admin-input {
   display: flex;
   gap: 10px;
   justify-content: center;
+  /* Sicherheitsnetz: .admin-btn bricht nicht um und schrumpft nicht. Ohne wrap
+     ragen zu breite Buttons links und rechts aus der Box heraus, statt in die
+     naechste Zeile zu rutschen. */
+  flex-wrap: wrap;
+}
+
+/* Drei Aktionen mit satzlangen Beschriftungen («Zurück zum Formular» …) passen
+   nie nebeneinander in die 380px-Box — dann untereinander und volle Breite.
+   column-reverse, weil die Reihenfolge im DOM Abbrechen → Verwerfen → Speichern
+   ist, die wichtigste Aktion aber zuoberst gehört — gleiche Anordnung wie im
+   mobilen Bottom-Sheet. */
+.admin-confirm-actions-stacked {
+  flex-direction: column-reverse;
+  gap: 8px;
+}
+
+.admin-confirm-actions-stacked .admin-btn {
+  width: 100%;
+  justify-content: center;
 }
 
 /* ─── Foto-Auswahl im Offerten-Versand ────────────────────── */

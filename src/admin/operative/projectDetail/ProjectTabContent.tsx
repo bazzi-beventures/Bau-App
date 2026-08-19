@@ -31,7 +31,7 @@ export function ProjectTabContent({
   useAcceptedQuote, onUseAcceptedQuoteChange, defaultInvoiceEmail,
   currentUserId,
   onShowQuoteForm, onShowReportForm, onEditReport, onEditQuote,
-  onSendQuote, onSendThankyou, onGenerateInvoice, onShowApprovalForm,
+  onSendQuote, onSendThankyou, onSendOrderConfirmation, onGenerateInvoice, onShowApprovalForm,
   status, settingStatus, reopening, onStatusAction,
 }: {
   tab: ProjectTab
@@ -61,6 +61,7 @@ export function ProjectTabContent({
   onEditQuote: (quoteId: number) => void
   onSendQuote: (q: ProjectQuote) => void
   onSendThankyou: (q: ProjectQuote) => void
+  onSendOrderConfirmation: (q: ProjectQuote) => void
   onGenerateInvoice: (remark: string) => Promise<boolean>
   onShowApprovalForm: () => void
   status: ProjectStatus
@@ -114,6 +115,7 @@ export function ProjectTabContent({
           onRegenerate={billing.regenerate}
           onSend={onSendQuote}
           onSendThankyou={onSendThankyou}
+          onSendOrderConfirmation={onSendOrderConfirmation}
           onSendRejection={billing.sendRejection}
           onEdit={onEditQuote}
           addingVariantId={billing.addingVariantId}

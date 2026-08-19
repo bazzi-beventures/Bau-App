@@ -127,10 +127,11 @@ export function quoteDraftHasContent(
     // niemand etwas eingegeben hat).
     (d.skontoPct ?? '').trim() !== skontoDefaults.pct ||
     (d.skontoDays ?? '').trim() !== skontoDefaults.days ||
-    // Auch das Abwählen des Häkchens ist eine Eingabe: die Felder bleiben dabei
-    // gefüllt, ohne diese Zeile wäre der Entwurf "unverändert" und das Formular
-    // stünde beim nächsten Öffnen wieder mit angehaktem Skonto da.
-    (d.skontoActive ?? !!(d.skontoPct ?? '').trim()) !== (skontoDefaults.pct !== '') ||
+    // Das Häkchen startet immer abgewählt (auch mit Mandanten-Vorgabe) — Anhaken ist
+    // also eine Eingabe und muss den Entwurf auslösen, selbst wenn Satz und Frist noch
+    // exakt auf der Vorgabe stehen. Der Fallback deckt Altentwürfe ohne das Feld ab:
+    // dort hiess ein gefüllter %-Satz "Skonto an".
+    (d.skontoActive ?? !!(d.skontoPct ?? '').trim()) ||
     (d.notes.trim() !== '' && d.notes !== STANDARD_NOTES && d.notes !== stdNotes)
   )
 }

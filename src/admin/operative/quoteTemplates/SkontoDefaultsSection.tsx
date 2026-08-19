@@ -24,8 +24,9 @@ export function SkontoDefaultsSection({
           <div className="admin-page-title" style={{ fontSize: 18 }}>Skonto-Vorgabe</div>
           <div className="admin-page-subtitle">
             Startwerte für die Skonto-Felder einer neuen Offerte — üblich ist ein fester
-            Satz pro Firma («2% innert 10 Tagen»). Pro Offerte bleiben beide Werte frei
-            änderbar; bestehende Offerten ändert die Vorgabe nicht.
+            Satz pro Firma («2% innert 10 Tagen»). Das Skonto-Häkchen der Offerte bleibt
+            trotzdem aus: die Vorgabe füllt nur die Felder, angehakt wird pro Offerte.
+            Beide Werte bleiben frei änderbar; bestehende Offerten ändert die Vorgabe nicht.
             {!saved.pct && ' Aktuell keine Vorgabe — die Felder starten leer.'}
           </div>
         </div>

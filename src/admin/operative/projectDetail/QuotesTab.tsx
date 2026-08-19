@@ -26,6 +26,7 @@ interface QuotesTabProps {
   // Öffnet den Danke-Mail-Dialog (Empfänger-Abfrage) — der Versand selbst
   // passiert im Dialog, deshalb die ganze Offerte statt nur der ID.
   onSendThankyou: (quote: ProjectQuote) => void
+  onSendOrderConfirmation: (quote: ProjectQuote) => void
   onSendRejection: (quoteId: number) => void
   onEdit: (quoteId: number) => void
   // „Weitere Offerte" (mehrere Varianten pro Projekt) — Standard-Fähigkeit, kein Flag.
@@ -45,7 +46,7 @@ interface QuotesTabProps {
 export function QuotesTab({
   quotes, invoices, regeneratingQuoteId, hasLocalDraft, dankEnabled,
   absageEnabled, sendingRejectionId,
-  onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou,
+  onShowCreateForm, onResumeDraft, onUpdateStatus, onRegenerate, onSend, onSendThankyou, onSendOrderConfirmation,
   onSendRejection, onEdit, addingVariantId, onAddVariant,
   files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
 }: QuotesTabProps) {
@@ -171,6 +172,12 @@ export function QuotesTab({
                         ✓ Absage-Mail {fmtDate(q.rejection_mail_sent_at)}
                       </span>
                     )}
+                    {/* Ohne Feature-Bedingung — die Auftragsbestätigung steht jedem Mandanten offen. */}
+                    {q.order_confirmation_sent_at && (
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }} title="Auftragsbestätigung an den Kunden wurde versendet">
+                        ✓ Auftragsbestätigung {fmtDate(q.order_confirmation_sent_at)}
+                      </span>
+                    )}
                     {/* Summe + Aktionen als ein rechtsbündiger Block, der bei knappem
                         Platz (Kommentar-Seitenleiste) als Einheit umbricht – statt die
                         Summe vom Button-Cluster zu trennen. */}
@@ -220,6 +227,16 @@ export function QuotesTab({
                               title="Dankesmail an den Kunden senden"
                             >
                               Dankeschön senden
+                            </button>
+                          )}
+                          {/* Kein Feature-Flag: siehe quotes/QuoteListParts.tsx */}
+                          {q.status === 'akzeptiert' && !q.order_confirmation_sent_at && (
+                            <button
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              onClick={() => onSendOrderConfirmation(q)}
+                              title="Auftragsbestätigung an den Kunden senden"
+                            >
+                              Auftragsbestätigung
                             </button>
                           )}
                           {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (

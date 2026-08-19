@@ -180,7 +180,7 @@ export function SendQuoteDialog({ quoteId, header, defaultEmail, onClose, onSent
     : info.vorlagen
 
   return (
-    // Backdrop-Klick schliesst (drag-sicher, wie im SendThankyouDialog) — während
+    // Backdrop-Klick schliesst (drag-sicher, wie im SendQuoteMailDialog) — während
     // des Versands bleibt der Dialog stehen.
     <div className="admin-confirm-overlay" {...backdropCloseProps(() => { if (!sending) onClose() })}>
       <div className="admin-confirm-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
