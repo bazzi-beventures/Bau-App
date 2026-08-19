@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import AppointmentsCard from './AppointmentsCard'
 import { AppointmentDraft, emptyDraft } from '../projectAppointments'
+import { APPOINTMENT_KIND_LABELS, APPOINTMENT_KINDS } from '../../../api/admin/scheduling'
 
 // Die Kachel ist reine Darstellung: Entwürfe rein, geänderte Entwürfe raus.
 // Getestet wird genau dieser Vertrag — Speichern übernimmt ProjectDetailScreen.
@@ -87,6 +88,27 @@ describe('AppointmentsCard', () => {
     fireEvent.click(screen.getByText('Montage'))          // Editor aufklappen
     fireEvent.change(screen.getByLabelText('Termin-Typ'), { target: { value: 'aufmass' } })
     expect(onChange.mock.calls[0][0][0]).toMatchObject({ key: 'a-1', kind: 'aufmass' })
+  })
+
+  // Die Typ-Liste kommt aus APPOINTMENT_KIND_LABELS (api/admin/scheduling.ts) —
+  // die Kachel zählt sie nicht mehr selbst auf. Der Test hält fest, dass die
+  // Registry auch wirklich im Dropdown ankommt (inkl. Demontage/Wiedermontage).
+  it('bietet alle Termin-Typen aus der Registry an', () => {
+    setup([draft()])
+    fireEvent.click(screen.getByText('Montage'))          // Editor aufklappen
+    const select = screen.getByLabelText('Termin-Typ')
+    expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual(
+      APPOINTMENT_KINDS.map(k => APPOINTMENT_KIND_LABELS[k]),
+    )
+    expect(APPOINTMENT_KINDS).toContain('demontage')
+    expect(APPOINTMENT_KINDS).toContain('wiedermontage')
+  })
+
+  it('gibt eine Wiedermontage als geänderten Entwurf zurück', () => {
+    const onChange = setup([draft()])
+    fireEvent.click(screen.getByText('Montage'))
+    fireEvent.change(screen.getByLabelText('Termin-Typ'), { target: { value: 'wiedermontage' } })
+    expect(onChange.mock.calls[0][0][0]).toMatchObject({ key: 'a-1', kind: 'wiedermontage' })
   })
 
   it('setzt beim Startdatum das leere Enddatum auf denselben Tag', () => {

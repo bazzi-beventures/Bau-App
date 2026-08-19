@@ -11,7 +11,7 @@ import { ProjectTimeline } from './projekte/ProjectTimeline'
 import {
   QueuedTaskToggle, enqueueTaskToggle, loadTaskQueue, reconcileTaskQueue, saveTaskQueue, taskKey,
 } from './projekte/taskQueue'
-import { sortProjectsChronologically } from './projekte/sortProjects'
+import { sortProjectsNewestFirst } from './projekte/sortProjects'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 import { mapsUrl } from '../shared/mapsLink'
 import { DownloadIcon } from '../shared/DownloadIcon'
@@ -1026,15 +1026,17 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
             groupMap.set(key, arr)
           })
           const groups = Array.from(groupMap.entries())
+            // Neuester Tag zuerst: der aktuelle Auftrag steht oben, Altes rutscht
+            // nach unten. "Ohne Termin" bleibt in beiden Richtungen am Ende.
             .sort(([a], [b]) => {
               if (a === noDateKey) return 1
               if (b === noDateKey) return -1
-              return a.localeCompare(b)
+              return b.localeCompare(a)
             })
-            // Innerhalb des Tages nach Startzeit — der Monteur arbeitet die
-            // Liste von oben nach unten ab.
+            // Innerhalb des Tages weiterhin nach Startzeit aufsteigend — der
+            // Monteur arbeitet einen Tag von oben nach unten ab.
             .map(([dateKey, groupProjects]) =>
-              [dateKey, sortProjectsChronologically(groupProjects)] as const)
+              [dateKey, sortProjectsNewestFirst(groupProjects)] as const)
 
           return (
             <div className="projekte-grouped">

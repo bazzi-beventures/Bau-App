@@ -302,6 +302,7 @@ export default function QuotesScreen({ initialStatus, onConsumed }: QuotesScreen
         <SendOrderConfirmationDialog
           quoteId={orderConfirmationQuote.id}
           defaultEmail={orderConfirmationQuote.customer_email || ''}
+          alreadySentAt={orderConfirmationQuote.order_confirmation_sent_at}
           header={<>{orderConfirmationQuote.quote_number} · {fmtCHF(orderConfirmationQuote.total_amount)}<br />Projekt: {orderConfirmationQuote.project_name}</>}
           onClose={() => setOrderConfirmationQuote(null)}
           onSent={msg => { showToast(msg, 'success'); setOrderConfirmationQuote(null); load() }}

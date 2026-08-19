@@ -88,12 +88,13 @@ describe('SendThankyouDialog', () => {
 // Gleicher Dialog, anderer Endpoint. Wichtig: der Knopf hängt an keinem Feature —
 // der Dialog selbst kennt darum gar keine Flags, er sendet einfach.
 
-function renderOrderConfirmation(onSent = vi.fn()) {
+function renderOrderConfirmation(onSent = vi.fn(), alreadySentAt: string | null = null) {
   render(
     <SendOrderConfirmationDialog
       quoteId={7}
       header="OF-2026-042"
       defaultEmail="kunde@example.ch"
+      alreadySentAt={alreadySentAt}
       onClose={vi.fn()}
       onSent={onSent}
     />,
@@ -112,7 +113,7 @@ describe('SendOrderConfirmationDialog', () => {
     await waitFor(() => expect(onSent).toHaveBeenCalledWith('Auftragsbestätigung gesendet'))
     const call = mockFetch.mock.calls.find(c => c[0] === '/pwa/admin/quotes/7/send-order-confirmation')!
     expect(JSON.parse((call[1] as RequestInit).body as string))
-      .toEqual({ recipient_email: 'kunde@example.ch' })
+      .toEqual({ recipient_email: 'kunde@example.ch', resend: false })
   })
 
   it('zeigt den Backend-Fehler an und bleibt offen', async () => {
@@ -124,5 +125,35 @@ describe('SendOrderConfirmationDialog', () => {
 
     expect(await screen.findByText('Auftragsbestätigung wurde für diese Offerte bereits versendet.')).toBeInTheDocument()
     expect(onSent).not.toHaveBeenCalled()
+  })
+
+  // Zweitversand: der Dialog ist die Stelle, an der aus "schon gesendet" ein bewusster
+  // Vorgang wird. Ohne das resend-Flag im Body lehnt das Backend ab — deshalb ist das
+  // Flag hier die eigentliche Zusicherung, nicht die Beschriftung.
+  it('schickt beim Zweitversand das resend-Flag mit und benennt den Vorgang', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue({ status: 'ok', message: 'Auftragsbestätigung gesendet' })
+    const onSent = renderOrderConfirmation(vi.fn(), '2026-08-19T10:00:00Z')
+
+    expect(screen.getByText(/Bereits gesendet am 19\.08\.2026/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Erneut senden' }))
+
+    await waitFor(() => expect(onSent).toHaveBeenCalled())
+    const call = mockFetch.mock.calls.find(c => c[0] === '/pwa/admin/quotes/7/send-order-confirmation')!
+    expect(JSON.parse((call[1] as RequestInit).body as string))
+      .toEqual({ recipient_email: 'kunde@example.ch', resend: true })
+  })
+
+  it('schickt beim Erstversand resend=false', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValue({ status: 'ok', message: 'gesendet' })
+    renderOrderConfirmation()
+
+    await user.click(screen.getByRole('button', { name: 'Auftragsbestätigung senden' }))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(c => c[0] === '/pwa/admin/quotes/7/send-order-confirmation')!
+      expect(JSON.parse((call[1] as RequestInit).body as string).resend).toBe(false)
+    })
   })
 })

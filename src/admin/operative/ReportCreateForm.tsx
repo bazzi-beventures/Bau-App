@@ -168,7 +168,10 @@ export interface ReportEditPayload {
   staff: { staff_id: string | null; name: string; hours: number; hour_type: string }[]
   materials: { art_nr: string; amount: number; item_name?: string }[]
   kleinmaterial: { item_name: string; count: number; amount_chf: number } | null
-  fixed_materials: { item_name: string; amount: number; unit: string; unit_price: number }[]
+  fixed_materials: {
+    item_name: string; amount: number; unit: string; unit_price: number
+    source_quote_id?: number | null
+  }[]
   editable?: boolean
   edit_blocked_reason?: string | null
 }
@@ -335,6 +338,10 @@ export function ReportCreateForm({
         setFixedRows((r.fixed_materials ?? []).map(f => ({
           itemName: f.item_name, amount: numToField(f.amount),
           unit: f.unit || 'Stk', unitPrice: numToField(f.unit_price),
+          // Herkunft mitführen: das Bearbeiten schickt die Positionen vollständig
+          // zurück (Vollersetzung) — ohne sie verlöre eine importierte Zeile beim
+          // ersten Speichern ihre Offerten-Zuordnung.
+          fromQuoteId: f.source_quote_id ?? undefined,
         })))
         if (r.kleinmaterial) {
           setKlein({
@@ -586,6 +593,10 @@ export function ReportCreateForm({
         amount: parseNum(r.amount),
         unit: r.unit.trim() || 'Stk',
         unit_price: parseNum(r.unitPrice),
+        // Aus welcher Offerte die Zeile importiert wurde (undefined = von Hand
+        // erfasst). Der Server merkt sich das an der Position und übernimmt dieselbe
+        // Offerte danach nicht noch einmal auf einem weiteren Rapport des Projekts.
+        source_quote_id: r.fromQuoteId,
       }))
 
     setSaving(true)
@@ -604,7 +615,10 @@ export function ReportCreateForm({
         einbauort?: string
         materials?: { art_nr: string; amount: number }[]
         kleinmaterial?: { item_name: string; count: number; amount_chf: number }
-        fixed_materials?: { item_name: string; amount: number; unit: string; unit_price: number }[]
+        fixed_materials?: {
+          item_name: string; amount: number; unit: string; unit_price: number
+          source_quote_id?: number
+        }[]
       } = {
         report_date: reportDate,
         description: description.trim(),

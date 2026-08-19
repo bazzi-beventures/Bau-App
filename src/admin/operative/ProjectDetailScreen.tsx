@@ -484,12 +484,15 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
         <SendOrderConfirmationDialog
           quoteId={orderConfirmationQuote.id}
           defaultEmail={orderConfirmationQuote.customer_email || ''}
+          alreadySentAt={orderConfirmationQuote.order_confirmation_sent_at}
           header={<>{orderConfirmationQuote.quote_number}</>}
           onClose={() => setOrderConfirmationQuote(null)}
           onSent={async msg => {
             showToast(msg)
             setOrderConfirmationQuote(null)
-            await billing.reloadQuotes()
+            // Der Versand legt das Auftragsbestätigungs-PDF am Projekt ab — die
+            // Dateiliste muss mit, sonst taucht es erst nach einem Reload auf.
+            await Promise.all([billing.reloadQuotes(), documents.reload()])
           }}
         />
       )}

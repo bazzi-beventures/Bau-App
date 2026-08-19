@@ -54,7 +54,12 @@ function existingReport(over: Record<string, unknown> = {}) {
     staff: [{ staff_id: 's2', name: 'Bob', hours: 3.5, hour_type: 'werkstatt' }],
     materials: [{ art_nr: 'STG123', amount: 2, item_name: 'Getriebehalter' }],
     kleinmaterial: { item_name: 'Kleinmaterial', count: 1, amount_chf: 25 },
-    fixed_materials: [{ item_name: 'Storen grau', amount: 1, unit: 'Stk', unit_price: 480 }],
+    fixed_materials: [{
+      item_name: 'Storen grau', amount: 1, unit: 'Stk', unit_price: 480,
+      // Herkunft der Position: aus Offerte 9 importiert. Muss das Bearbeiten
+      // überleben — das PUT ersetzt vollständig (siehe Test unten).
+      source_quote_id: 9,
+    }],
     editable: true,
     edit_blocked_reason: null,
     ...over,
@@ -148,8 +153,11 @@ describe('ReportCreateForm — Bearbeiten-Modus', () => {
     // Das PUT ersetzt vollständig — Material, Fixpositionen und Pauschale müssen
     // wieder mit, obwohl sie niemand angefasst hat.
     expect(body.materials).toEqual([{ art_nr: 'STG123', amount: 2 }])
+    // source_quote_id kommt mit zurück: ginge sie beim Bearbeiten verloren, sähe der
+    // Guard die Offerte wieder als offen und der nächste Rapport übernähme sie erneut
+    // (docs/specs/rapport-nachtrag.md §3.5).
     expect(body.fixed_materials).toEqual([
-      { item_name: 'Storen grau', amount: 1, unit: 'Stk', unit_price: 480 },
+      { item_name: 'Storen grau', amount: 1, unit: 'Stk', unit_price: 480, source_quote_id: 9 },
     ])
     expect(body.kleinmaterial).toEqual({ item_name: 'Kleinmaterial', count: 1, amount_chf: 25 })
     expect(body.is_warranty).toBe(true)

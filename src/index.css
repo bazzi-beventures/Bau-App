@@ -516,6 +516,11 @@ input, textarea { font-family: var(--font); color: var(--text); }
   outline: none;
 }
 .corr-input:focus { border-color: var(--accent-amber); }
+.corr-error {
+  font-size: 12px;
+  color: var(--accent-red, #ef4444);
+  line-height: 1.35;
+}
 .corr-actions { display: flex; gap: 8px; margin-top: 4px; }
 .corr-btn {
   flex: 1; padding: 9px; border-radius: var(--radius-sm);
@@ -1989,3 +1994,28 @@ input, textarea { font-family: var(--font); color: var(--text); }
   overflow-x: auto; margin: 4px 0 8px;
 }
 .chat-md pre code { background: none; padding: 0; }
+
+/* ── iOS: kein Auto-Zoom beim Fokus in ein Eingabefeld ───────────
+   Mobile Safari zoomt beim Antippen in jedes Feld mit Schriftgrösse < 16px
+   hinein — und zoomt danach NICHT von selbst wieder heraus. Im Korrektur-
+   Formular (Datum, Einstempel, Ausstempel, Pause, Grund) passiert das bei
+   jedem Feld erneut: der Monteur muss die Seite nach jedem Tipp von Hand
+   wieder verkleinern, die Feldbeschriftungen liegen währenddessen ausserhalb
+   des Bildschirms.
+
+   Darum auf Touch-Geräten überall mindestens 16px. Der `#root`-Präfix dient
+   allein der Spezifität: die Regel muss die Klassenregeln überstimmen
+   (.corr-input 13px, .chat-textarea 14px, .admin-form-input 14px, .input
+   15px …), ohne dass jede davon einzeln gepflegt werden muss. Auf Maus-
+   Geräten (pointer: fine) bleibt das Layout unverändert — dort gibt es
+   das Zoom-Verhalten nicht.
+
+   Checkbox/Radio/Range sind ausgenommen: sie zeigen keinen Text, ihre
+   Grösse hängt aber an font-size (siehe .ersatzteil-pick input). */
+@media (pointer: coarse) {
+  #root input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  #root textarea,
+  #root select {
+    font-size: 16px;
+  }
+}

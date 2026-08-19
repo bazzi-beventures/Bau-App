@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { sendQuoteOrderConfirmation, sendQuoteThankyou } from '../../api/admin/quotes'
 import { backdropCloseProps } from '../../shared/backdropClose'
+import { fmtDate } from '../utils/format'
 
 interface BaseProps {
   quoteId: number
@@ -13,6 +14,8 @@ interface BaseProps {
 interface Props extends BaseProps {
   title: string
   sendLabel: string
+  /** Optionaler Hinweis unter dem Empfängerfeld (z.B. welches Dokument mitgeht). */
+  note?: string
   fallbackMessage: (email: string) => string
   send: (quoteId: number, email: string) => Promise<{ message?: string }>
 }
@@ -25,7 +28,7 @@ interface Props extends BaseProps {
 // Die beiden Mails unterscheiden sich nur in Beschriftung und Endpoint; der Ablauf
 // (Adresse prüfen, senden, Backend-Fehler im Dialog zeigen, offen bleiben) ist derselbe.
 export function SendQuoteMailDialog(
-  { quoteId, header, defaultEmail, onClose, onSent, title, sendLabel, fallbackMessage, send }: Props,
+  { quoteId, header, defaultEmail, onClose, onSent, title, sendLabel, note, fallbackMessage, send }: Props,
 ) {
   const [email, setEmail] = useState(defaultEmail ?? '')
   const [sending, setSending] = useState(false)
@@ -59,6 +62,9 @@ export function SendQuoteMailDialog(
             onChange={e => setEmail(e.target.value)}
             placeholder="kunde@example.com"
           />
+          {note && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)' }}>{note}</div>
+          )}
         </div>
 
         {error && <div className="admin-form-error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -91,15 +97,27 @@ export function SendThankyouDialog(props: BaseProps) {
  * Auftragsbestätigung nach Offerten-Annahme. Steht bei jeder angenommenen Offerte
  * bereit — ohne Feature-Flag (das Feature `offerte_auftragsbestaetigung` schaltet nur
  * den automatischen Versand).
+ *
+ * `alreadySentAt` schaltet auf den ERNEUT-Modus: der Dialog benennt den Vorgang als
+ * Zweitversand, zeigt das Datum des ersten und schickt das `resend`-Flag mit. Ohne das
+ * Flag lehnt das Backend eine bereits versendete Bestätigung ab — der bewusste zweite
+ * Versand muss also durch diesen Dialog, ein versehentlicher Doppelklick kommt nicht
+ * durch.
  */
-export function SendOrderConfirmationDialog(props: BaseProps) {
+export function SendOrderConfirmationDialog({ alreadySentAt, ...props }: BaseProps & {
+  alreadySentAt?: string | null
+}) {
+  const isResend = !!alreadySentAt
   return (
     <SendQuoteMailDialog
       {...props}
-      title="Auftragsbestätigung senden"
-      sendLabel="Auftragsbestätigung senden"
+      title={isResend ? 'Auftragsbestätigung erneut senden' : 'Auftragsbestätigung senden'}
+      sendLabel={isResend ? 'Erneut senden' : 'Auftragsbestätigung senden'}
+      note={isResend
+        ? `Bereits gesendet am ${fmtDate(alreadySentAt)}. Der Kunde erhält dasselbe Dokument noch einmal; die Ablage beim Projekt wird überschrieben statt verdoppelt.`
+        : 'Das Dokument «Auftragsbestätigung» (Inhalt der Offerte) geht als PDF mit und wird beim Projekt unter «Offerten» abgelegt.'}
       fallbackMessage={email => `Auftragsbestätigung an ${email} gesendet`}
-      send={sendQuoteOrderConfirmation}
+      send={(quoteId, email) => sendQuoteOrderConfirmation(quoteId, email, isResend)}
     />
   )
 }

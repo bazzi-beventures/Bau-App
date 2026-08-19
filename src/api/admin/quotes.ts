@@ -55,13 +55,17 @@ export async function sendQuoteThankyou(
  * Hängt bewusst an KEINEM Feature-Flag — anders als Danke-/Absage-Mail steht der
  * Knopf jedem Mandanten offen. Das Feature `offerte_auftragsbestaetigung` schaltet
  * nur den automatischen Versand bei jeder Annahme.
+ *
+ * `resend` ist der bewusste zweite Versand. Ohne das Flag lehnt das Backend eine
+ * bereits versendete Bestätigung weiterhin ab — ein Doppelklick löst also keine
+ * zweite Mail aus.
  */
 export async function sendQuoteOrderConfirmation(
-  quoteId: number | string, recipientEmail: string,
+  quoteId: number | string, recipientEmail: string, resend = false,
 ): Promise<{ message?: string }> {
   return apiFetch<{ message?: string }>(`/pwa/admin/quotes/${quoteId}/send-order-confirmation`, {
     method: 'POST',
-    body: JSON.stringify({ recipient_email: recipientEmail }),
+    body: JSON.stringify({ recipient_email: recipientEmail, resend }),
   })
 }
 

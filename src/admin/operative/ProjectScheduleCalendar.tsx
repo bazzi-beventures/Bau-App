@@ -24,7 +24,7 @@ import {
   crewMembers, entryTitle, fmtTime, fmtTimeRange, hasUnassignedEntries, kindSymbol,
   neededDistancePairs, overlapConflictIds, pillBg, pillClass, pillExtraLines,
   projectCoversDay, projectMonteurNames, readDragPayload, rowEntries, scheduledDayIsoSet,
-  setDragPayload, useHoverCard, useScheduleDistances,
+  setDragPayload, terminLegend, useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
@@ -92,7 +92,7 @@ function CalendarLegend({ canton }: { canton: string }) {
         Feiertag {canton.toUpperCase()}
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
-        📐 Aufmass · 🔧 Montage · 🛠️ Service · 📋 Sonstiges · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt · 🚧 Blocker (schraffiert = provisorisch)
+        {terminLegend()} · 👥 Teamsitzung · 📦 Lager · ⚙️ Werkstatt · 🚧 Blocker (schraffiert = provisorisch)
       </div>
       <div className="absence-cal-legend-item" style={{ color: 'var(--muted)' }}>
         Tipp: Einsatz greifen und auf einen anderen Tag ziehen — in der Wochenansicht auch auf eine andere Uhrzeit. Auf freier Fläche einen Zeitraum aufziehen, um einen neuen Termin zu planen. Mit der Maus auf einem Einsatz stehen bleiben zeigt alle Angaben, <strong>Doppelklick</strong> öffnet das Projekt.

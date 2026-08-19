@@ -128,10 +128,11 @@ describe('ProjekteScreen — Rapport-Sperre', () => {
   })
 })
 
-// Die Kachelliste ist der Tagesablauf des Monteurs: von oben nach unten
-// abzuarbeiten. Sie übernahm bisher die Server-Reihenfolge, in der die Einsätze
-// eines Tages nach Namen standen (11:00 vor 09:00 vor 16:00).
-describe('ProjekteScreen — chronologische Reihenfolge', () => {
+// Die Kachelliste zeigt den neuesten Tag oben (Altes rutscht nach unten), einen
+// einzelnen Tag aber weiter als Tagesablauf von oben nach unten. Sie übernahm
+// früher die Server-Reihenfolge, in der die Einsätze eines Tages nach Namen
+// standen (11:00 vor 09:00 vor 16:00).
+describe('ProjekteScreen — Reihenfolge der Einsätze', () => {
   function tileNames(container: HTMLElement): (string | null)[] {
     return Array.from(container.querySelectorAll('.projekte-tile-name')).map(el => el.textContent)
   }
@@ -150,16 +151,16 @@ describe('ProjekteScreen — chronologische Reihenfolge', () => {
     ])
   })
 
-  it('gruppiert nach Tag und hängt Projekte ohne Termin ans Ende', async () => {
+  it('gruppiert nach Tag, neuester Tag oben, ohne Termin ans Ende', async () => {
     routeFetch([
       project({ id: 'a', name: 'Noch nicht disponiert', start_date: null, start_time: null }),
-      project({ id: 'b', name: 'Morgen früh', start_date: '2026-08-14', start_time: '07:00:00' }),
-      project({ id: 'c', name: 'Heute spät', start_date: '2026-08-13', start_time: '17:00:00' }),
+      project({ id: 'b', name: 'Heute früh', start_date: '2026-08-14', start_time: '07:00:00' }),
+      project({ id: 'c', name: 'Gestern spät', start_date: '2026-08-13', start_time: '17:00:00' }),
     ])
     const { container } = render(<ProjekteScreen {...NOOP} onStartRapport={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText('Noch nicht disponiert')).toBeInTheDocument())
-    expect(tileNames(container)).toEqual(['Heute spät', 'Morgen früh', 'Noch nicht disponiert'])
+    expect(tileNames(container)).toEqual(['Heute früh', 'Gestern spät', 'Noch nicht disponiert'])
     expect(screen.getByText('13.08.2026')).toBeInTheDocument()
     expect(screen.getByText('14.08.2026')).toBeInTheDocument()
     expect(screen.getByText('Ohne Termin')).toBeInTheDocument()

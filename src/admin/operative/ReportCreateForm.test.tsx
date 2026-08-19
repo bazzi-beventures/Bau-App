@@ -562,9 +562,12 @@ describe('ReportCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
 
     await waitFor(() => expect(onDone).toHaveBeenCalled())
+    // source_quote_id: aus welcher Offerte die Zeile stammt. Der Server merkt sie
+    // sich an der Position und übernimmt dieselbe Offerte danach nicht noch einmal
+    // auf einem weiteren Rapport des Projekts (docs/specs/rapport-nachtrag.md §3.5).
     expect(lastPostBody().fixed_materials).toEqual([
-      { item_name: 'Storen Typ X', amount: 2.5, unit: 'Stk', unit_price: 450 },
-      { item_name: 'Kurbelstange', amount: 3, unit: 'm', unit_price: 20 },
+      { item_name: 'Storen Typ X', amount: 2.5, unit: 'Stk', unit_price: 450, source_quote_id: 1 },
+      { item_name: 'Kurbelstange', amount: 3, unit: 'm', unit_price: 20, source_quote_id: 1 },
     ])
     // Regulärer Katalog-Material-Key bleibt unberührt (keine Katalogzeile erfasst).
     expect(lastPostBody()).not.toHaveProperty('materials')
@@ -727,8 +730,8 @@ describe('ReportCreateForm', () => {
 
     // BEIDE Material-Sets landen auf dem Rapport.
     expect(lastPostBody().fixed_materials).toEqual([
-      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800 },
-      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450 },
+      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800, source_quote_id: 2 },
+      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450, source_quote_id: 1 },
     ])
   })
 
@@ -797,8 +800,8 @@ describe('ReportCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
     await waitFor(() => expect(onDone).toHaveBeenCalled())
     expect(lastPostBody().fixed_materials).toEqual([
-      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450 },
-      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800 },
+      { item_name: 'Storen Typ X', amount: 2, unit: 'Stk', unit_price: 450, source_quote_id: 1 },
+      { item_name: 'Markise Typ Y', amount: 1, unit: 'Stk', unit_price: 800, source_quote_id: 2 },
     ])
   })
 

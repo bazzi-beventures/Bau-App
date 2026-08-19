@@ -1,4 +1,4 @@
-import { compareProjectsChronologically } from './sortProjects'
+import { compareProjectsNewestFirst } from './sortProjects'
 
 interface TimelineProject {
   id: string
@@ -78,9 +78,10 @@ function buildTimeline<P extends TimelineProject>(projects: P[]): {
     return { project: p, startDate: start, endDate: end, startOffset, length }
   })
 
-  // Gleiche Reihenfolge wie die Kachel-Ansicht: Datum, dann Startzeit, dann Name.
-  // Zwei Einsätze am selben Tag standen sonst in Server-Reihenfolge untereinander.
-  spans.sort((a, b) => compareProjectsChronologically(a.project, b.project))
+  // Gleiche Reihenfolge wie die Kachel-Ansicht: neuestes Datum zuerst, dann
+  // Startzeit, dann Name. Beide Ansichten zeigen dieselbe Liste — sie dürfen sie
+  // nicht unterschiedlich herum stapeln.
+  spans.sort((a, b) => compareProjectsNewestFirst(a.project, b.project))
 
   return { info: { start: startISO, days, todayIndex }, spans }
 }

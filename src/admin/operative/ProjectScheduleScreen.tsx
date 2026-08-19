@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   upsertProject, getSchedulingConfig, SchedulingConfig,
-  ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS, AppointmentRecurrence,
+  ProjectAppointment, AppointmentKind, APPOINTMENT_KIND_LABELS, APPOINTMENT_KINDS,
+  DEFAULT_APPOINTMENT_KIND, AppointmentRecurrence,
   listAppointments, createAppointment, updateAppointment, deleteAppointment,
 } from '../../api/admin'
 import {
@@ -700,7 +701,7 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
         start_time: a.start_time,
         end_time: a.end_time,
         monteur_ids: (a.monteur_ids && a.monteur_ids.length ? a.monteur_ids : p.monteur_ids) ?? [],
-        termin_badge: p.kind === 'project' && a.kind !== 'montage'
+        termin_badge: p.kind === 'project' && a.kind !== DEFAULT_APPOINTMENT_KIND
           ? (a.kind === 'sonstiges' && a.label ? a.label : APPOINTMENT_KIND_LABELS[a.kind])
           : undefined,
         termin_kind: p.kind === 'project' ? a.kind : undefined,
@@ -1129,10 +1130,9 @@ export default function ProjectScheduleScreen({ canton = 'ZH', onNav }: Props) {
                             value={apptForm.kind}
                             onChange={e => setApptForm(a => a && ({ ...a, kind: e.target.value as AppointmentKind }))}
                           >
-                            <option value="aufmass">Aufmass</option>
-                            <option value="montage">Montage</option>
-                            <option value="service">Service</option>
-                            <option value="sonstiges">Sonstiges</option>
+                            {APPOINTMENT_KINDS.map(k => (
+                              <option key={k} value={k}>{APPOINTMENT_KIND_LABELS[k]}</option>
+                            ))}
                           </select>
                         </label>
                         {apptForm.kind === 'sonstiges' && (

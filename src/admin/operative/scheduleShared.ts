@@ -7,6 +7,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { resolveScheduleDistances } from '../../api/admin'
+import {
+  APPOINTMENT_KIND_LABELS, APPOINTMENT_KINDS, AppointmentKind, DEFAULT_APPOINTMENT_KIND,
+} from '../../api/admin/scheduling'
 import type { Project } from '../../api/admin/projects'
 import { projectCustomerName } from '../utils/project'
 import { diffDays, hhmmToMin, parseDateStr, shiftISO, toDateStr } from '../utils/calendarHelpers'
@@ -23,8 +26,9 @@ export interface StaffLite {
 // Projekt und überlagert die Terminfelder; `id` ist die TERMIN-ID — dadurch sind
 // Keys/Lanes/Drag&Drop je Termin eindeutig, auch bei mehreren Terminen desselben
 // Projekts. termin_badge: Typ-Label (z.B. "Aufmass"), leer beim Standardfall.
-// termin_kind: roher Termin-Typ (aufmass/montage/service/sonstiges) für das
-// Typ-Symbol — nur bei Kundenprojekten gesetzt, interne Einsätze nutzen p.kind.
+// termin_kind: roher Termin-Typ (AppointmentKind, siehe api/admin/scheduling.ts)
+// für das Typ-Symbol — nur bei Kundenprojekten gesetzt, interne Einsätze nutzen
+// p.kind.
 export type CalendarEntry = Project & { termin_badge?: string; termin_kind?: string }
 
 // ─── Formatierung ────────────────────────────────────────────────────────────
@@ -196,9 +200,11 @@ export function pillClass(p: Project): string {
 
 // Kleines Typ-Symbol je Aufgaben-Art: Kundenprojekte nach Termin-Typ
 // (termin_kind), interne Einsätze nach Einsatz-Art (kind).
-const TERMIN_SYMBOLS: Record<string, string> = {
+export const TERMIN_SYMBOLS: Record<AppointmentKind, string> = {
   aufmass: '📐',
+  demontage: '🔩',
   montage: '🔧',
+  wiedermontage: '🔁',
   service: '🛠️',
   sonstiges: '📋',
 }
@@ -214,7 +220,13 @@ const KIND_SYMBOLS: Record<string, string> = {
 
 export function kindSymbol(p: CalendarEntry): string {
   if (p.kind && p.kind !== 'project') return KIND_SYMBOLS[p.kind] ?? ''
-  return TERMIN_SYMBOLS[p.termin_kind ?? 'montage'] ?? ''
+  return TERMIN_SYMBOLS[(p.termin_kind ?? DEFAULT_APPOINTMENT_KIND) as AppointmentKind] ?? ''
+}
+
+// Legende der Termin-Typen ("📐 Aufmass · 🔩 Demontage · …") — aus der Registry
+// abgeleitet, damit ein neuer Typ nicht in der Legende vergessen wird.
+export function terminLegend(): string {
+  return APPOINTMENT_KINDS.map(k => `${TERMIN_SYMBOLS[k]} ${APPOINTMENT_KIND_LABELS[k]}`).join(' · ')
 }
 
 // Optionale Zusatz-Zeilen auf der Kachel, gesteuert per Tenant-Config (scheduling_config.fields).

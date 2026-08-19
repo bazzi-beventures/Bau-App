@@ -7,7 +7,7 @@
 // ../projectAppointments.ts.
 
 import { useState } from 'react'
-import { AppointmentKind } from '../../../api/admin'
+import { AppointmentKind, APPOINTMENT_KIND_LABELS, APPOINTMENT_KINDS } from '../../../api/admin'
 import {
   AppointmentDraft, applyStartDate, draftTeamNames, draftTitle, emptyDraft, fmtDraftWhen,
   nextAppointment, todayISO,
@@ -120,10 +120,9 @@ export default function AppointmentsCard({ appointments, onChange, staff, projec
                         value={d.kind}
                         onChange={e => patch(d.key, { kind: e.target.value as AppointmentKind })}
                       >
-                        <option value="aufmass">Aufmass</option>
-                        <option value="montage">Montage</option>
-                        <option value="service">Service</option>
-                        <option value="sonstiges">Sonstiges</option>
+                        {APPOINTMENT_KINDS.map(k => (
+                          <option key={k} value={k}>{APPOINTMENT_KIND_LABELS[k]}</option>
+                        ))}
                       </select>
                     </div>
                     {d.kind === 'sonstiges' && (

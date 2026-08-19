@@ -11,6 +11,7 @@ import {
   VacationEntitlement,
 } from '../../api/chat'
 import { apiFetch, ApiError, isOfflineError } from '../../api/client'
+import { breakInputValue, correctionError, correctionIncomplete, parseBreakMinutes } from '../../api/correction'
 import BerichtScreen, { BerichtType } from '../../screens/BerichtScreen'
 import { useToast, ToastHost } from '../components/useToast'
 
@@ -201,6 +202,9 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
     reason: '',
   })
   const [corrLoading, setCorrLoading] = useState(false)
+  // Siehe api/correction.ts: eine Pause länger als die Anwesenheit landet sonst
+  // als 0-Minuten-Tag in der Session, ohne Fehlermeldung.
+  const corrError = correctionError(corrForm)
   const [pendingCorrection, setPendingCorrection] = useState<{ id: string; date: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -318,7 +322,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
   }
 
   async function handleCorrectionSubmit() {
-    if (!corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()) return
+    if (correctionIncomplete(corrForm) || correctionError(corrForm) !== null) return
     setCorrLoading(true)
     try {
       const res = await submitCorrectionRequest(corrForm)
@@ -337,6 +341,13 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
       if (isOfflineError(err)) msg = 'Keine Internetverbindung'
       else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
         msg = 'Für diesen Tag ist bereits eine Absenz genehmigt — keine Zeitkorrektur möglich.'
+      }
+      // 400 trägt vom Endpoint bereits deutschen Klartext (unplausible Zeiten).
+      // Einzige Ausnahme: `no_staff_linked` ist ein Code, keine Meldung.
+      else if (err instanceof ApiError && err.status === 400) {
+        msg = err.message === 'no_staff_linked'
+          ? 'Dein Konto ist keinem Mitarbeiter zugeordnet. Bitte beim Vorgesetzten melden.'
+          : err.message
       }
       showToast(msg, 'error')
     } finally {
@@ -563,8 +574,10 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
                 className="admin-form-input"
                 type="number"
                 min="0"
-                value={corrForm.break_minutes}
-                onChange={e => setCorrForm(f => ({ ...f, break_minutes: Number(e.target.value) }))}
+                inputMode="numeric"
+                placeholder="0"
+                value={breakInputValue(corrForm.break_minutes)}
+                onChange={e => setCorrForm(f => ({ ...f, break_minutes: parseBreakMinutes(e.target.value) }))}
               />
             </div>
             <div className="admin-form-group">
@@ -577,6 +590,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
                 onChange={e => setCorrForm(f => ({ ...f, reason: e.target.value }))}
               />
             </div>
+            {corrError && <div className="admin-form-error">{corrError}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
               <button
                 className="admin-btn admin-btn-secondary"
@@ -588,12 +602,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
               <button
                 className="admin-btn admin-btn-primary"
                 onClick={handleCorrectionSubmit}
-                disabled={
-                  corrLoading ||
-                  !corrForm.clock_in ||
-                  !corrForm.clock_out ||
-                  !corrForm.reason.trim()
-                }
+                disabled={corrLoading || correctionIncomplete(corrForm) || corrError !== null}
               >
                 {corrLoading ? '…' : 'Einreichen'}
               </button>

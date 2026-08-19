@@ -123,15 +123,21 @@ export function QuoteRowActions({ quote: q, flags, acting, on }: {
       )}
       {/* Auftragsbestätigung: bewusst ohne Feature-Flag — was der Kunde nach einer
           Zusage erwartet, darf nicht an einem Schalter hängen. Das Feature
-          `offerte_auftragsbestaetigung` schaltet nur den automatischen Versand. */}
-      {q.status === 'akzeptiert' && !q.order_confirmation_sent_at && (
+          `offerte_auftragsbestaetigung` schaltet nur den automatischen Versand.
+          Der Knopf bleibt nach dem Versand stehen (beschriftet als "erneut senden"):
+          falsche Adresse erwischt, beim Kunden nie angekommen, Kopie fürs Treuhandbüro
+          — vorher war die Bestätigung nach einem Klick für immer unerreichbar. Gegen
+          Doppelversand schützt weiter der Claim im Backend, nicht ein fehlender Knopf. */}
+      {q.status === 'akzeptiert' && (
         <button
           className="admin-btn admin-btn-secondary admin-btn-sm"
           onClick={() => on.onOrderConfirmation(q)}
           disabled={busy}
-          title="Auftragsbestätigung an den Kunden senden"
+          title={q.order_confirmation_sent_at
+            ? 'Auftragsbestätigung erneut an den Kunden senden'
+            : 'Auftragsbestätigung an den Kunden senden'}
         >
-          Auftragsbestätigung
+          {q.order_confirmation_sent_at ? 'AB erneut senden' : 'Auftragsbestätigung'}
         </button>
       )}
       {flags.absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (

@@ -7,14 +7,32 @@ import { apiFetch } from '../client'
 // Spec: docs/specs/einsatzplanung-mehrere-termine.md. Die Legacy-Felder auf dem
 // Projekt spiegeln serverseitig den Ersttermin.
 
-export type AppointmentKind = 'aufmass' | 'montage' | 'service' | 'sonstiges'
-
-export const APPOINTMENT_KIND_LABELS: Record<AppointmentKind, string> = {
+// ─── Termin-Typen ───────────────────────────────────────────
+// EINE Quelle der Wahrheit fürs Frontend (Pendant im Backend:
+// db/project_appointments.py APPOINTMENT_KIND_LABELS). Schlüssel = DB-Wert,
+// Wert = Anzeigename; die Reihenfolge ist die Reihenfolge im Dropdown und in
+// der Kalender-Legende und folgt dem Ablauf einer Baustelle
+// (Aufmass → Demontage → Montage → Wiedermontage → Service).
+// Wer hier einen Typ ergänzt, braucht keine weitere UI-Änderung — nur das
+// Typ-Symbol in admin/operative/scheduleShared.ts, die CHECK-Constraint der
+// Spalte `kind` (Migration) und die Backend-Registry.
+export const APPOINTMENT_KIND_LABELS = {
   aufmass: 'Aufmass',
+  demontage: 'Demontage',
   montage: 'Montage',
+  wiedermontage: 'Wiedermontage',
   service: 'Service',
   sonstiges: 'Sonstiges',
-}
+} as const
+
+export type AppointmentKind = keyof typeof APPOINTMENT_KIND_LABELS
+
+// Auswahlreihenfolge — für <option>-Listen und die Legende.
+export const APPOINTMENT_KINDS = Object.keys(APPOINTMENT_KIND_LABELS) as AppointmentKind[]
+
+// Normalfall eines Kundenprojekt-Termins (= DB-Default). Wird als Badge bewusst
+// nicht beschriftet, damit der Regelfall den Kalender nicht zupflastert.
+export const DEFAULT_APPOINTMENT_KIND: AppointmentKind = 'montage'
 
 export interface ProjectAppointment {
   id: string

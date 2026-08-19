@@ -38,6 +38,11 @@ export const REPORT_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] 
 // nur am Projekt.
 export const QUOTE_DOC_SECTIONS: { key: ProjectFileCategory; title: string }[] = [
   { key: 'offerte', title: 'Hochgeladene Offerten (Papier / Fremdsystem)' },
+  // Die versendeten Auftragsbestätigungen: das PDF legt der Versand-Knopf selbst hier
+  // ab (Backend: services/quote_order_confirmation_pdf.py). Bewusst kein eigener Reiter
+  // — die Auftragsbestätigung IST die angenommene Offerte, nur weitergeführt. Hochladen
+  // bleibt möglich (nachgereichte/unterschriebene Fassung).
+  { key: 'auftragsbestaetigung_kunde', title: 'Auftragsbestätigungen an den Kunden' },
 ]
 
 // Alle bekannten Kategorien über beide Tabs hinweg. Der legacyFallback der

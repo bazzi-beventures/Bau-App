@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
 import { ApiError, isNetworkError, isOfflineError } from '../api/client'
 import { drainActions, isQueueStuck, loadQueue, saveQueue } from '../api/zeitQueue'
+import { breakInputValue, correctionError, correctionIncomplete, parseBreakMinutes } from '../api/correction'
 import { BerichtType } from './BerichtScreen'
 
 interface Props {
@@ -158,6 +159,10 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
     date: today(), clock_in: '', clock_out: '', break_minutes: 0, reason: '',
   })
   const [corrLoading, setCorrLoading] = useState(false)
+  // Inhaltlicher Fehler im Antrag (Pause > Anwesenheit, Ausstempel vor
+  // Einstempel). Muss vor dem Absenden greifen: das Backend würde daraus bei
+  // der Genehmigung still 0 Arbeitsminuten machen.
+  const corrError = correctionError(corrForm)
   const [pendingCorrection, setPendingCorrection] = useState<{ id: string; date: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -187,7 +192,7 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
   }, [pendingCorrection])
 
   async function handleCorrectionSubmit() {
-    if (!corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()) return
+    if (correctionIncomplete(corrForm) || correctionError(corrForm) !== null) return
     setCorrLoading(true)
     setResult(null)
     try {
@@ -204,6 +209,14 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
       if (isOfflineError(err)) text = 'Keine Internetverbindung'
       else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
         text = 'Für diesen Tag ist bereits eine Absenz genehmigt — keine Zeitkorrektur möglich.'
+      }
+      // 400 trägt vom Endpoint bereits deutschen Klartext (unplausible Zeiten) —
+      // den zeigen statt ihn hinter der generischen Meldung zu verstecken.
+      // Einzige Ausnahme: `no_staff_linked` ist ein Code, keine Meldung.
+      else if (err instanceof ApiError && err.status === 400) {
+        text = err.message === 'no_staff_linked'
+          ? 'Dein Konto ist keinem Mitarbeiter zugeordnet. Bitte beim Vorgesetzten melden.'
+          : err.message
       }
       setResult({ text, isError: true })
     } finally {
@@ -468,8 +481,10 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
                 className="corr-input"
                 type="number"
                 min="0"
-                value={corrForm.break_minutes}
-                onChange={e => setCorrForm(f => ({ ...f, break_minutes: Number(e.target.value) }))}
+                inputMode="numeric"
+                placeholder="0"
+                value={breakInputValue(corrForm.break_minutes)}
+                onChange={e => setCorrForm(f => ({ ...f, break_minutes: parseBreakMinutes(e.target.value) }))}
               />
             </div>
             <div className="corr-row">
@@ -482,6 +497,7 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
                 onChange={e => setCorrForm(f => ({ ...f, reason: e.target.value }))}
               />
             </div>
+            {corrError && <div className="corr-error">{corrError}</div>}
             <div className="corr-actions">
               <button
                 className="corr-btn corr-btn-cancel"
@@ -493,7 +509,7 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
               <button
                 className="corr-btn corr-btn-submit"
                 onClick={handleCorrectionSubmit}
-                disabled={corrLoading || !corrForm.clock_in || !corrForm.clock_out || !corrForm.reason.trim()}
+                disabled={corrLoading || correctionIncomplete(corrForm) || corrError !== null}
               >
                 {corrLoading ? '…' : 'Einreichen'}
               </button>

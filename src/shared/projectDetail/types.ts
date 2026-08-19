@@ -64,12 +64,16 @@ export type ProjectFileCategory =
   | 'sonstiges'
   | 'angebot_lieferant'
   | 'bestellungen'
-  | 'auftragsbestaetigung'
+  | 'auftragsbestaetigung' // AB des LIEFERANTEN an uns (Lieferantendokument, admin-only)
   | 'lieferschein'
   | 'anhang'
   | 'prospekt' // Altbestand: frühere Kategorie der Offerten-Anhänge, wird unter 'anhang' angezeigt
   | 'rapport'  // eingescanntes Papier-Blatt oder Rapport aus einem Fremdsystem (z.B. Sorba)
   | 'offerte'  // eingescannte/externe Offerte, die nicht im System erstellt wurde
+  // UNSERE Auftragsbestätigung an den Kunden: das PDF, das der Versand-Knopf erzeugt
+  // und mitschickt (inhaltlich die Offerte). Steht im Offerten-Tab, weil es die
+  // Fortsetzung der Offerte ist — nicht zu verwechseln mit 'auftragsbestaetigung'.
+  | 'auftragsbestaetigung_kunde'
 
 export interface ProjectFile {
   id: string
@@ -89,12 +93,13 @@ export const CATEGORY_LABELS: Record<ProjectFileCategory, string> = {
   sonstiges: 'Sonstiges',
   angebot_lieferant: 'Angebote Lieferant',
   bestellungen: 'Bestellungen',
-  auftragsbestaetigung: 'Auftragsbestätigung',
+  auftragsbestaetigung: 'Auftragsbestätigung Lieferant',
   lieferschein: 'Lieferschein',
   anhang: 'Anhang',
   prospekt: 'Prospekt',
   rapport: 'Rapport',
   offerte: 'Offerte',
+  auftragsbestaetigung_kunde: 'Auftragsbestätigung',
 }
 
 // ─── Kommentare am Projekt ──────────────────────────────────

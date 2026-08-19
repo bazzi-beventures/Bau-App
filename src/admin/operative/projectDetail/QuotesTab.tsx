@@ -229,14 +229,17 @@ export function QuotesTab({
                               Dankeschön senden
                             </button>
                           )}
-                          {/* Kein Feature-Flag: siehe quotes/QuoteListParts.tsx */}
-                          {q.status === 'akzeptiert' && !q.order_confirmation_sent_at && (
+                          {/* Kein Feature-Flag, Knopf bleibt nach dem Versand stehen:
+                              siehe quotes/QuoteListParts.tsx */}
+                          {q.status === 'akzeptiert' && (
                             <button
                               className="admin-btn admin-btn-secondary admin-btn-sm"
                               onClick={() => onSendOrderConfirmation(q)}
-                              title="Auftragsbestätigung an den Kunden senden"
+                              title={q.order_confirmation_sent_at
+                                ? 'Auftragsbestätigung erneut an den Kunden senden'
+                                : 'Auftragsbestätigung an den Kunden senden'}
                             >
-                              Auftragsbestätigung
+                              {q.order_confirmation_sent_at ? 'AB erneut senden' : 'Auftragsbestätigung'}
                             </button>
                           )}
                           {absageEnabled && q.status === 'abgelehnt' && !q.rejection_mail_sent_at && (
@@ -289,10 +292,10 @@ export function QuotesTab({
         </div>
       )}
 
-      {/* Offerten, die nicht hier entstanden sind: die eingescannte Papier-Offerte,
-          eine aus einem Vorgängersystem oder die eines Drittanbieters. Bewusst hier
-          statt im Dokumente-Tab — und bewusst als Datei-Kategorie: solche Dokumente
-          haben keine Offerten-Zeile, an die man sie hängen könnte. */}
+      {/* Dokumente rund um die Offerte, die keine Offerten-Zeile haben: hochgeladene
+          Fremd-/Papier-Offerten und die versendeten Auftragsbestätigungen (das PDF
+          legt der Versand-Knopf selbst ab). Bewusst hier statt im Dokumente-Tab —
+          und bewusst als Datei-Kategorien statt als eigener Reiter. */}
       {onUploadFile && onDeleteFile && onRenameFile && (
         <div style={{ marginTop: 24 }}>
           <FileSections
