@@ -36,3 +36,31 @@ describe('UnsavedChangesDialog — Button-Anordnung', () => {
     expect(renderDialog(labels).className).toBe(renderDialog({ ...labels, saving: true }).className)
   })
 })
+
+// Über dem Projekt-Detail kann die Rapport-Maske offen sein. «Speichern» hiesse dort
+// entweder "das Formular darunter speichern" (wirkungslos) oder "einen halben Rapport
+// buchen" (ein Beleg mit Geldfolge) — der Knopf entfällt.
+describe('UnsavedChangesDialog — allowSave', () => {
+  it('zeigt Speichern standardmässig an', () => {
+    renderDialog()
+
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeInTheDocument()
+  })
+
+  it('blendet Speichern aus, lässt aber Verwerfen und Abbrechen stehen', () => {
+    renderDialog({ allowSave: false })
+
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Verwerfen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeInTheDocument()
+  })
+
+  it('rechnet den fehlenden Knopf bei der Anordnung heraus', () => {
+    // Ohne diese Korrektur stapelte die Zwei-Knopf-Fassung früher als nötig.
+    const labels = { saveLabel: 'Entwurf behalten', discardLabel: 'Entwurf verwerfen' }
+
+    expect(renderDialog(labels).className).toContain('admin-confirm-actions-stacked')
+    expect(renderDialog({ ...labels, allowSave: false }).className)
+      .not.toContain('admin-confirm-actions-stacked')
+  })
+})

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   addressLocality, crewMembers, crewShortLabels, hasUnassignedEntries,
-  neededDistancePairs, overlapConflictIds, pairKey, rowEntries, staffShortLabel,
+  neededDistancePairs, overlapConflictIds, pairKey, reassignTeam, rowEntries,
+  staffShortLabel,
 } from './scheduleShared'
 import type { CalendarEntry } from './scheduleShared'
 import type { Project } from '../../api/admin/projects'
@@ -220,5 +221,34 @@ describe('overlapConflictIds', () => {
       entry({ id: 'a' }),
       entry({ id: 'b' }),
     ])]).toEqual([])
+  })
+})
+
+describe('reassignTeam', () => {
+  // Lag bis 2026-08 wortgleich in beiden Drop-Handlern (Plantafel + Gantt) — ein
+  // Konflikt-/Team-Bugfix haette nur in einer Ansicht gewirkt.
+  it('tauscht Quell-Monteur gegen Ziel-Monteur', () => {
+    expect(reassignTeam(['a', 'b'], 'c', 'a')).toEqual(['b', 'c'])
+  })
+
+  it('laesst das Team unveraendert beim Drop in dieselbe Zeile', () => {
+    expect(reassignTeam(['a', 'b'], 'a', 'a')).toBeUndefined()
+  })
+
+  it('aendert nichts beim Drop in «Ohne Monteur»', () => {
+    expect(reassignTeam(['a'], null, 'a')).toBeUndefined()
+  })
+
+  it('fuegt hinzu, wenn der Einsatz aus der Sammelzeile kommt (kein Quell-Monteur)', () => {
+    expect(reassignTeam([], 'c', null)).toEqual(['c'])
+  })
+
+  it('dupliziert einen bereits zugewiesenen Ziel-Monteur nicht', () => {
+    expect(reassignTeam(['a', 'c'], 'c', 'a')).toEqual(['c'])
+  })
+
+  it('vertraegt fehlendes Team (null/undefined)', () => {
+    expect(reassignTeam(null, 'c', null)).toEqual(['c'])
+    expect(reassignTeam(undefined, 'c', 'a')).toEqual(['c'])
   })
 })

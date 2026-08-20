@@ -103,7 +103,18 @@ export async function disablePush(): Promise<void> {
   await sub.unsubscribe().catch(() => {})
 }
 
-export async function sendTestPush(): Promise<number> {
-  const res = (await apiFetch('/pwa/push/test', { method: 'POST' })) as { sent: number }
-  return res.sent
+export type TestPushResult = {
+  /** Anzahl Geräte, die die Test-Push JETZT bekommen haben. */
+  sent: number
+  /**
+   * true = zurückgehalten, weil der Nutzer nicht eingestempelt ist. Push geht
+   * beim nächsten Einstempeln raus (Einstempel-Regel, services/web_push_service.py).
+   * Wer das ignoriert und nur `sent` prüft, zeigt bei 0 fälschlich "geht nicht".
+   */
+  queued: boolean
+}
+
+export async function sendTestPush(): Promise<TestPushResult> {
+  const res = (await apiFetch('/pwa/push/test', { method: 'POST' })) as TestPushResult
+  return { sent: res.sent ?? 0, queued: Boolean(res.queued) }
 }

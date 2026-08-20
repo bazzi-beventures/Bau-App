@@ -6,6 +6,7 @@ import {
 import { isOfflineError } from '../../api/client'
 import { getMaterialsMeta } from '../../api/admin/materials'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ToastHost, useToast } from '../components/useToast'
 
 // Massen-VK-Erhöhung für EIGENE Materialien (Artikel ohne Lieferant).
 // Zwischenlösung, solange die Lieferanten-Preislisten noch nicht vollständig
@@ -34,7 +35,7 @@ export default function MaterialVkBulkPanel() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const { toast, showToast } = useToast()
 
   useEffect(() => {
     (async () => {
@@ -55,7 +56,6 @@ export default function MaterialVkBulkPanel() {
   const loadPreview = useCallback(async () => {
     if (!pctValid) return
     setLoading(true)
-    setToast(null)
     try {
       const res = await previewVkBulkIncrease(pctNum, category)
       setPreview(res)
@@ -63,7 +63,7 @@ export default function MaterialVkBulkPanel() {
       // Standard: alle anhebbaren Artikel vorausgewählt.
       setSelected(new Set(res.rows.filter(r => r.mode !== 'skip').map(r => r.art_nr)))
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung.' : 'Vorschau fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung.' : 'Vorschau fehlgeschlagen.', 'error')
     } finally {
       setLoading(false)
     }
@@ -87,7 +87,6 @@ export default function MaterialVkBulkPanel() {
   async function apply() {
     if (previewPct == null) return
     setSubmitting(true)
-    setToast(null)
     try {
       // Alle anhebbaren gewählt → Filter-Modus (umgeht das Auswahl-Limit); sonst
       // die explizite Auswahl. Der Server rechnet die Ziel-VK ohnehin frisch.
@@ -96,7 +95,7 @@ export default function MaterialVkBulkPanel() {
         : await applyVkBulkIncrease(previewPct, { artNrs: [...selected] })
       const parts = [`${res.updated} Artikel angehoben`]
       if (res.skipped) parts.push(`${res.skipped} übersprungen`)
-      setToast({ type: 'success', msg: parts.join(' · ') })
+      showToast(parts.join(' · '), 'success')
       setConfirmOpen(false)
       // Vorschau verwerfen statt neu laden: verhindert, dass die schon angehobenen
       // Preise versehentlich gleich noch einmal (+pct%) angewendet werden. Für eine
@@ -105,7 +104,7 @@ export default function MaterialVkBulkPanel() {
       setPreviewPct(null)
       setSelected(new Set())
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Aktion fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Aktion fehlgeschlagen.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -275,11 +274,7 @@ export default function MaterialVkBulkPanel() {
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

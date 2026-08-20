@@ -20,7 +20,7 @@ import { consumeBack } from './shared/backButton'
 import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
 import { clearDraft, loadDraft } from './chat/rapportDraft'
-import { discardPrompt, planRapportStart } from './chat/rapportStart'
+import { confirmLeaveRapport, discardPrompt, planRapportStart } from './chat/rapportStart'
 import { cancelReport } from './api/chat'
 
 type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen'
@@ -172,6 +172,29 @@ export default function App() {
     history.pushState(null, '', window.location.href)
   }, [screen])
 
+  // Verlassen des Rapport-Chats: erst fragen, wenn dort etwas offen ist.
+  //
+  // Der Guard sitzt hier und nicht im ChatScreen, aus zwei Gründen: Erstens laufen
+  // ALLE Ausgänge über diese Stelle (die Nav-Callbacks unten und der popstate-Handler
+  // darunter). Zweitens ist `useBackButton` dafür untauglich — `consumeBack()` POPPT
+  // den obersten Handler, ein dauerhaft aktiver Guard würde also genau einmal warnen
+  // und beim zweiten Zurück-Druck durchfallen.
+  //
+  // Der Entwurf kommt aus dem localStorage statt aus dem ChatScreen-State: dort steht
+  // er ohnehin (saveDraft läuft bei jeder Zustandsänderung), und `startRapport` unten
+  // liest ihn genauso. Zwischen der letzten Eingabe und dem Tippen auf «Home» liegen
+  // immer mehrere Frames — der gespeicherte Stand ist aktuell.
+  const leaveRapport = useCallback((next: () => void) => {
+    if (screenRef.current !== 'rapport') { next(); return }
+    const userId = user?.authorized_user_id ?? localStorage.getItem(SK.AUTHORIZED_USER_ID) ?? ''
+    if (confirmLeaveRapport(userId ? loadDraft(userId, Date.now()) : null)) next()
+  }, [user])
+
+  // Der popstate-Handler wird einmal registriert und sähe sonst dauerhaft die
+  // Fassung des ersten Renders (mit user === null).
+  const leaveRapportRef = useRef(leaveRapport)
+  useEffect(() => { leaveRapportRef.current = leaveRapport }, [leaveRapport])
+
   // Hardware/browser back button → navigate to home instead of closing the app
   useEffect(() => {
     const onPopState = () => {
@@ -181,7 +204,9 @@ export default function App() {
       if (consumeBack()) return
       const s = screenRef.current
       if (s !== 'home' && s !== 'admin' && s !== 'pin' && s !== 'login' && s !== 'loading') {
-        setScreen('home')
+        // Im Rapport-Chat erst die Rückfrage — der Hardware-Zurück ist dort der
+        // Ausgang, der am leichtesten aus Versehen getroffen wird.
+        leaveRapportRef.current(() => setScreen('home'))
       }
     }
     window.addEventListener('popstate', onPopState)
@@ -325,8 +350,13 @@ export default function App() {
       </svg>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{pushMsg.title}</div>
+        {/* pre-line: Sammel-Push und Morgen-Briefing schicken eine Aufzählung
+            mit \n. Ohne das würde daraus "• A • B • C" auf einer Zeile. */}
         {pushMsg.body && (
-          <div style={{ fontSize: '0.85rem', marginTop: 2, opacity: 0.95, wordBreak: 'break-word' }}>
+          <div style={{
+            fontSize: '0.85rem', marginTop: 2, opacity: 0.95,
+            wordBreak: 'break-word', whiteSpace: 'pre-line',
+          }}>
             {pushMsg.body}
           </div>
         )}
@@ -436,10 +466,13 @@ export default function App() {
         initialMessage={rapportInitialMessage}
         initialProject={rapportInitialProject}
         onInitialMessageConsumed={() => { setRapportInitialMessage(null); setRapportInitialProject(null) }}
-        onNavHome={() => setScreen('home')}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
-        onNavProjekte={() => setScreen('projekte')}
-        onNavProfile={() => setScreen('profile')}
+        // Jeder Ausgang läuft durch die Rückfrage (leaveRapport). onLoggedOut NICHT:
+        // das ist kein Weggehen, sondern die abgelaufene Sitzung (401) — dort gibt es
+        // nichts mehr zu entscheiden, und der Entwurf überlebt den Login ohnehin.
+        onNavHome={() => leaveRapport(() => setScreen('home'))}
+        onNavArbeitszeit={() => leaveRapport(() => setScreen('arbeitszeit'))}
+        onNavProjekte={() => leaveRapport(() => setScreen('projekte'))}
+        onNavProfile={() => leaveRapport(() => setScreen('profile'))}
         onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
       />
     )

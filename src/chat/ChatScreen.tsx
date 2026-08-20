@@ -10,6 +10,7 @@ import KleinmaterialPrompt, { KleinmaterialSelection } from './KleinmaterialProm
 import ErsatzteilPrompt, { ErsatzteilSelection } from './ErsatzteilPrompt'
 import LeistungsartPrompt, { WORK_TYPES } from './LeistungsartPrompt'
 import { loadDraft, saveDraft } from './rapportDraft'
+import { LeaveWarning, rapportLeaveWarning } from './rapportStart'
 
 interface Message {
   id: number
@@ -103,19 +104,41 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const [deletingReport, setDeletingReport] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  // Der Zwischenstand als ein Objekt: er wird gespeichert (unten) UND bewertet
+  // (beforeunload). Zwei Fassungen davon würden auseinanderlaufen, sobald jemand ein
+  // Feld ergänzt.
+  const draftState = {
+    messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
+    summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
+    pendingSignReportId, downloadReportId, reportSigned,
+    workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject,
+  }
+
   // Rapport-Zwischenstand persistieren, sobald sich relevanter State ändert.
   // Leere Zustände (nur Begrüssung) löschen den Draft automatisch (siehe saveDraft).
   useEffect(() => {
-    saveDraft(user.authorized_user_id, {
-      messages, kleinCollected, ersatzCollected, collectedKlein, collectedErsatz,
-      summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
-      pendingSignReportId, downloadReportId, reportSigned,
-      workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject,
-    }, Date.now())
+    saveDraft(user.authorized_user_id, draftState, Date.now())
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
       collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId, reportSigned,
       workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject])
+
+  // Reload und Tab-schliessen: der Browser fragt selbst nach, solange ein Rapport
+  // offen ist. Best effort und mit zwei Einschränkungen — der Text ist der des
+  // Browsers (nicht beeinflussbar), und in der INSTALLIERTEN PWA feuert das Ereignis
+  // je nach System gar nicht. Der verlässliche Weg ist die Rückfrage in App.tsx
+  // (Nav-Kacheln, Zurück-Pfeil, Android-Zurück); das hier deckt Desktop und Reload ab.
+  const leaveWarningRef = useRef<LeaveWarning | null>(null)
+  useEffect(() => { leaveWarningRef.current = rapportLeaveWarning(draftState) })
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!leaveWarningRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // Nach abgeschlossenem Rapport (PDF geschlossen) auf einen frischen Stand
   // zurücksetzen — das löscht zugleich den Draft, weil der Zustand wieder leer ist.

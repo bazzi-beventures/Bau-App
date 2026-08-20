@@ -14,11 +14,27 @@ export interface AdditionalEmail {
   label: string | null
 }
 
+// Anrede im Kundenstamm (Migration 20260820b). Gespeichert wird der Schlüssel,
+// angezeigt und gedruckt das Label. Die Liste muss zu db.customers.SALUTATION_LABELS
+// passen: die Spalte trägt einen CHECK, ein hier erfundener Wert kommt als 400
+// zurück. NULL/'' = keine Anrede — der Normalfall bei Firmen und Verwaltungen.
+export const SALUTATIONS = [
+  { value: 'herr', label: 'Herr' },
+  { value: 'frau', label: 'Frau' },
+] as const
+
+/** Druckform einer gespeicherten Anrede; unbekannt/leer ergibt '' (Zeile fällt weg). */
+export function salutationLabel(value: string | null | undefined): string {
+  return SALUTATIONS.find(s => s.value === value)?.label ?? ''
+}
+
 // Die Antwort trägt mehr Spalten als hier stehen (z.B. invoice_delivery,
 // print_notes) — aufgeführt ist, was die PWA verwendet.
 export interface Customer {
   id: string
   name: string
+  /** 'herr' | 'frau' | null — Schlüssel, nicht Druckform (siehe salutationLabel). */
+  salutation: string | null
   company: string | null
   email: string | null
   additional_emails: AdditionalEmail[] | null
@@ -49,6 +65,8 @@ export interface CustomersListResponse {
 // Entwurfs-Umwandlung legt einen Kunden mit vier Feldern an.
 export interface CustomerInput {
   name: string
+  // null leert die Anrede wieder (dreiwertige PATCH-Semantik im Backend).
+  salutation?: string | null
   company?: string | null
   email?: string | null
   // Immer mitsenden (auch []), wenn das Formular sie kennt — sonst kommt das

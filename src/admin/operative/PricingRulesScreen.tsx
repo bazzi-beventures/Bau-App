@@ -5,6 +5,7 @@ import { deletePricingRule, listPricingRules, savePricingRule } from '../../api/
 import type { PricingRule } from '../../api/admin/pricingRules'
 import { listSuppliers } from '../../api/admin/suppliers'
 import type { Supplier } from '../../api/admin/suppliers'
+import { ToastHost, useToast } from '../components/useToast'
 
 interface EditState {
   supplier_name: string
@@ -22,7 +23,7 @@ export default function PricingRulesScreen() {
   const [customCategory, setCustomCategory] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast } = useToast()
 
   async function load() {
     setLoading(true)
@@ -76,8 +77,7 @@ export default function PricingRulesScreen() {
         markup_pct: parseFloat(form.markup_pct),
       }, isEdit ? (editing as PricingRule).id : undefined)
       setEditing(null)
-      setToast('Preisregel gespeichert')
-      setTimeout(() => setToast(null), 3000)
+      showToast('Preisregel gespeichert')
       load()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler')
@@ -98,8 +98,7 @@ export default function PricingRulesScreen() {
     try {
       await deletePricingRule(rule.id)
       setEditing(null)
-      setToast('Preisregel gelöscht')
-      setTimeout(() => setToast(null), 3000)
+      showToast('Preisregel gelöscht')
       load()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fehler')
@@ -257,11 +256,7 @@ export default function PricingRulesScreen() {
         </div>
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className="admin-toast success">{toast}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

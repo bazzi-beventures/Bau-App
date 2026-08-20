@@ -4,6 +4,7 @@ import {
   StaffMember, BulkClockInStatus,
 } from '../../api/admin'
 import { isOfflineError } from '../../api/client'
+import { ToastHost, useToast } from '../components/useToast'
 
 function nowHHMM(): string {
   const d = new Date()
@@ -30,7 +31,7 @@ export default function BulkClockInScreen() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [results, setResults] = useState<Record<string, BulkClockInStatus>>({})
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const { toast, showToast } = useToast()
 
   async function load() {
     setLoading(true)
@@ -39,7 +40,7 @@ export default function BulkClockInScreen() {
       setStaff(list.filter(s => s.is_active))
       setClockedIn(new Set(status.clocked_in_staff_ids))
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung.' : 'Laden fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung.' : 'Laden fehlgeschlagen.', 'error')
     } finally {
       setLoading(false)
     }
@@ -69,7 +70,6 @@ export default function BulkClockInScreen() {
   async function handleSubmit() {
     if (selected.size === 0 || !time) return
     setSubmitting(true)
-    setToast(null)
     try {
       const res = await bulkClockIn([...selected], time)
       const map: Record<string, BulkClockInStatus> = {}
@@ -79,13 +79,13 @@ export default function BulkClockInScreen() {
       if (res.already) parts.push(`${res.already} bereits eingestempelt`)
       if (res.errors) parts.push(`${res.errors} Fehler`)
       if (res.push_sent) parts.push(`${res.push_sent} Push gesendet`)
-      setToast({ type: res.errors ? 'error' : 'success', msg: parts.join(' · ') })
+      showToast(parts.join(' · '), res.errors ? 'error' : 'success')
       setSelected(new Set())
       // Status neu laden, damit frisch Eingestempelte ausgegraut erscheinen.
       const status = await getClockStatus()
       setClockedIn(new Set(status.clocked_in_staff_ids))
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Einstempeln fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Einstempeln fehlgeschlagen.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -181,11 +181,7 @@ export default function BulkClockInScreen() {
         )}
       </div>
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

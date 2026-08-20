@@ -303,6 +303,9 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
         <UnsavedChangesDialog
           saving={savingPendingNav}
           message="Auf dieser Seite gibt es Änderungen, die noch nicht gespeichert sind."
+          // Manche Masken lassen sich von hier aus nicht sinnvoll speichern (offene
+          // Rapport-Maske über dem Projekt-Detail) — dann bleiben Verwerfen/Zurück.
+          allowSave={dirtyGuard()?.canSave?.() !== false}
           onSave={savePendingNav}
           onDiscard={commitPendingNav}
           onCancel={() => setPendingNav(null)}

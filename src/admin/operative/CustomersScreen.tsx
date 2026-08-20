@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  addCustomerComment, checkCustomerName, deleteCustomer, deleteCustomerComment,
-  getCustomerComments, listCustomers, saveCustomer, updateCustomerComment,
+  SALUTATIONS, addCustomerComment, checkCustomerName, deleteCustomer, deleteCustomerComment,
+  getCustomerComments, listCustomers, salutationLabel, saveCustomer, updateCustomerComment,
 } from '../../api/admin/customers'
 import type {
   AdditionalEmail, Customer, CustomerComment, CustomerNameMatch, CustomersListResponse,
@@ -211,6 +211,9 @@ function CustomerForm({
 }) {
   const isNew = !initial
   const [name, setName] = useState(initial?.name ?? '')
+  // Anrede: '' = keine (Firmen, Verwaltungen). Gehalten wird der Schlüssel
+  // ('herr'/'frau'), nicht die Druckform — die baut das PDF selbst.
+  const [salutation, setSalutation] = useState(initial?.salutation ?? '')
   const [company, setCompany] = useState(initial?.company ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
   // Zusatzadressen: Formular-Zeilen (Label + Adresse); leere Zeilen filtert der Submit.
@@ -277,6 +280,9 @@ function CustomerForm({
     try {
       await saveCustomer({
         name: name.trim(),
+        // null statt '' — der Server macht daraus ein echtes Leeren des Feldes,
+        // '' verstiesse gegen den CHECK auf der Spalte.
+        salutation: salutation || null,
         company: company.trim() || null,
         email: email || null,
         // Immer senden (auch []), damit Entfernen aller Zusatzadressen gespeichert wird.
@@ -335,15 +341,38 @@ function CustomerForm({
         </div>
         <div className="admin-form-row">
           <div className="admin-form-group">
-            <label className="admin-form-label" htmlFor="customer-name">Name *</label>
-            <input
-              id="customer-name"
-              className="admin-form-input"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
-              aria-describedby={nameMatches.length > 0 ? 'customer-name-duplicates' : undefined}
-            />
+            {/* Anrede und Name in EINER Zeile: die Anrede gehört zum Namen und
+                steht im Empfängerblock von Offerte und Rechnung direkt über ihm.
+                Flex statt einer eigenen admin-form-row, damit der Dubletten-
+                Hinweis unten am Namensfeld hängen bleibt und die Anrede nicht
+                die halbe Zeilenbreite bekommt. */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: '0 0 110px' }}>
+                <label className="admin-form-label" htmlFor="customer-salutation">Anrede</label>
+                <select
+                  id="customer-salutation"
+                  className="admin-form-input"
+                  value={salutation}
+                  onChange={e => setSalutation(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {SALUTATIONS.map(s => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label className="admin-form-label" htmlFor="customer-name">Name *</label>
+                <input
+                  id="customer-name"
+                  className="admin-form-input"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  aria-describedby={nameMatches.length > 0 ? 'customer-name-duplicates' : undefined}
+                />
+              </div>
+            </div>
             {nameMatches.length > 0 && (
               <div className="admin-form-hint-warn" role="status" id="customer-name-duplicates">
                 <div className="admin-form-hint-lead">
@@ -620,7 +649,14 @@ export default function CustomersScreen() {
                 renderCard={c => (
                   <>
                     <div className="admin-card-head">
-                      <span className="admin-card-title">{c.name}</span>
+                      <span className="admin-card-title">
+                        {salutationLabel(c.salutation) && (
+                          <span style={{ fontWeight: 400, color: 'var(--muted)' }}>
+                            {salutationLabel(c.salutation)}{' '}
+                          </span>
+                        )}
+                        {c.name}
+                      </span>
                       {c.company && <span className="admin-card-meta">{c.company}</span>}
                     </div>
                     {(c.email || c.phone) && (
@@ -660,7 +696,17 @@ export default function CustomersScreen() {
               <tbody>
                 {rows.map(c => (
                   <tr key={c.id} onClick={() => setEditing(c)}>
-                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    {/* Anrede als gedämpftes Präfix statt eigener Spalte — die
+                        Tabelle hat schon sieben, und die Anrede ist ohne den
+                        Namen daneben sinnlos. */}
+                    <td style={{ fontWeight: 500 }}>
+                      {salutationLabel(c.salutation) && (
+                        <span style={{ fontWeight: 400, color: 'var(--muted)' }}>
+                          {salutationLabel(c.salutation)}{' '}
+                        </span>
+                      )}
+                      {c.name}
+                    </td>
                     <td style={{ color: 'var(--muted)' }}>{c.company ?? '—'}</td>
                     <td style={{ color: 'var(--muted)' }}>
                       {c.email ?? '—'}

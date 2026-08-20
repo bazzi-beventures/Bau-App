@@ -41,4 +41,18 @@ describe('unsavedChanges-Registry', () => {
     expect(await dirtyGuard()!.save()).toBe(false)
     expect(save).toHaveBeenCalledOnce()
   })
+
+  // Ein Guard ohne canSave ist der Normalfall (Maske speichert sich selbst) — die
+  // Abfrage muss dann weiterhin «Speichern» anbieten.
+  it('behandelt einen Guard ohne canSave als speicherbar', () => {
+    registerUnsavedChangesGuard({ isDirty: () => true, save: async () => true })
+    expect(dirtyGuard()?.canSave?.() !== false).toBe(true)
+  })
+
+  it('reicht ein canSave=false durch', () => {
+    registerUnsavedChangesGuard({
+      isDirty: () => true, save: async () => true, canSave: () => false,
+    })
+    expect(dirtyGuard()?.canSave?.() !== false).toBe(false)
+  })
 })

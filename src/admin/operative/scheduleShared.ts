@@ -387,6 +387,29 @@ export function overlapConflictIds(entries: CalendarEntry[]): Set<string> {
   return out
 }
 
+/**
+ * Team nach einem Zeilenwechsel per Drag&Drop: Quell-Monteur raus, Ziel-Monteur rein.
+ *
+ * Gibt `undefined` zurück, wenn das Team unverändert bleibt — der Aufrufer schickt
+ * dann nur den Tages-/Zeitversatz. Das ist der Fall bei einem Drop in dieselbe Zeile
+ * und bei einem Drop in die Sammelzeile «Ohne Monteur» (`targetRowId === null`):
+ * dort ist niemand zugewiesen, also gibt es auch niemanden hinzuzufügen.
+ *
+ * Lag bis 2026-08 wortgleich in beiden Drop-Handlern (Plantafel und Gantt) — ein
+ * Bugfix hätte nur in einer Ansicht gewirkt. Dieselbe Begründung wie bei
+ * `rowEntries`/`overlapConflictIds` (Ur-Spec §4.5, dort als `reassignTeam` benannt).
+ */
+export function reassignTeam(
+  currentTeam: string[] | null | undefined,
+  targetRowId: string | null,
+  sourceRowId: string | null,
+): string[] | undefined {
+  if (!targetRowId || targetRowId === sourceRowId) return undefined
+  const team = (currentTeam || []).filter(id => id !== sourceRowId)
+  if (!team.includes(targetRowId)) team.push(targetRowId)
+  return team
+}
+
 export const PAIR_SEP = '\u0001'
 
 export function pairKey(a: string | null | undefined, b: string | null | undefined): string | null {

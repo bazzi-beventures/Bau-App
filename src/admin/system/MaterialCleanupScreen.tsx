@@ -7,6 +7,7 @@ import { isOfflineError } from '../../api/client'
 import { getMaterialsMeta } from '../../api/admin/materials'
 import { listSuppliers } from '../../api/admin/suppliers'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ToastHost, useToast } from '../components/useToast'
 
 // SAP-klassische Status-Benennung — an EINER Stelle, damit der Begriff
 // später in einer Zeile austauschbar bleibt (z.B. auf 'Gesperrt').
@@ -47,7 +48,7 @@ export default function MaterialCleanupScreen() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [confirm, setConfirm] = useState<{ targetActive: boolean } | null>(null)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const { toast, showToast } = useToast()
 
   // Lieferanten + Kategorien für die Filter-Dropdowns.
   useEffect(() => {
@@ -77,7 +78,7 @@ export default function MaterialCleanupScreen() {
       })
       setScan(res)
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung.' : 'Scan fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung.' : 'Scan fehlgeschlagen.', 'error')
     } finally {
       setLoading(false)
     }
@@ -129,7 +130,6 @@ export default function MaterialCleanupScreen() {
 
   async function applyStatus(targetActive: boolean) {
     setSubmitting(true)
-    setToast(null)
     try {
       const res = allFiltered
         ? await bulkSetMaterialStatusAll(
@@ -138,13 +138,13 @@ export default function MaterialCleanupScreen() {
         : await bulkSetMaterialStatus([...selected], targetActive)
       const parts = [`${res.updated} aktualisiert`]
       if (res.skipped_blocked) parts.push(`${res.skipped_blocked} gesperrt übersprungen`)
-      setToast({ type: 'success', msg: parts.join(' · ') })
+      showToast(parts.join(' · '), 'success')
       setSelected(new Set())
       setAllFiltered(false)
       setConfirm(null)
       await load()
     } catch (e) {
-      setToast({ type: 'error', msg: isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Aktion fehlgeschlagen.' })
+      showToast(isOfflineError(e) ? 'Keine Verbindung — bitte erneut versuchen.' : 'Aktion fehlgeschlagen.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -378,11 +378,7 @@ export default function MaterialCleanupScreen() {
         />
       )}
 
-      {toast && (
-        <div className="admin-toast-container">
-          <div className={`admin-toast ${toast.type}`}>{toast.msg}</div>
-        </div>
-      )}
+      <ToastHost toast={toast} />
     </div>
   )
 }

@@ -2,6 +2,13 @@
 // inaktive Rechnungen zählen deshalb nicht mit, bezahlte ohnehin nicht.
 // Grundlage für die Offen-Summe in der Rechnungsübersicht und für den Hinweis
 // beim Projektabschluss.
+//
+// ⚠️ Zweite Wahrheit im Backend: `db/invoices.py::OPEN_INVOICE_STATUSES` führt
+// dieselbe Liste (dort entscheidet sie, welche Rechnungen beim Neu-Generieren
+// archiviert werden). Beide gehen über denselben API-Vertrag — wer hier einen
+// Status ergänzt, muss ihn dort nachziehen, sonst zählt diese Übersicht anders
+// als der Server archiviert. Ein geteiltes Schema gibt es (noch) nicht; bis
+// dahin sind diese zwei Kommentare der Anker.
 const OPEN_INVOICE_STATUSES = ['ausstehend', 'offen', 'gesendet']
 
 export function isInvoiceOpen(status: string | null | undefined): boolean {

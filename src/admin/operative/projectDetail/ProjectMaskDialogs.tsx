@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { backdropCloseProps } from '../../../shared/backdropClose'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { QuoteCreateForm } from '../quotes/QuoteCreateForm'
@@ -35,6 +35,7 @@ export function ProjectMaskDialogs({
   showQuoteForm, onQuoteDone, onQuoteCancel,
   showReportForm, editReportId, onReportDone, onReportCancel,
   editQuote, onEditQuoteDone, onEditQuoteClose,
+  reportDirtyRef,
 }: {
   project: Project
   staff: StaffMember[]
@@ -51,6 +52,16 @@ export function ProjectMaskDialogs({
   editQuote: QuoteDetail | null
   onEditQuoteDone: (warning?: string) => void
   onEditQuoteClose: () => void
+  /**
+   * Ref des Aufrufers, in die der Dirty-Stand der Rapport-Maske gespiegelt wird.
+   *
+   * Der Projekt-Detail meldet dem globalen Guard (`admin/unsavedChanges`) sonst nur
+   * sein eigenes Formular — ein Klick in der Sidebar warf eine offene, halb
+   * ausgefüllte Rapport-Maske ersatzlos weg. Eine Ref statt eines State-Callbacks aus
+   * demselben Grund wie unten: jeder Tastendruck in der Maske würde sonst den ganzen
+   * Screen neu rendern.
+   */
+  reportDirtyRef?: React.MutableRefObject<boolean>
 }) {
   // Die Bearbeiten-Maske kennt keinen localStorage-Entwurf — geaenderte
   // Positionen leben nur in ihrem State. Sie meldet ueber onDirtyChange, ob
@@ -72,14 +83,20 @@ export function ProjectMaskDialogs({
   // Rapport erfassen/bearbeiten: gleiches Muster wie die Offerten-Bearbeitung
   // unten. ✕/Esc/Android-Zurueck der Maske laufen ueber requestReportClose und
   // damit durch DIESELBE Rueckfrage wie der Backdrop-Klick.
-  const reportDirty = useRef(false)
+  const ownReportDirty = useRef(false)
+  // Die Ref des Aufrufers gewinnt, damit der globale Guard denselben Stand sieht.
+  const reportDirty = reportDirtyRef ?? ownReportDirty
   const [confirmReportDiscard, setConfirmReportDiscard] = useState(false)
-  const markReportDirty = useCallback((dirty: boolean) => { reportDirty.current = dirty }, [])
+  const markReportDirty = useCallback((dirty: boolean) => { reportDirty.current = dirty }, [reportDirty])
   const closeReport = useCallback(() => {
     setConfirmReportDiscard(false)
     reportDirty.current = false
     onReportCancel()
-  }, [onReportCancel])
+  }, [onReportCancel, reportDirty])
+  // Verschwindet die Maske auf einem anderen Weg (Projekt-Detail schliesst), darf der
+  // gemeldete Dirty-Stand nicht stehen bleiben — sonst fragt die nächste Navigation
+  // nach einer Maske, die es nicht mehr gibt.
+  useEffect(() => () => { reportDirty.current = false }, [reportDirty])
   const requestReportClose = useCallback(() => {
     if (reportDirty.current) setConfirmReportDiscard(true)
     else closeReport()

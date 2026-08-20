@@ -12,8 +12,8 @@ import {
   CalendarEntry, StaffLite,
   addressLocality, crewShortLabels, useHoverCard, entryTitle, fmtTimeRange,
   hasUnassignedEntries, kindSymbol, neededDistancePairs, overlapConflictIds,
-  pillBg, pillClass, projectCoversDay, readDragPayload, rowEntries, setDragPayload,
-  useScheduleDistances,
+  pillBg, pillClass, projectCoversDay, readDragPayload, reassignTeam, rowEntries,
+  setDragPayload, useScheduleDistances,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
 import { diffDays, isToday, toDateStr } from '../utils/calendarHelpers'
@@ -153,15 +153,10 @@ export default function ProjectScheduleGantt({
     // Raster sinnvoll setzen könnte.
     const time = proj.start_time ? xToSnappedTime(x, startHour, endHour, hourW) : undefined
 
-    const srcRow = payload.sourceRowId || null
-    // Zeilenwechsel = Umzuweisung: Quell-Monteur raus, Ziel-Monteur rein.
-    // Drop in «Ohne Monteur» ändert das Team nicht (nur Zeit/Tag).
-    let newTeam: string[] | undefined
-    if (rowId && rowId !== srcRow) {
-      const team = (proj.monteur_ids || []).filter(id => id !== srcRow)
-      if (!team.includes(rowId)) team.push(rowId)
-      newTeam = team
-    }
+    // Zeilenwechsel = Umzuweisung (geteilt mit der Plantafel, siehe reassignTeam):
+    // Quell-Monteur raus, Ziel-Monteur rein. Drop in «Ohne Monteur» ändert das
+    // Team nicht — dann bleiben nur Zeit/Tag.
+    const newTeam = reassignTeam(proj.monteur_ids, rowId, payload.sourceRowId || null)
     const timeChanged = time !== undefined && time !== (proj.start_time ?? '').slice(0, 5)
     if (delta !== 0 || newTeam || timeChanged) onReschedule(proj.id, delta, time, newTeam)
   }

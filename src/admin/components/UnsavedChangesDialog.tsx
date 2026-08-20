@@ -17,6 +17,13 @@ interface UnsavedChangesDialogProps {
   savingLabel?: string
   discardLabel?: string
   cancelLabel?: string
+  /**
+   * `false` blendet den Speichern-Knopf aus — dann bleiben Verwerfen und Zurück.
+   * Für Masken, in denen «Speichern» nichts Sinnvolles täte: über dem Projekt-Detail
+   * kann die Rapport-Maske offen sein, und die speichert dieser Dialog nicht (er
+   * speicherte das Formular darunter).
+   */
+  allowSave?: boolean
 }
 
 /**
@@ -35,6 +42,7 @@ export function UnsavedChangesDialog({
   savingLabel = 'Speichern…',
   discardLabel = 'Verwerfen',
   cancelLabel = 'Abbrechen',
+  allowSave = true,
 }: UnsavedChangesDialogProps) {
   // Drei Buttons nebeneinander passen nur, solange die Beschriftungen kurz sind:
   // von der 380px-Box bleiben nach Polstern und Abständen rund 200px für Text,
@@ -46,7 +54,8 @@ export function UnsavedChangesDialog({
   // daneben, ist das Ergebnis nur weniger hübsch — herausragen kann nichts
   // mehr, das fängt flex-wrap im CSS ab.
   const labelChars =
-    cancelLabel.length + discardLabel.length + Math.max(saveLabel.length, savingLabel.length)
+    cancelLabel.length + discardLabel.length
+    + (allowSave ? Math.max(saveLabel.length, savingLabel.length) : 0)
   const stacked = labelChars > 36
 
   useEffect(() => {
@@ -77,9 +86,11 @@ export function UnsavedChangesDialog({
           <button className="admin-btn admin-btn-danger" onClick={onDiscard} disabled={saving}>
             {discardLabel}
           </button>
-          <button className="admin-btn admin-btn-primary" onClick={onSave} disabled={saving}>
-            {saving ? savingLabel : saveLabel}
-          </button>
+          {allowSave && (
+            <button className="admin-btn admin-btn-primary" onClick={onSave} disabled={saving}>
+              {saving ? savingLabel : saveLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>

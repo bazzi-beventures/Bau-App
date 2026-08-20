@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { reopenProject, saveProjectForm, setProjectStatus } from '../../api/admin/projects'
 import { getAdminStaff } from '../../api/admin/staff'
 import { getAllCustomers } from '../../api/admin/customers'
@@ -234,11 +234,22 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     onSaved(null)
   }
 
+  // Dirty-Stand der Rapport-Maske (Overlay über diesem Screen). Er gehört in den
+  // globalen Guard: sonst wirft ein Klick in der Sidebar eine offene, halb
+  // ausgefüllte Rapport-Maske ersatzlos weg — ✕/Esc/Backdrop fragen längst nach,
+  // die Navigation nicht.
+  const reportMaskDirty = useRef(false)
+
   // Navigation über Sidebar/MobileNav: die Maske speichert nur, das Wegnavigieren
   // übernimmt der Aufrufer (AdminApp).
   useUnsavedChangesGuard(
-    () => form.isDirty,
+    () => form.isDirty || reportMaskDirty.current,
     async () => (await form.persist()) !== false,
+    // Bei offener Rapport-Maske bietet die Abfrage kein «Speichern» an: sie würde
+    // das Projektformular darunter speichern, nicht den Rapport — und einen halb
+    // ausgefüllten Rapport zu buchen wäre schlimmer als der Verlust (er ist ein
+    // Beleg mit Geldfolge).
+    () => !reportMaskDirty.current,
   )
 
   async function handleClose() {
@@ -384,6 +395,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           editReportId={editReportId}
           onReportDone={() => { closeReportForm(); billing.reloadReports() }}
           onReportCancel={closeReportForm}
+          reportDirtyRef={reportMaskDirty}
           editQuote={editQuote}
           onEditQuoteDone={warning => { billing.reloadQuotes(); if (warning) showToast(warning) }}
           onEditQuoteClose={() => setEditQuote(null)}

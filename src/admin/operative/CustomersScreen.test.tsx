@@ -123,3 +123,51 @@ describe('CustomersScreen — Dubletten-Hinweis', () => {
     expect(screen.getByText('Speichern')).toBeEnabled()
   })
 })
+
+// Anrede (Migration 20260820b): gespeichert wird der Schlüssel, nicht die
+// Druckform — die baut das PDF selbst (db.customers.salutation_label).
+describe('CustomersScreen — Anrede', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  function savedCustomerPayload() {
+    const call = mockFetch.mock.calls.find(
+      c => (c[0] as string) === '/pwa/admin/customers' && (c[1] as RequestInit)?.method === 'POST',
+    )
+    return JSON.parse((call![1] as RequestInit).body as string)
+  }
+
+  it('schickt den gewählten Schlüssel mit', async () => {
+    routeFetch([])
+    const input = await openNewCustomerForm()
+    fireEvent.change(input, { target: { value: 'Hans Müller' } })
+    fireEvent.change(screen.getByLabelText('Anrede'), { target: { value: 'herr' } })
+    fireEvent.click(screen.getByText('Speichern'))
+
+    await waitFor(() => expect(savedCustomerPayload().salutation).toBe('herr'))
+  })
+
+  it('schickt null statt Leerstring, wenn keine Anrede gewählt ist', async () => {
+    // '' verstiesse gegen customers_salutation_check; null leert das Feld sauber.
+    routeFetch([])
+    const input = await openNewCustomerForm()
+    fireEvent.change(input, { target: { value: 'Huber GmbH' } })
+    fireEvent.click(screen.getByText('Speichern'))
+
+    await waitFor(() => expect(savedCustomerPayload().salutation).toBeNull())
+  })
+
+  it('zeigt die Druckform in der Liste vor dem Namen', async () => {
+    mockFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/pwa/admin/customers/list')) {
+        return { ...EMPTY_LIST, rows: [{ ...MUELLER, salutation: 'herr' }], total: 1 }
+      }
+      return { matches: [] }
+    })
+    render(<CustomersScreen />)
+    expect(await screen.findByText('Herr')).toBeInTheDocument()
+    expect(screen.getByText('Hans Müller')).toBeInTheDocument()
+  })
+})

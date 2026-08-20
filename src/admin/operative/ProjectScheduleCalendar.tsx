@@ -23,8 +23,8 @@ import ProjectScheduleGantt from './ProjectScheduleGantt'
 import {
   crewMembers, entryTitle, fmtTime, fmtTimeRange, hasUnassignedEntries, kindSymbol,
   neededDistancePairs, overlapConflictIds, pillBg, pillClass, pillExtraLines,
-  projectCoversDay, projectMonteurNames, readDragPayload, rowEntries, scheduledDayIsoSet,
-  setDragPayload, terminLegend, useHoverCard, useScheduleDistances,
+  projectCoversDay, projectMonteurNames, readDragPayload, reassignTeam, rowEntries,
+  scheduledDayIsoSet, setDragPayload, terminLegend, useHoverCard, useScheduleDistances,
   type CalendarEntry, type StaffLite,
 } from './scheduleShared'
 import EventHoverCard from './EventHoverCard'
@@ -598,15 +598,10 @@ function PlantafelView({
     const proj = projById.get(payload.projectId)
     if (!proj) return
     const delta = diffDays(payload.grabDayISO, toDateStr(day))
-    const srcRow = payload.sourceRowId || null
-    // Zeilenwechsel = Umzuweisung: Quell-Monteur raus, Ziel-Monteur rein.
-    // Drop in «Ohne Monteur» ändert das Team nicht (nur Tagesversatz).
-    let newTeam: string[] | undefined
-    if (rowId && rowId !== srcRow) {
-      const team = (proj.monteur_ids || []).filter(id => id !== srcRow)
-      if (!team.includes(rowId)) team.push(rowId)
-      newTeam = team
-    }
+    // Zeilenwechsel = Umzuweisung (geteilt mit dem Gantt, siehe reassignTeam):
+    // Quell-Monteur raus, Ziel-Monteur rein. Drop in «Ohne Monteur» ändert das
+    // Team nicht — dann bleibt nur der Tagesversatz.
+    const newTeam = reassignTeam(proj.monteur_ids, rowId, payload.sourceRowId || null)
     if (delta !== 0 || newTeam) onReschedule(proj.id, delta, undefined, newTeam)
   }
 

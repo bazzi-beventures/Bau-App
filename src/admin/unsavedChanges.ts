@@ -14,6 +14,16 @@ export interface UnsavedChangesGuard {
   isDirty: () => boolean
   /** Speichert die Maske. false = fehlgeschlagen (Navigation abbrechen). */
   save: () => Promise<boolean>
+  /**
+   * Darf die Abfrage «Speichern» anbieten? Fehlt die Funktion, ja.
+   *
+   * Nicht jede offene Eingabe lässt sich sinnvoll speichern: steht über dem
+   * Projekt-Detail die Rapport-Maske und ist halb ausgefüllt, wäre «Speichern»
+   * entweder wirkungslos (es speicherte das Projektformular darunter) oder falsch
+   * (ein halber Rapport ist ein Beleg mit Geldfolge). Dann bleiben Verwerfen und
+   * Zurück-zur-Maske.
+   */
+  canSave?: () => boolean
 }
 
 let active: UnsavedChangesGuard | null = null
@@ -41,17 +51,23 @@ export function resetUnsavedChangesGuard(): void {
  * Meldet die aufrufende Maske als Guard an und warnt zusätzlich beim
  * Schliessen/Neuladen des Browser-Tabs.
  */
-export function useUnsavedChangesGuard(isDirty: () => boolean, save: () => Promise<boolean>): void {
+export function useUnsavedChangesGuard(
+  isDirty: () => boolean,
+  save: () => Promise<boolean>,
+  canSave?: () => boolean,
+): void {
   const isDirtyRef = useRef(isDirty)
   const saveRef = useRef(save)
+  const canSaveRef = useRef(canSave)
   // Nach jedem Render aktualisieren — die Callbacks werden immer erst danach
   // (aus Event-Handlern) aufgerufen und sehen so nie einen alten Render-Stand.
-  useEffect(() => { isDirtyRef.current = isDirty; saveRef.current = save })
+  useEffect(() => { isDirtyRef.current = isDirty; saveRef.current = save; canSaveRef.current = canSave })
 
   useEffect(() => {
     const guard: UnsavedChangesGuard = {
       isDirty: () => isDirtyRef.current(),
       save: () => saveRef.current(),
+      canSave: () => canSaveRef.current?.() ?? true,
     }
     const unregister = registerUnsavedChangesGuard(guard)
 

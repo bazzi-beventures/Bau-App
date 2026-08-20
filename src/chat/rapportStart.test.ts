@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { discardPrompt, planRapportStart } from './rapportStart'
-import { RapportDraftState } from './rapportDraft'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  confirmLeaveRapport,
+  discardPrompt,
+  planRapportStart,
+  rapportLeaveWarning,
+} from './rapportStart'
+import { DRAFT_MAX_AGE_MS, RapportDraftState } from './rapportDraft'
 
 // Regression: ein Monteur hatte 5h erfasst, die Zusammenfassung stand da
 // («Bericht so speichern?»), er schaute zwischendurch aufs Projekt und tippte dort
@@ -94,6 +99,86 @@ describe('planRapportStart', () => {
       'Test 09.08.',
     )
     expect(plan).toEqual({ kind: 'start' })
+  })
+})
+
+// Regression: der Chat liess sich wortlos verlassen — ein Fehlgriff auf «Home» und
+// der Bildschirm war weg. Dass der Entwurf 12 h überlebt, wusste niemand.
+describe('rapportLeaveWarning', () => {
+  const nachrichten = [
+    { id: 1, role: 'bot' as const, text: 'Hallo', timestamp: '08:00' },
+    { id: 2, role: 'user' as const, text: '8 Stunden', timestamp: '08:01' },
+  ]
+
+  it('schweigt ohne Entwurf und ohne offenen Rapport', () => {
+    expect(rapportLeaveWarning(null)).toBeNull()
+    expect(rapportLeaveWarning(draft())).toBeNull()
+  })
+
+  it('warnt beim erfassten, noch nicht gespeicherten Rapport', () => {
+    const w = rapportLeaveWarning(draft({ pendingConfirm: true, pendingProject: 'MFH' }))
+    expect(w?.kind).toBe('unsaved')
+    expect(w?.text).toContain('noch nicht gespeichert')
+  })
+
+  it('nennt die Frist aus der Konstante, nicht eine getippte Zahl', () => {
+    const stunden = Math.round(DRAFT_MAX_AGE_MS / 3_600_000)
+    const w = rapportLeaveWarning(draft({ pendingConfirm: true }))
+    expect(w?.text).toContain(`${stunden} Stunden`)
+  })
+
+  it('warnt beim gespeicherten, aber nicht unterschriebenen Rapport', () => {
+    const w = rapportLeaveWarning(draft({ pendingSignReportId: 42, pendingProject: 'MFH' }))
+    expect(w?.kind).toBe('unsigned')
+    // Der Grund gehört dazu: unsigniert heisst nicht verrechenbar.
+    expect(w?.text).toContain('nicht verrechnet')
+    expect(w?.text).toContain('Unterschrift nachtragen')
+  })
+
+  it('warnt mitten im Erfassen und nennt das Projekt', () => {
+    const w = rapportLeaveWarning(draft({ pendingProject: 'MFH Sonnhalde', messages: nachrichten }))
+    expect(w?.kind).toBe('in_progress')
+    expect(w?.text).toContain('MFH Sonnhalde')
+  })
+
+  it('kommt mitten im Erfassen auch ohne Projektangabe aus', () => {
+    // Entwurf einer älteren App-Version: pendingProject fehlt, pendingConfirm steht.
+    expect(rapportLeaveWarning(draft({ pendingConfirm: true }))?.kind).toBe('unsaved')
+  })
+
+  it('schweigt beim fertigen Rapport (PDF-Schritt)', () => {
+    // Dort ist «Schliessen» der vorgesehene Weg — eine Rückfrage wäre reine Reibung.
+    const fertig = draft({
+      downloadReportId: 42, reportSigned: true,
+      pendingProject: 'MFH Sonnhalde', messages: nachrichten,
+    })
+    expect(rapportLeaveWarning(fertig)).toBeNull()
+  })
+
+  it('schweigt, wenn nur die Begrüssung dasteht', () => {
+    const leer = draft({
+      pendingProject: 'MFH', messages: [nachrichten[0]],
+    })
+    expect(rapportLeaveWarning(leer)).toBeNull()
+  })
+})
+
+describe('confirmLeaveRapport', () => {
+  it('fragt nicht, wenn nichts offen ist', () => {
+    const confirm = vi.fn(() => true)
+    expect(confirmLeaveRapport(draft(), confirm)).toBe(true)
+    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it('lässt gehen, wenn der Monteur bestätigt', () => {
+    const confirm = vi.fn(() => true)
+    expect(confirmLeaveRapport(draft({ pendingConfirm: true }), confirm)).toBe(true)
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('noch nicht gespeichert'))
+  })
+
+  it('hält zurück, wenn er abbricht', () => {
+    const confirm = vi.fn(() => false)
+    expect(confirmLeaveRapport(draft({ pendingConfirm: true }), confirm)).toBe(false)
   })
 })
 
