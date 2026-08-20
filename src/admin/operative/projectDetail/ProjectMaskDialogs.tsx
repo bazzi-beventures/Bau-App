@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { backdropCloseProps } from '../../../shared/backdropClose'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { QuoteCreateForm } from '../quotes/QuoteCreateForm'
+import type { QuoteCreateFormHandle } from '../quotes/QuoteCreateForm'
 import { QuoteEditForm } from '../quotes/QuoteEditForm'
 import type { QuoteDetail } from '../quotes/quoteTypes'
 import { ReportCreateForm } from '../ReportCreateForm'
@@ -13,11 +14,15 @@ import type { StaffMember } from './DetailsForm'
 // neue Offerte, Rapport (erfassen ODER bearbeiten) und Offerte bearbeiten.
 //
 // Sie liegen zusammen, weil sie sich denselben Rahmen teilen — 920 px breit,
-// scrollend, ueber dem Screen — und weil ihr Unterschied genau EINE Frage ist:
-// meldet die Maske ungespeicherte Aenderungen nach aussen? Nur QuoteEditForm tut
-// das (onDirtyChange); nur dort darf ein Klick neben das Fenster schliessen.
-// Die Rueckfrage dazu gehoert dieser Datei, nicht dem Screen: sie betrifft
-// ausschliesslich diese eine Maske.
+// scrollend, ueber dem Screen. Alle drei schliessen per Klick neben das
+// Fenster, aber nie auf Kosten offener Eingaben:
+//   - Neue Offerte: der Backdrop-Klick wird ans Formular delegiert
+//     (requestClose-Handle) — es besitzt den Verlassen-Flow selbst
+//     (localStorage-Entwurf + Entwurf-behalten/verwerfen-Rueckfrage).
+//   - Rapport und Offerte bearbeiten: kein Entwurf, der Stand lebt nur im
+//     State. Die Maske meldet ueber onDirtyChange, ob etwas offen ist; dann
+//     kommt zuerst die Verwerfen-Rueckfrage. Die Rueckfrage gehoert dieser
+//     Datei, nicht dem Screen: sie betrifft ausschliesslich diese Overlays.
 //
 // Der React-Compiler-Lint meldet fuer `blockWhen` «Cannot access refs during
 // render» — ein Fehlalarm: backdropCloseProps reicht die Funktion nur an
@@ -60,17 +65,39 @@ export function ProjectMaskDialogs({
     onEditQuoteClose()
   }, [onEditQuoteClose])
 
+  // Neue Offerte: der Backdrop-Klick laeuft ueber das requestClose-Handle des
+  // Formulars — dieselbe Rueckfrage wie ✕/Esc/Abbrechen dort.
+  const createFormRef = useRef<QuoteCreateFormHandle>(null)
+
+  // Rapport erfassen/bearbeiten: gleiches Muster wie die Offerten-Bearbeitung
+  // unten. ✕/Esc/Android-Zurueck der Maske laufen ueber requestReportClose und
+  // damit durch DIESELBE Rueckfrage wie der Backdrop-Klick.
+  const reportDirty = useRef(false)
+  const [confirmReportDiscard, setConfirmReportDiscard] = useState(false)
+  const markReportDirty = useCallback((dirty: boolean) => { reportDirty.current = dirty }, [])
+  const closeReport = useCallback(() => {
+    setConfirmReportDiscard(false)
+    reportDirty.current = false
+    onReportCancel()
+  }, [onReportCancel])
+  const requestReportClose = useCallback(() => {
+    if (reportDirty.current) setConfirmReportDiscard(true)
+    else closeReport()
+  }, [closeReport])
+
   return (
     <>
       {/* ── Dialog: Neue Offerte ─────────────────────────────── */}
-      {/* Bewusst ohne backdropCloseProps: die Maske hat kein Dirty-Signal (anders
-          als QuoteEditForm mit onDirtyChange unten), ein Klick daneben würde eine
-          halb erfasste Offerte wegwerfen. Fällt mit Charge H2 (Offert-Formulare)
-          zusammen — dort bekommt QuoteCreateForm onDirtyChange. */}
+      {/* Kein blockWhen: ob und was gefragt wird (Entwurf behalten/verwerfen),
+          entscheidet das Formular selbst — hier wird nur delegiert. */}
       {showQuoteForm && (
-        <div className="admin-confirm-overlay">
+        <div
+          className="admin-confirm-overlay"
+          {...backdropCloseProps(() => createFormRef.current?.requestClose())}
+        >
           <div className="admin-confirm-box" style={{ maxWidth: 920, maxHeight: '90vh', overflow: 'auto' }}>
             <QuoteCreateForm
+              ref={createFormRef}
               lockedProjectName={project.name}
               lockedProjectId={project.id}
               onDone={onQuoteDone}
@@ -81,10 +108,14 @@ export function ProjectMaskDialogs({
       )}
 
       {/* ── Dialog: Rapport manuell erfassen / bearbeiten ─────── */}
-      {/* Ebenfalls ohne backdropCloseProps — ReportCreateForm meldet keine
-          Änderungen nach aussen; Rückfrage kommt mit Charge H3. */}
       {(showReportForm || editReportId !== null) && (
-        <div className="admin-confirm-overlay">
+        <div
+          className="admin-confirm-overlay"
+          {...backdropCloseProps(closeReport, {
+            blockWhen: () => reportDirty.current,
+            onBlocked: () => setConfirmReportDiscard(true),
+          })}
+        >
           {/* Gleiche Breite wie die Offerten-Maske: die Material-/Fixpreis-Zeilen
               haben bis zu fünf Felder pro Zeile — bei 640 px blieb je Feld so wenig
               Platz, dass Artikelnamen und Preise abgeschnitten wurden. */}
@@ -98,8 +129,9 @@ export function ProjectMaskDialogs({
               staff={staff}
               quotes={quotes}
               editReportId={editReportId ?? undefined}
-              onDone={onReportDone}
-              onCancel={onReportCancel}
+              onDirtyChange={markReportDirty}
+              onDone={() => { reportDirty.current = false; onReportDone() }}
+              onCancel={requestReportClose}
             />
           </div>
         </div>
@@ -138,6 +170,21 @@ export function ProjectMaskDialogs({
           variant="danger"
           onConfirm={close}
           onCancel={() => setConfirmDiscard(false)}
+        />
+      )}
+
+      {/* Esc bei offener Rueckfrage: ReportCreateForm ruft onCancel (= erneutes
+          requestReportClose, No-op bei offener Frage), der ConfirmDialog faengt
+          dasselbe Esc und schliesst sich — Ergebnis «Weiter bearbeiten». */}
+      {confirmReportDiscard && (
+        <ConfirmDialog
+          title="Rapport verwerfen?"
+          message="Der Rapport ist noch nicht gespeichert. Schliessen verwirft die Eingaben."
+          confirmLabel="Verwerfen"
+          cancelLabel="Weiter bearbeiten"
+          variant="danger"
+          onConfirm={closeReport}
+          onCancel={() => setConfirmReportDiscard(false)}
         />
       )}
     </>

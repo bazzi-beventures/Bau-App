@@ -27,10 +27,10 @@ const ALLOWED: Record<string, number> = {
   'admin/operative/SendQuoteDialog.tsx': 1,
   // Danke-Mail und Auftragsbestätigung teilen sich ein Overlay (SendQuoteMailDialog).
   'admin/operative/SendQuoteMailDialog.tsx': 1,
-  // Die drei Erfassungsmasken des Projekt-Details, mit H3 aus dem Screen gezogen;
-  // zwei davon (Neue Offerte, Rapport) haben noch kein Dirty-Signal und dürfen
-  // darum nicht per Backdrop schliessen — Rückfrage kommt mit Charge H2, dann
-  // sinkt diese Zahl.
+  // Die drei Erfassungsmasken des Projekt-Details, mit H3 aus dem Screen gezogen.
+  // Alle drei schliessen per Backdrop, ohne Eingaben zu verlieren: Rapport und
+  // Offerte-bearbeiten via backdropCloseProps + Dirty-Rückfrage, Neue Offerte
+  // delegiert an den Verlassen-Flow des Formulars (requestClose-Handle).
   'admin/operative/projectDetail/ProjectMaskDialogs.tsx': 3,
   // Die Freigabe-Maske, ebenfalls mit H3 ausgezogen (mit backdropCloseProps).
   'admin/operative/projectDetail/ApprovalCreateDialog.tsx': 1,

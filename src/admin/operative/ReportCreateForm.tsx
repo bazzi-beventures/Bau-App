@@ -189,6 +189,7 @@ export function ReportCreateForm({
   editReportId,
   onDone,
   onCancel,
+  onDirtyChange,
 }: {
   project: ReportFormProject
   staff: ReportFormStaff[]
@@ -198,6 +199,10 @@ export function ReportCreateForm({
   editReportId?: number
   onDone: () => void
   onCancel: () => void
+  // Meldet dem Overlay-Aufrufer, ob ein Schliessen Eingaben wegwerfen würde
+  // (gleicher Vertrag wie QuoteEditForm) — diese Maske hat keinen
+  // localStorage-Entwurf, was hier steht, lebt nur im State.
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const isEdit = editReportId !== undefined
   const defaultQuote = useMemo(() => pickDefaultQuote(quotes), [quotes])
@@ -365,7 +370,24 @@ export function ReportCreateForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editReportId, project.id])
 
-  // Esc schliesst das Fenster.
+  // ── Dirty-Check (analog QuoteEditForm) ──
+  // Der Vergleichswert ist NICHT einfach der erste Render: im Bearbeiten-Modus
+  // lädt der gespeicherte Stand asynchron nach — die Basis wird erst gesetzt,
+  // wenn loadingExisting abgeschlossen ist (bei Neuerfassung: nach dem ersten
+  // Render, dort ist alles synchron vorbelegt).
+  const dirtySnapshot = JSON.stringify({
+    reportDate, selectedQuoteId, description, rows, massaufnahme, beratung,
+    isWarranty, artDerArbeit, einbauort, materialRows, klein, fixedRows,
+  })
+  const [dirtyBaseline, setDirtyBaseline] = useState<string | null>(null)
+  useEffect(() => {
+    if (!loadingExisting && dirtyBaseline === null) setDirtyBaseline(dirtySnapshot)
+  }, [loadingExisting, dirtyBaseline, dirtySnapshot])
+  const isDirty = dirtyBaseline !== null && dirtySnapshot !== dirtyBaseline
+  useEffect(() => { onDirtyChange?.(isDirty) }, [isDirty, onDirtyChange])
+
+  // Esc schliesst das Fenster — über onCancel, der Aufrufer entscheidet (bei
+  // offenen Eingaben fragt ProjectMaskDialogs nach, statt sie wegzuwerfen).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onCancel()

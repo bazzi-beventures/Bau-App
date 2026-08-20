@@ -5,7 +5,7 @@
 // quotePayload.ts. Was hier bleibt, ist die Maske selbst: Projektwahl,
 // Materialliste über den Katalog, der localStorage-Entwurf und das Absenden.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { createQuote } from '../../../api/admin/quotes'
 import { getAdminProjects } from '../../../api/admin/projects'
 import {
@@ -45,7 +45,20 @@ interface Props {
   lockedProjectId?: string
 }
 
-export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedProjectId }: Props) {
+// Imperatives Handle für den Overlay-Aufrufer (ProjectMaskDialogs): ein Klick
+// neben das Fenster soll denselben Verlassen-Flow durchlaufen wie ✕/Esc/
+// Abbrechen — bei Inhalt also die Entwurf-behalten/verwerfen-Rückfrage statt
+// kommentarlos zu schliessen. Ein onDirtyChange wie im QuoteEditForm reichte
+// dafür nicht: die Rückfrage dieser Maske (UnsavedChangesDialog mit
+// Entwurfs-Semantik) lebt hier drin, nicht beim Aufrufer.
+export interface QuoteCreateFormHandle {
+  requestClose: () => void
+}
+
+export const QuoteCreateForm = forwardRef<QuoteCreateFormHandle, Props>(function QuoteCreateForm(
+  { onDone, onCancel, lockedProjectName, lockedProjectId }: Props,
+  ref,
+) {
   const master = useQuoteMasterData()
   const [projects, setProjects] = useState<Project[]>([])
   const [materialSupplierFilter, setMaterialSupplierFilter] = useState('')
@@ -205,6 +218,8 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
     removeQuoteDraft(draftKey)
     onCancel()
   }, [draft.isPristine, draftKey, onCancel])
+
+  useImperativeHandle(ref, () => ({ requestClose }), [requestClose])
 
   // Esc schliesst das Fenster — ist das PDF-Review-Modal oder die Verlassen-
   // Abfrage offen, zuerst diese (die Abfrage räumt sich selbst per Esc weg).
@@ -544,4 +559,4 @@ export function QuoteCreateForm({ onDone, onCancel, lockedProjectName, lockedPro
       </div>
     </div>
   )
-}
+})
