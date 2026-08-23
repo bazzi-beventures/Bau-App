@@ -7,7 +7,10 @@ import KpiCards from '../kpis/components/KpiCards'
 import DataTable from '../kpis/components/DataTable'
 import BiBarChart from '../kpis/components/BiBarChart'
 import type { ColumnDef, KpiNutzungAdoptionRow, KpiNutzungAktionRow } from '../kpis/types'
-import { UNMAPPED, actionLabel, isPseudoModule, moduleLabel, moduleOfAction } from '../constants/usageTaxonomy'
+import {
+  UNMAPPED, actionLabel, coverageNote, isPseudoModule, moduleCoverage, moduleLabel, moduleOfAction,
+} from '../constants/usageTaxonomy'
+import type { Coverage } from '../constants/usageTaxonomy'
 import '../kpis/kpi-dashboard.css'
 import './usage.css'
 
@@ -57,10 +60,16 @@ interface ModulRow {
   pseudo: boolean
   aktionen: number
   anteil_pct: number
-  /** 0 = aktiv und ungenutzt. DataTable sortiert selbst; über diesen Schlüssel
-   *  (per defaultSort, keine eigene Spalte) stehen die toten Module oben, und
-   *  weil Array.sort stabil ist, bleibt darunter die Reihenfolge nach
-   *  Aktionen erhalten. */
+  /** Wie weit audit_log dieses Modul abdeckt. `keine` heisst: 0 ist hier keine
+   *  Aussage, sondern eine Lücke — siehe moduleCoverage(). */
+  coverage: Coverage
+  /** Erläuterung bei Teilabdeckung, sonst undefined. */
+  note?: string
+  /** 0 = messbar, aktiv und trotzdem ungenutzt (der Befund, wegen dem man die
+   *  Tabelle aufmacht), 1 = normal, 2 = gar nicht protokolliert (trägt keine
+   *  Information und gehört deshalb nach unten). DataTable sortiert selbst;
+   *  weil Array.sort stabil ist, bleibt innerhalb einer Stufe die Reihenfolge
+   *  nach Aktionen erhalten. */
   prio: number
 }
 
@@ -81,26 +90,52 @@ interface AdoptionRow {
 }
 
 const MODUL_COLUMNS: ColumnDef<ModulRow>[] = [
-  { key: 'name', label: 'Modul' },
+  {
+    key: 'name',
+    label: 'Modul',
+    render: (_v, row) => (
+      <>
+        {row.name}
+        {row.note && <div className="usage-note">{row.note}</div>}
+      </>
+    ),
+  },
   {
     key: 'aktiv',
     label: 'Status',
     render: (_v, row) => {
       // Sammeltöpfe kann niemand abschalten — "nicht aktiv" wäre schlicht falsch.
       if (row.pseudo) return <span className="usage-muted">immer aktiv</span>
-      return row.aktiv ? 'aktiv' : <span className="usage-muted">nicht aktiv</span>
+      if (!row.aktiv) return <span className="usage-muted">nicht aktiv</span>
+      // Eingeschaltet, aber es führt kein Weg in den Audit-Trail. Ohne diesen
+      // Hinweis stünde daneben "0 — ungenutzt" und behauptete etwas, das die
+      // Datenlage nicht hergibt.
+      if (row.coverage === 'keine') return <span className="usage-muted">aktiv · nicht protokolliert</span>
+      if (row.coverage === 'teilweise') return <span className="usage-muted">aktiv · teilweise erfasst</span>
+      return 'aktiv'
     },
   },
   {
     key: 'aktionen',
     label: 'Aktionen',
     align: 'right',
-    render: (_v, row) =>
-      !row.pseudo && row.aktiv && row.aktionen === 0
+    render: (_v, row) => {
+      // Kein Messwert, also keine Zahl: eine 0 hier wäre eine Behauptung.
+      if (!row.pseudo && row.coverage === 'keine') return <span className="usage-muted">—</span>
+      return !row.pseudo && row.aktiv && row.aktionen === 0
         ? <span className="usage-dead">0 — ungenutzt</span>
-        : intnum(row.aktionen),
+        : intnum(row.aktionen)
+    },
   },
-  { key: 'anteil_pct', label: 'Anteil', align: 'right', format: pctCell },
+  {
+    key: 'anteil_pct',
+    label: 'Anteil',
+    align: 'right',
+    render: (_v, row) =>
+      !row.pseudo && row.coverage === 'keine'
+        ? <span className="usage-muted">—</span>
+        : pctCell(row.anteil_pct),
+  },
 ]
 
 const AKTION_COLUMNS: ColumnDef<AktionRow>[] = [
@@ -175,6 +210,7 @@ export default function UsageScreen({ enabledModules }: Props) {
       const aktionen = aktionenProModul.get(key) ?? 0
       const pseudo = isPseudoModule(key)
       const aktiv = enabledModules.includes(key)
+      const coverage = pseudo ? 'voll' : moduleCoverage(key)
       out.push({
         modul: key,
         name: moduleLabel(key),
@@ -182,15 +218,23 @@ export default function UsageScreen({ enabledModules }: Props) {
         pseudo,
         aktionen,
         anteil_pct: totalAktionen > 0 ? (aktionen / totalAktionen) * 100 : 0,
-        prio: !pseudo && aktiv && aktionen === 0 ? 0 : 1,
+        coverage,
+        note: coverageNote(key),
+        prio: coverage === 'keine' ? 2 : (!pseudo && aktiv && aktionen === 0 ? 0 : 1),
       })
     }
     return out.sort((a, b) => b.aktionen - a.aktionen)
   }, [enabledModules, aktionenProModul, totalAktionen])
 
-  const genutzteModule = modulRows.filter(r => !r.pseudo && r.aktiv && r.aktionen > 0).length
-  const aktiveModule = modulRows.filter(r => !r.pseudo && r.aktiv).length
-  const toteModule = aktiveModule - genutzteModule
+  // Gezählt wird gegen die MESSBAREN Module, nicht gegen alle aktiven. Sonst
+  // steht dauerhaft eine rote Kachel da, die zu neun Zehnteln aus Push- und
+  // Hintergrundmodulen besteht, welche per Bauart nie eine Aktion schreiben —
+  // und der eine echte Befund darunter (ein eingeschaltetes, aber wirklich
+  // ungenutztes Modul) geht darin unter.
+  const messbareModule = modulRows.filter(r => !r.pseudo && r.aktiv && r.coverage !== 'keine')
+  const genutzteModule = messbareModule.filter(r => r.aktionen > 0).length
+  const toteModule = messbareModule.length - genutzteModule
+  const nichtProtokolliert = modulRows.filter(r => !r.pseudo && r.aktiv && r.coverage === 'keine').length
 
   // ── Kacheln ──
   // "Aktive Benutzer" ist das TAGES-Maximum, nicht die Summe: Tageswerte sind
@@ -219,9 +263,12 @@ export default function UsageScreen({ enabledModules }: Props) {
   const cards = useMemo(() => [
     {
       label: 'Genutzte Module',
-      value: `${genutzteModule} / ${aktiveModule}`,
+      value: `${genutzteModule} / ${messbareModule.length}`,
       color: toteModule > 0 ? '#be123c' : undefined,
-      sub: toteModule > 0 ? `${toteModule} aktiv, aber ungenutzt` : 'alle aktiven im Einsatz',
+      sub: [
+        toteModule > 0 ? `${toteModule} aktiv, aber ungenutzt` : 'alle messbaren im Einsatz',
+        nichtProtokolliert > 0 ? `${nichtProtokolliert} nicht protokolliert` : '',
+      ].filter(Boolean).join(' · '),
     },
     { label: 'Aktionen', value: intnum(totalAktionen), sub: range.label },
     { label: 'Aktive Benutzer (max./Tag)', value: intnum(maxBenutzerProTag) },
@@ -231,8 +278,8 @@ export default function UsageScreen({ enabledModules }: Props) {
       color: ohneAktivitaet > 0 ? '#be123c' : undefined,
       sub: 'aktive Konten im Zeitraum',
     },
-  ], [genutzteModule, aktiveModule, toteModule, totalAktionen, range.label,
-      maxBenutzerProTag, ohneAktivitaet, aktiveKonten.length])
+  ], [genutzteModule, messbareModule.length, toteModule, nichtProtokolliert,
+      totalAktionen, range.label, maxBenutzerProTag, ohneAktivitaet, aktiveKonten.length])
 
   // ── Tagesbalken: Aktionen, ohne Personenbezug ──
   const chartData = useMemo(() => {
@@ -296,7 +343,13 @@ export default function UsageScreen({ enabledModules }: Props) {
             Gezählt werden protokollierte <strong>Änderungen</strong>, kein Blättern und
             kein Lesen — ein Modul ohne Aktionen kann also angeschaut worden sein.
             Aktionsprotokoll erst ab {AUDIT_START}; frühere Zeiträume sind leer, nicht
-            ungenutzt. Tipp: Auf einen Tagesbalken klicken zoomt auf diesen Tag.
+            ungenutzt.
+            {nichtProtokolliert > 0 && (
+              <> <strong>{intnum(nichtProtokolliert)}</strong> aktive Module schreiben gar
+              nicht ins Protokoll (Push, Erinnerungen, KI, Hilfe-Bot) — sie stehen unten
+              als «nicht protokolliert» und zählen nicht als ungenutzt.</>
+            )}{' '}
+            Tipp: Auf einen Tagesbalken klicken zoomt auf diesen Tag.
             {nichtZugeordnet > 0 && (
               <> · <strong>{intnum(nichtZugeordnet)}</strong> Aktionen ohne Modul-Zuordnung —
               Regel in <code>usageTaxonomy.ts</code> ergänzen.</>

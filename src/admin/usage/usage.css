@@ -13,3 +13,13 @@
 .usage-muted {
   color: var(--text-muted);
 }
+
+/* Erläuterung unter einem Modulnamen: was die Zahl daneben wirklich zählt.
+   Nur dort, wo der Modulname mehr verspricht als der Audit-Trail hergibt. */
+.usage-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+  max-width: 46ch;
+}

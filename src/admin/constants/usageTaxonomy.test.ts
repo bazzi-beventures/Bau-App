@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   KNOWN_ACTIONS, PSEUDO_MODULES, UNMAPPED,
-  actionLabel, moduleLabel, moduleOfAction,
+  actionLabel, coverageNote, moduleCoverage, moduleLabel, moduleOfAction,
 } from './usageTaxonomy'
 
 // Spiegel von config.KNOWN_MODULES (Python). Muss zusammenpassen — ein Tippfehler
@@ -73,5 +73,45 @@ describe('moduleLabel', () => {
     expect(moduleLabel('rapport')).toBe('Rapporte')
     expect(moduleLabel('quotes')).toBe('quotes')
     expect(moduleLabel(UNMAPPED)).toBe('nicht zugeordnet')
+  })
+})
+
+describe('moduleCoverage', () => {
+  // Der Grund für die ganze Unterscheidung: diese Module haben keine Regel und
+  // koennen deshalb nie eine Aktion bekommen. Sie als "ungenutzt" zu zaehlen
+  // behauptet einen Befund, den die Daten nicht hergeben.
+  it.each([
+    'admin_clock_in_push', 'ai', 'approval_push', 'auto_clockout_correction_reminder',
+    'clock_in_reminder', 'clock_out_reminder', 'help_bot', 'kpis',
+    'morning_briefing', 'project_change_push',
+  ])('%s ist nicht protokolliert', mod => {
+    expect(moduleCoverage(mod)).toBe('keine')
+  })
+
+  // Gegenprobe: alles, worauf eine Regel zeigt, muss messbar bleiben — sonst
+  // verschwindet ein echter Befund aus der Kachel.
+  it.each(['quotes', 'invoicing', 'inventory', 'scheduling', 'hr', 'document_backup',
+           'aftersales', 'payment_matching', 'task_board'])('%s ist messbar', mod => {
+    expect(moduleCoverage(mod)).toBe('voll')
+  })
+
+  it('kennt timekeeping als nur teilweise erfasst', () => {
+    expect(moduleCoverage('timekeeping')).toBe('teilweise')
+    expect(coverageNote('timekeeping')).toMatch(/Ein- und Ausstempeln/)
+  })
+
+  it('erklaert nur, wo es etwas zu erklaeren gibt', () => {
+    expect(coverageNote('quotes')).toBeUndefined()
+    expect(coverageNote('ai')).toBeUndefined()
+  })
+
+  // Die Abdeckung wird aus RULES abgeleitet. Faellt das auseinander, meldet
+  // dieser Test es, bevor die Kachel wieder falsch zaehlt.
+  it('leitet die Messbarkeit aus denselben Regeln ab wie die Zuordnung', () => {
+    for (const action of KNOWN_ACTIONS) {
+      const mod = moduleOfAction(action)
+      if (mod === UNMAPPED) continue
+      expect(moduleCoverage(mod)).not.toBe('keine')
+    }
   })
 })

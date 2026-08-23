@@ -136,6 +136,51 @@ describe('UsageScreen — Modul-Inventar', () => {
   })
 })
 
+describe('UsageScreen — nicht protokollierte Module', () => {
+  // Der Befund, der das Dashboard beim ersten Scharfschalten unlesbar machte:
+  // zehn eingeschaltete Push-/Hintergrundmodule ohne Zuordnungsregel standen
+  // rot als "ungenutzt" und begruben den einen echten Treffer darunter.
+  const MIT_PUSH = ['quotes', 'invoicing', 'clock_in_reminder', 'morning_briefing', 'ai']
+
+  it('zaehlt sie nicht gegen die genutzten Module', async () => {
+    setup(AKTIONEN, [konto()], MIT_PUSH)
+    // quotes + invoicing sind messbar und genutzt; die drei anderen haben gar
+    // keine Regel und gehoeren nicht in den Nenner.
+    expect(await screen.findByText('2 / 2')).toBeTruthy()
+    expect(screen.getByText(/3 nicht protokolliert/)).toBeTruthy()
+  })
+
+  it('nennt sie im Inventar beim Namen statt "0 — ungenutzt"', async () => {
+    setup(AKTIONEN, [konto()], MIT_PUSH)
+    const zeilen = await rowsAfter(/Modul-Inventar/)
+    const push = zeilen.find(tr => (tr.textContent ?? '').startsWith('clock_in_reminder'))
+    expect(push).toBeTruthy()
+    expect(push!.textContent).toContain('nicht protokolliert')
+    expect(push!.textContent).not.toContain('ungenutzt')
+  })
+
+  it('stellt sie ans Ende, nicht nach oben', async () => {
+    setup(AKTIONEN, [konto()], [...MIT_PUSH, 'aftersales'])
+    const zeilen = await rowsAfter(/Modul-Inventar/)
+    const namen = zeilen.map(tr => (tr.textContent ?? '').split(/aktiv|immer/)[0].trim())
+    // aftersales ist messbar und ungenutzt -> oben. Die drei ohne Regel -> unten.
+    expect(namen[0]).toBe('aftersales')
+    expect(namen.slice(-3).sort()).toEqual(['ai', 'clock_in_reminder', 'morning_briefing'])
+  })
+
+  it('erklaert bei timekeeping, was die Zahl wirklich zaehlt', async () => {
+    setup(
+      [aktion({ action: 'admin_approve_correction', aktionen: 23 })],
+      [konto()],
+      ['timekeeping'],
+    )
+    const zeilen = await rowsAfter(/Modul-Inventar/)
+    const tk = zeilen.find(tr => (tr.textContent ?? '').startsWith('timekeeping'))
+    expect(tk!.textContent).toContain('Ein- und Ausstempeln wird nicht protokolliert')
+    expect(tk!.textContent).toContain('teilweise erfasst')
+  })
+})
+
 describe('UsageScreen — Adoption', () => {
   it('markiert Konten, die nie eingeloggt waren', async () => {
     setup(AKTIONEN, [konto({ benutzer_name: 'Nie Da', zuletzt_gesehen: null })])

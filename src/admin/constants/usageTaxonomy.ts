@@ -59,6 +59,53 @@ const RULES: { test: RegExp; module: UsageModule }[] = [
   { test: /project|customer|staff|user|pin/,     module: 'grundfunktion' },
 ]
 
+/**
+ * Module, für die es überhaupt eine Regel gibt. Nur sie können je eine Zahl
+ * > 0 tragen — für alle anderen ist "0 Aktionen" keine Messung, sondern das
+ * Fehlen einer Messung.
+ *
+ * Aus RULES abgeleitet statt von Hand gepflegt: eine neue Regel macht ihr Modul
+ * automatisch messbar. Eine zweite Liste hier würde beim ersten Nachtrag
+ * auseinanderlaufen, und zwar still.
+ */
+const RULE_MODULES: ReadonlySet<string> = new Set(RULES.map(r => r.module))
+
+/** Wie weit `audit_log` ein Modul überhaupt abdeckt. */
+export type Coverage = 'voll' | 'teilweise' | 'keine'
+
+/**
+ * Module mit Regel, deren Regel aber nur einen Randbereich trägt: die Zahl
+ * stimmt, sie beantwortet nur eine engere Frage als der Modulname verspricht.
+ *
+ * `timekeeping` ist der Fall, der beim ersten Blick aufs Dashboard in die Irre
+ * führte: 23 Aktionen neben 4'000 lesen sich als "Zeiterfassung läuft nicht",
+ * dabei schreibt das Ein- und Ausstempeln überhaupt nichts ins `audit_log`
+ * (`agents/routers/timekeeping.py` auditiert nur `zeit_recorded_at_verworfen`
+ * und `create_absence`). Gezählt werden ausschliesslich Admin-Eingriffe.
+ */
+const PARTIAL_COVERAGE: Record<string, string> = {
+  timekeeping:
+    'Ein- und Ausstempeln wird nicht protokolliert. Gezählt werden nur '
+    + 'Admin-Eingriffe: Korrekturen freigeben oder ablehnen, Sammel-Einstempeln, '
+    + 'Stundenexport, verworfene Zeitstempel.',
+}
+
+/**
+ * Abdeckung eines Moduls. `keine` heisst: keine Regel zeigt auf dieses Modul,
+ * es kann also nie Aktionen bekommen — Push-, Erinnerungs- und
+ * Hintergrundmodule, dazu `ai`, `help_bot` und `kpis`. Deren Wirkung steht
+ * woanders (LLM-Kosten, Error-Logs), nur eben nicht im Audit-Trail.
+ */
+export function moduleCoverage(module: string): Coverage {
+  if (module in PARTIAL_COVERAGE) return 'teilweise'
+  return RULE_MODULES.has(module) || module === UNMAPPED ? 'voll' : 'keine'
+}
+
+/** Erläuterung zu einer Teilabdeckung; undefined, wenn es nichts zu erklären gibt. */
+export function coverageNote(module: string): string | undefined {
+  return PARTIAL_COVERAGE[module]
+}
+
 /** Modul einer Aktion; UNMAPPED, wenn keine Regel greift. */
 export function moduleOfAction(action: string): UsageModule {
   for (const r of RULES) if (r.test.test(action)) return r.module
