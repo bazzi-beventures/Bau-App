@@ -28,7 +28,16 @@ import type { StaffMember } from './DetailsForm'
 // render» — ein Fehlalarm: backdropCloseProps reicht die Funktion nur an
 // onClick weiter, gelesen wird die Ref erst beim Klick. Der Dirty-Stand MUSS
 // eine Ref sein; als State wuerde jeder Tastendruck in der Offerte den ganzen
-// Screen neu rendern.
+// Screen neu rendern. Dasselbe Muster loest /immutability (Setzen des
+// Dirty-Flags) und /preserve-manual-memoization aus.
+//
+// Der Disable steht DATEIWEIT, nicht je Zeile: der Compiler meldet den ganzen
+// `backdropCloseProps(...)`-Aufruf, und in JSX-Attributposition wirkt
+// `eslint-disable-next-line` nicht. Alle neun Meldungen dieser Datei gehen auf
+// dieses eine Muster zurueck. Wer hier neuen Code mit echtem Ref-Zugriff im
+// Render schreibt, bekommt keine Warnung mehr — beim naechsten Umbau dieser
+// Datei den Disable pruefen. Spec: docs/specs/refactoring-charge-h-frontend-grossbaustellen.md §4.
+/* eslint-disable react-hooks/refs, react-hooks/immutability, react-hooks/preserve-manual-memoization */
 
 export function ProjectMaskDialogs({
   project, staff, quotes,
@@ -129,7 +138,7 @@ export function ProjectMaskDialogs({
         <div
           className="admin-confirm-overlay"
           {...backdropCloseProps(closeReport, {
-            blockWhen: () => reportDirty.current,
+              blockWhen: () => reportDirty.current,
             onBlocked: () => setConfirmReportDiscard(true),
           })}
         >
@@ -163,7 +172,7 @@ export function ProjectMaskDialogs({
         <div
           className="admin-confirm-overlay"
           {...backdropCloseProps(close, {
-            blockWhen: () => editQuoteDirty.current,
+              blockWhen: () => editQuoteDirty.current,
             onBlocked: () => setConfirmDiscard(true),
           })}
         >

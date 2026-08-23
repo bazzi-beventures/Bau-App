@@ -28,7 +28,14 @@ export function useVisibilityPolling(
   intervalMs: number,
 ) {
   const savedCallback = useRef(onPoll)
-  savedCallback.current = onPoll
+  // Die Zuweisung gehoert in einen Effekt, nicht in den Render-Rumpf: eine Ref
+  // waehrend des Renderns zu beschreiben ist ein Seiteneffekt, den React unter
+  // StrictMode/Concurrent doppelt ausfuehren darf (react-hooks/refs). Fuer einen
+  // Intervall-Poller ist der Effekt-Zeitpunkt aequivalent — der Tick laeuft
+  // ohnehin erst nach dem Commit, und bis dahin steht die neue Funktion.
+  useEffect(() => {
+    savedCallback.current = onPoll
+  })
 
   useEffect(() => {
     let cancelled = false

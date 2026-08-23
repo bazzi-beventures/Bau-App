@@ -66,13 +66,20 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   // ein angefangener Rapport nach Navigation/Reload nicht neu eingegeben werden
   // muss. Den ID-Zähler über die wiederhergestellten IDs heben, sonst kollidieren
   // neue Nachrichten-IDs mit den restaurierten.
-  const draftRef = useRef<ReturnType<typeof loadDraft> | undefined>(undefined)
-  if (draftRef.current === undefined) {
+  //
+  // Als useState-Initializer, nicht als Ref-Zuweisung im Render-Rumpf: Letzteres
+  // ist ein Seiteneffekt während des Renderns (Ref schreiben, `Date.now()` lesen,
+  // Modul-Variable erhöhen) und färbte über `draft` jede Ableitung darunter ein —
+  // 19 Meldungen des React-Compiler-Lints aus dieser einen Stelle. Der
+  // Initializer ist der dafür vorgesehene Ort und läuft ebenfalls genau einmal.
+  // Unter StrictMode kann er im Dev-Modus zweimal laufen; beides ist hier
+  // folgenlos, weil `loadDraft` nur liest und das Anheben des Zählers idempotent
+  // ist (Maximum).
+  const [draft] = useState(() => {
     const d = loadDraft(user.authorized_user_id, Date.now())
     if (d) for (const m of d.messages) { if (m.id > _idCounter) _idCounter = m.id }
-    draftRef.current = d
-  }
-  const draft = draftRef.current
+    return d
+  })
 
   // Vor dem Speichern gesammelte Zusatz-Positionen (werden beim Bestätigen mitgebucht).
   // Leistungsart (reports.art_der_arbeit): erster Schritt vor dem Speichern.

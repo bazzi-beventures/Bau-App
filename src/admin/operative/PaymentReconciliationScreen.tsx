@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import {
   reconcileCamt, ReconcileResponse, ReconcileResult, ReconcileStatus,
 } from '../../api/admin'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 
 const STATUS_META: Record<ReconcileStatus, { label: string; color: string; bg: string }> = {
   matched:         { label: 'Bezahlt',        color: '#0a7d33', bg: '#e8f6ed' },
@@ -25,6 +27,28 @@ function StatusBadge({ status }: { status: ReconcileStatus }) {
   )
 }
 
+/** Die vier Spalten, die am Handy nicht auf die Karte passen (§3-Entscheid:
+ *  Referenz, Rechnung, Eingegangen, Differenz und Status bleiben sichtbar,
+ *  der Rest wandert hinter das Aufklappen). */
+function ResultDetail({ r }: { r: ReconcileResult }) {
+  const zeilen: [string, string][] = [
+    ['Projekt', r.project_name || '—'],
+    ['Erwartet', chf(r.expected_amount)],
+    ['Valuta', r.value_date || '—'],
+    ['Auftraggeber', r.debtor_name || '—'],
+  ]
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 13 }}>
+      {zeilen.map(([label, wert]) => (
+        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+          <span style={{ color: 'var(--muted)' }}>{label}</span>
+          <span style={{ textAlign: 'right' }}>{wert}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function PaymentReconciliationScreen() {
   const [file, setFile] = useState<File | null>(null)
   const [dryRun, setDryRun] = useState(true)
@@ -32,6 +56,10 @@ export default function PaymentReconciliationScreen() {
   const [error, setError] = useState('')
   const [response, setResponse] = useState<ReconcileResponse | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const isMobile = useIsMobile()
+  // Ergebniszeilen haben keine ID — der Index ist hier die einzige Identitaet,
+  // und die Liste wird nach dem Laden nicht umsortiert.
+  const [expanded, setExpanded] = useState<number | null>(null)
 
   function resetAll() {
     setFile(null)
@@ -116,6 +144,36 @@ export default function PaymentReconciliationScreen() {
             {!s.dry_run && <SummaryCard label="Verbucht" value={s.applied} color="#0a7d33" />}
           </div>
 
+          {isMobile ? (
+            <AdminCardList
+              // Index mitgefuehrt statt per indexOf nachgeschlagen: das waere
+              // ein Suchlauf pro Karte und Rendern (O(n²)). Korrekt waere es
+              // auch — indexOf vergleicht ueber Referenzidentitaet, feldgleiche
+              // Eingaenge sind verschiedene Objekte —, nur unnoetig teuer.
+              items={response.results.map((r, i) => ({ r, i }))}
+              keyFor={({ i }) => String(i)}
+              empty="Keine Eingänge im Auszug."
+              onItemClick={({ i }) => setExpanded(expanded === i ? null : i)}
+              renderCard={({ r, i }) => (
+                <>
+                  <div className="admin-card-head">
+                    <span className="admin-card-title" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                      {r.reference || '—'}
+                    </span>
+                    <StatusBadge status={r.status} />
+                  </div>
+                  <div className="admin-card-meta">Rechnung {r.invoice_number || '—'}</div>
+                  <div className="admin-card-meta">
+                    Eingegangen <strong>{chf(r.paid_amount)}</strong>
+                    {r.amount_diff ? (
+                      <> · Differenz <strong style={{ color: '#b3261e' }}>{chf(r.amount_diff)}</strong></>
+                    ) : null}
+                  </div>
+                  {expanded === i && <ResultDetail r={r} />}
+                </>
+              )}
+            />
+          ) : (
           <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
@@ -150,6 +208,7 @@ export default function PaymentReconciliationScreen() {
             </tbody>
           </table>
           </div>
+          )}
 
           {s.dry_run && s.matched > 0 && (
             <div className="admin-form-hint" style={{ marginTop: 12 }}>

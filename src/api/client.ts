@@ -71,7 +71,10 @@ async function parseErrorDetail(res: Response): Promise<string> {
       // als Fallback lesen, damit die deutsche Meldung nicht auf "Bad Request" fällt.
       detail = body.detail ?? body.error ?? detail
     }
-  } catch {}
+  } catch {
+    // Body ist kein JSON (HTML vom Edge-Proxy, leere Antwort) — dann bleibt
+    // `detail` auf dem Statuszeilen-Fallback stehen, der unten gesetzt wird.
+  }
   // Nie leer und nie ein Objekt zurückgeben. Zwei reale Fälle laufen sonst als
   // stumme Fehler durch, weil die Screens ihre Meldung mit `{error && …}` rendern
   // und ein Leerstring dort NICHTS anzeigt (Spinner stoppt, sonst passiert nichts):
@@ -237,7 +240,12 @@ export async function* apiStreamFetch(
       }
     }
   } finally {
-    try { reader.releaseLock() } catch {}
+    try {
+      reader.releaseLock()
+    } catch {
+      // Der Reader kann bereits freigegeben sein (Abbruch, Netzwerkfehler) —
+      // das Aufraeumen darf den urspruenglichen Fehler nicht ueberdecken.
+    }
   }
 }
 

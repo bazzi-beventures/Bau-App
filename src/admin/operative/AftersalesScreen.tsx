@@ -7,6 +7,8 @@ import {
 } from '../../api/admin'
 import { apiUrl } from '../../api/client'
 import { fmtDate } from '../utils/format'
+import { AdminCardList } from '../components/AdminCardList'
+import { useIsMobile } from '../useIsMobile'
 import { useToast, ToastHost } from '../components/useToast'
 
 type FilterKey = AftersalesStatus | 'all'
@@ -41,6 +43,28 @@ const STATUS_BADGE: Record<AftersalesStatus, string> = {
   answered: 'admin-badge-success',
   cancelled: 'admin-badge-draft',
   failed: 'admin-badge-danger',
+}
+
+// Status-Badge und Aktions-Knopf teilen sich Tabelle und Karten-Ansicht.
+// Getrennt gepflegt driften Label und Badge-Klasse auseinander, und die
+// Mobile-Variante sieht man beim Testen am Desktop nicht.
+function AftersalesStatusBadge({ status }: { status: AftersalesStatus }) {
+  return (
+    <span className={`admin-badge ${STATUS_BADGE[status] || 'admin-badge-draft'}`}>
+      {STATUS_LABEL[status] || status}
+    </span>
+  )
+}
+
+function OpenButton({ t, onOpen }: { t: AftersalesTask; onOpen: (t: AftersalesTask) => void }) {
+  return (
+    <button
+      className={`admin-btn admin-btn-sm ${isEditable(t.status) ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
+      onClick={e => { e.stopPropagation(); onOpen(t) }}
+    >
+      {isEditable(t.status) ? 'Bearbeiten' : 'Vorschau'}
+    </button>
+  )
 }
 
 // Geplante und zu prüfende Aufgaben lassen sich noch bearbeiten (Datum/Text/senden/
@@ -93,6 +117,7 @@ export default function AftersalesScreen() {
   const [tasks, setTasks] = useState<AftersalesTask[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterKey>('review')
+  const isMobile = useIsMobile()
   const [selected, setSelected] = useState<AftersalesTask | null>(null)
   const [draft, setDraft] = useState<{ send_date: string; mail_subject: string; mail_body: string }>(
     { send_date: '', mail_subject: '', mail_body: '' },
@@ -238,6 +263,34 @@ export default function AftersalesScreen() {
 
         {loading ? (
           <div className="admin-loading"><div className="admin-spinner" /> Laden…</div>
+        ) : isMobile ? (
+          <AdminCardList
+            items={tasks}
+            keyFor={t => String(t.id)}
+            empty="Keine After-Sales-Einträge."
+            onItemClick={openDetail}
+            renderCard={t => (
+              <>
+                <div className="admin-card-head">
+                  <span className="admin-card-title">{t.customer_name || '—'}</span>
+                  <AftersalesStatusBadge status={t.status} />
+                </div>
+                <div className="admin-card-meta">
+                  {KIND_LABEL[t.kind] || t.kind} · {t.project_name || '—'}
+                </div>
+                <div className="admin-card-meta">
+                  {t.positions_snapshot?.projektleiter || '—'} · Versand {fmtDate(t.send_date)}
+                </div>
+                {/* Knopf und Karten-Klick fuehren zum selben openDetail — das
+                    stopPropagation im Knopf ist deshalb heute folgenlos und rein
+                    defensiv. Sollten die beiden Pfade je auseinandergehen, ist es
+                    das, was den Doppelaufruf verhindert. */}
+                <div className="admin-card-actions">
+                  <OpenButton t={t} onOpen={openDetail} />
+                </div>
+              </>
+            )}
+          />
         ) : (
           <table className="admin-table">
             <thead>
@@ -261,19 +314,8 @@ export default function AftersalesScreen() {
                   <td style={{ color: 'var(--muted)' }}>{t.project_name || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{t.positions_snapshot?.projektleiter || '—'}</td>
                   <td style={{ color: 'var(--muted)' }}>{fmtDate(t.send_date)}</td>
-                  <td>
-                    <span className={`admin-badge ${STATUS_BADGE[t.status] || 'admin-badge-draft'}`}>
-                      {STATUS_LABEL[t.status] || t.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className={`admin-btn admin-btn-sm ${isEditable(t.status) ? 'admin-btn-primary' : 'admin-btn-secondary'}`}
-                      onClick={e => { e.stopPropagation(); openDetail(t) }}
-                    >
-                      {isEditable(t.status) ? 'Bearbeiten' : 'Vorschau'}
-                    </button>
-                  </td>
+                  <td><AftersalesStatusBadge status={t.status} /></td>
+                  <td><OpenButton t={t} onOpen={openDetail} /></td>
                 </tr>
               ))}
             </tbody>
