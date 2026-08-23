@@ -62,6 +62,7 @@ function report(over: Record<string, unknown> = {}) {
     created_by: 'Max Muster',
     signature_timestamp: null,
     invoice_id: null,
+    invoice_locked: false,
     created_at: '2026-08-05T16:00:00Z',
     source: 'chat',
     is_own: true,
@@ -283,6 +284,29 @@ describe('ProjekteScreen — Rapporte des Projekts', () => {
     await openProject([project()], vi.fn(), { [REPORTS_PATH]: [report()] })
 
     expect(await screen.findByRole('button', { name: 'Löschen' })).toBeInTheDocument()
+  })
+
+  // Ein pendenter Rapport wird von der Rechnungsaggregation stillschweigend
+  // mitverrechnet. Solange die Rechnung den Kunden nicht erreicht hat, bleibt die
+  // Unterschrift nachtragbar — sonst wäre der Rapport für immer ohne Abnahme.
+  it('lässt die Unterschrift nachtragen, solange die Rechnung offen ist', async () => {
+    await openProject([project()], vi.fn(), {
+      [REPORTS_PATH]: [report({ invoice_id: 10, invoice_locked: false })],
+    })
+
+    expect(await screen.findByText('auf offener Rechnung')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Unterschrift/ })).toBeInTheDocument()
+    // Gelöscht wird trotzdem nicht: die Positionen stehen schon auf der Rechnung.
+    expect(screen.queryByRole('button', { name: 'Löschen' })).not.toBeInTheDocument()
+  })
+
+  it('nimmt keine Unterschrift mehr, sobald die Rechnung beim Kunden ist', async () => {
+    await openProject([project()], vi.fn(), {
+      [REPORTS_PATH]: [report({ invoice_id: 10, invoice_locked: true })],
+    })
+
+    expect(await screen.findByText('abgerechnet')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Unterschrift/ })).not.toBeInTheDocument()
   })
 })
 

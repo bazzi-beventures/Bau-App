@@ -17,6 +17,7 @@ import { UserInfo } from '../../api/auth'
 import { isFeatureEnabled } from '../../api/modules'
 import { AdminCardList } from '../components/AdminCardList'
 import { useIsMobile } from '../useIsMobile'
+import { useTabStrip } from '../hooks/useTabStrip'
 import { vkFromEk } from '../utils/quotePricing'
 
 interface StockModalProps {
@@ -648,6 +649,7 @@ type MaterialTab = 'inventory' | 'frequent' | 'vkbulk' | 'import'
 
 export default function MaterialsScreen({ user }: { user: UserInfo }) {
   const [tab, setTab] = useState<MaterialTab>('inventory')
+  const tabsRef = useTabStrip(tab)
   // Tab "Häufig benutzte Produkte" nur, wenn der Workflow ersatzteil_prompt aktiv ist.
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
   // Tab "VK-Massenänderung" nur, wenn eigene Artikel im Einsatz sind (import_eigenartikel).
@@ -655,7 +657,7 @@ export default function MaterialsScreen({ user }: { user: UserInfo }) {
 
   return (
     <div className="admin-page">
-      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+      <div className="kpi-admin-tabs" ref={tabsRef} style={{ marginBottom: 20 }}>
         <button
           className={`kpi-admin-tab${tab === 'inventory' ? ' active' : ''}`}
           onClick={() => setTab('inventory')}

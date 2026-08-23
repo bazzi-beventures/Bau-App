@@ -135,6 +135,7 @@ export function ProjectTabContent({
           onShowCreateForm={onShowReportForm}
           onDelete={billing.deleteReport}
           onEdit={onEditReport}
+          onRegeneratePdf={billing.regenerateReportPdf}
           paperRapportUrl={apiUrl(`/pwa/admin/projects/${project.id}/paper-rapport.pdf`)}
           files={documents.files}
           uploading={documents.uploading}

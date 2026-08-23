@@ -680,7 +680,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
               onClick={async () => {
                 setPdfDownloading(true)
                 try {
-                  const { blob, filename } = await downloadRapportPdf(downloadReportId)
+                  const { blob, filename } = await downloadRapportPdf(downloadReportId, reportSigned)
                   const url = URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = url

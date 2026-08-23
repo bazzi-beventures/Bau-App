@@ -42,7 +42,14 @@ export interface ProjectReport {
   id: number
   report_date: string
   description: string | null
+  // Wer den Rapport ERFASST hat — beim nacherfassten Rapport das Büro, nicht der
+  // Monteur. Deshalb steht in der Zeile `monteure`; created_by nur als Zusatz.
   created_by: string | null
+  // Wer vor Ort war: aus den erfassten Stunden (labor_hours), serverseitig
+  // zusammengesetzt wie die Kopfzeile des Rapport-PDFs. Ohne erfasste Stunden
+  // (Massaufnahme/Beratung) fällt der Server auf created_by zurück; fehlt das
+  // Feld ganz, ist die Antwort älter als die Ergänzung.
+  monteure?: string | null
   pdf_url: string | null
   storage_path?: string | null
   signature_timestamp: string | null

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTabStrip } from '../hooks/useTabStrip'
 import { WeeklyPlanTab } from './tabs/WeeklyPlanTab'
 import { YearEndTab } from './tabs/YearEndTab'
 import { ModulesTab } from './tabs/ModulesTab'
@@ -14,6 +15,7 @@ interface ConfigProps {
 export default function ConfigurationScreen({ userRole }: ConfigProps) {
   const isSuperadmin = userRole === 'superadmin'
   const [tab, setTab] = useState<'weekly-plan' | 'year-end' | 'modules' | 'notifications' | 'workflows' | 'travel-cost' | 'scheduling' | 'help-docs'>('weekly-plan')
+  const tabsRef = useTabStrip(tab)
 
   return (
     <div className="admin-page">
@@ -24,7 +26,7 @@ export default function ConfigurationScreen({ userRole }: ConfigProps) {
         </div>
       </div>
 
-      <div className="kpi-admin-tabs">
+      <div className="kpi-admin-tabs" ref={tabsRef}>
         <button
           className={`kpi-admin-tab${tab === 'weekly-plan' ? ' active' : ''}`}
           onClick={() => setTab('weekly-plan')}

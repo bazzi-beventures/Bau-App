@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useKpiData } from '../kpis/useKpiData'
+import { useDateRange } from '../kpis/useDateRange'
+import { tickDM } from '../kpis/dateRange'
+import DateRangeBar from '../kpis/components/DateRangeBar'
 import type {
   ColumnDef,
   KpiLlmKostenEndpunktRow,
@@ -22,39 +25,6 @@ const rappen = (usd: number) =>
 const intnum = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('de-CH') : '—')
 const chfCell = (v: unknown) => (typeof v === 'number' ? chf(v) : '—')
 const pctCell = (v: unknown) => (typeof v === 'number' ? `${v.toLocaleString('de-CH', { maximumFractionDigits: 1 })} %` : '—')
-
-// ── Datums-Helfer (lokale Zeitzone, kein UTC-Versatz) ──
-const isoLocal = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
-const fmtDE = (iso: string) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}` }
-const tickDM = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`
-
-type PresetId = '7t' | '30t' | '90t' | 'monat' | 'vormonat' | 'custom'
-
-function presetRange(id: Exclude<PresetId, 'custom'>): { von: string; bis: string } {
-  const today = new Date()
-  switch (id) {
-    case '7t': return { von: isoLocal(addDays(today, -6)), bis: isoLocal(today) }
-    case '30t': return { von: isoLocal(addDays(today, -29)), bis: isoLocal(today) }
-    case '90t': return { von: isoLocal(addDays(today, -89)), bis: isoLocal(today) }
-    case 'monat':
-      return { von: isoLocal(new Date(today.getFullYear(), today.getMonth(), 1)), bis: isoLocal(today) }
-    case 'vormonat':
-      return {
-        von: isoLocal(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
-        bis: isoLocal(new Date(today.getFullYear(), today.getMonth(), 0)),
-      }
-  }
-}
-
-const PRESETS: { id: Exclude<PresetId, 'custom'>; label: string }[] = [
-  { id: '7t', label: '7 Tage' },
-  { id: '30t', label: '30 Tage' },
-  { id: '90t', label: '90 Tage' },
-  { id: 'monat', label: 'Dieser Monat' },
-  { id: 'vormonat', label: 'Vormonat' },
-]
 
 // Endpunkt-Namen leserlich machen; unbekannte fallen auf den Rohwert zurück.
 const ENDPOINT_LABELS: Record<string, string> = {
@@ -107,19 +77,8 @@ const BREAKDOWN_COLUMNS: ColumnDef<BreakdownRow>[] = [
 export default function LlmCostsScreen() {
   // Zeitraum-Filter (Default: letzte 30 Tage). Treibt ALLES — server-seitig
   // gefiltert, damit nur der gewählte Bereich geladen wird (Cap-sicher).
-  const [preset, setPreset] = useState<PresetId>('30t')
-  const [von, setVon] = useState<string>(() => presetRange('30t').von)
-  const [bis, setBis] = useState<string>(() => presetRange('30t').bis)
-
-  function applyPreset(id: Exclude<PresetId, 'custom'>) {
-    const r = presetRange(id)
-    setVon(r.von); setBis(r.bis); setPreset(id)
-  }
-
-  const filters = useMemo(
-    () => ({ and: `(datum.gte.${von},datum.lte.${bis})` }),
-    [von, bis],
-  )
+  const range = useDateRange('30t')
+  const { filters } = range
 
   const endpunkt = useKpiData<KpiLlmKostenEndpunktRow>('vw_kpi_llm_kosten_endpunkt', filters)
   const modell = useKpiData<KpiLlmKostenModellRow>('vw_kpi_llm_kosten_modell', filters)
@@ -136,7 +95,7 @@ export default function LlmCostsScreen() {
     tokens: epRows.reduce((s, r) => s + r.total_tokens, 0),
   }), [epRows])
 
-  const periodLabel = von === bis ? fmtDE(von) : `${fmtDE(von)} – ${fmtDE(bis)}`
+  const periodLabel = range.label
 
   const cards = useMemo(() => [
     { label: 'Kosten', value: chf(totals.kostenUsd), color: '#be123c', sub: periodLabel },
@@ -157,10 +116,6 @@ export default function LlmCostsScreen() {
   const modellAgg = useMemo(() => aggregate(moRows, (r) => `${r.model} (${r.provider})`), [moRows])
   const benutzerAgg = useMemo(() => aggregate(buRows, (r) => r.benutzer_name), [buRows])
 
-  function drillToDay(datum: string) {
-    setVon(datum); setBis(datum); setPreset('custom')
-  }
-
   const loading = endpunkt.loading || modell.loading || benutzer.loading
   const error = endpunkt.error || modell.error || benutzer.error
 
@@ -176,39 +131,7 @@ export default function LlmCostsScreen() {
       </div>
 
       {/* Datumsbereich-Filter: Presets + freie von/bis-Auswahl */}
-      <div className="llm-cost-filter">
-        <div className="kpi-date-presets">
-          {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              className={`kpi-date-btn${preset === p.id ? ' active' : ''}`}
-              onClick={() => applyPreset(p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="llm-cost-range">
-          <label>
-            von
-            <input
-              type="date"
-              value={von}
-              max={bis}
-              onChange={(e) => { setVon(e.target.value); setPreset('custom') }}
-            />
-          </label>
-          <label>
-            bis
-            <input
-              type="date"
-              value={bis}
-              min={von}
-              onChange={(e) => { setBis(e.target.value); setPreset('custom') }}
-            />
-          </label>
-        </div>
-      </div>
+      <DateRangeBar range={range} />
 
       {loading && <div className="admin-loading"><div className="kpi-admin-spinner" />Laden…</div>}
       {error && !loading && <div className="admin-error">{error}</div>}
@@ -227,7 +150,7 @@ export default function LlmCostsScreen() {
             xKey="name"
             bars={[{ dataKey: 'Kosten', color: '#be123c', label: 'Kosten (CHF)' }]}
             height={280}
-            onBarClick={drillToDay}
+            onBarClick={range.drillToDay}
             xInterval="preserveStartEnd"
             xTickFormatter={tickDM}
           />

@@ -17,6 +17,11 @@ interface ReportsTabProps {
   // Optional: löscht einen Rapport (inkl. Stunden/Material). Fehlt der Prop, wird
   // kein Löschen-Knopf gezeigt (Abwärtskompatibilität).
   onDelete?: (reportId: number) => Promise<void>
+  // Optional: erzeugt ein fehlendes Rapport-PDF nach. Der Knopf erscheint nur an
+  // Rapporten ohne Dokument — und bewusst auch an abgerechneten: das PDF ist
+  // abgeleitet, nicht Inhalt. Ohne diesen Weg bleibt so ein Rapport dauerhaft
+  // unlesbar (Bearbeiten, das sonst neu rendert, sperrt das billed-Gate).
+  onRegeneratePdf?: (reportId: number) => Promise<void>
   // Optional: öffnet die Bearbeiten-Maske. Der Knopf erscheint nur an manuell
   // erfassten, noch nicht abgerechneten Rapporten — ein Chat-Rapport ist die
   // Aufnahme des Monteurs und wird nicht umgeschrieben (Server prüft dieselbe
@@ -34,11 +39,24 @@ interface ReportsTabProps {
 }
 
 export function ReportsTab({
-  reports, onShowCreateForm, paperRapportUrl, onDelete, onEdit,
+  reports, onShowCreateForm, paperRapportUrl, onDelete, onEdit, onRegeneratePdf,
   files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
 }: ReportsTabProps) {
   const [confirmDelete, setConfirmDelete] = useState<ProjectReport | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null)
+
+  // Fehler meldet der Aufrufer als Toast; hier zählt nur, dass der Knopf wieder
+  // klickbar wird, damit ein zweiter Versuch möglich bleibt.
+  async function handleRegenerate(reportId: number) {
+    if (!onRegeneratePdf) return
+    setRegeneratingId(reportId)
+    try {
+      await onRegeneratePdf(reportId)
+    } finally {
+      setRegeneratingId(null)
+    }
+  }
 
   // Abgerechnete Rapporte bleiben tabu: ihre Positionen stehen auf einer Rechnung.
   // Alles andere darf der Projektleiter wegräumen — auch unterschriebene Rapporte,
@@ -95,6 +113,16 @@ export function ReportsTab({
             const signed = !!r.signature_timestamp
             const billed = !!r.invoice_id
             const manual = r.source === 'admin_manual'
+            // Wer vor Ort war, nicht wer getippt hat: `monteure` kommt aus den
+            // erfassten Stunden — dieselbe Regel wie die Kopfzeile des Rapport-PDFs.
+            // Beim nacherfassten Rapport standen hier sonst Büro (Liste) und Monteur
+            // (PDF) für denselben Rapport nebeneinander.
+            const monteur = r.monteure || r.created_by || '—'
+            // Den Erfasser nur nennen, wenn er nicht selbst vor Ort war — genau die
+            // Konstellation, die das PDF unten mit «Manuell erfasst durch …» vermerkt.
+            const erfasser = r.monteure && r.created_by && r.created_by !== r.monteure
+              ? r.created_by
+              : null
             // Priorität: Abgerechnet > Unterschrieben > Manuell > Pendent.
             const status: { label: string; cls: string } = billed
               ? { label: 'Abgerechnet', cls: 'admin-badge-closed' }
@@ -120,7 +148,8 @@ export function ReportsTab({
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                    {r.created_by ?? '—'}
+                    {monteur}
+                    {erfasser ? ` (erfasst von ${erfasser})` : ''}
                     {r.description ? ` · ${r.description}` : ''}
                   </div>
                 </div>
@@ -128,6 +157,16 @@ export function ReportsTab({
                   <a href={apiUrl(`/pwa/admin/reports/${r.id}/pdf`)} target="_blank" rel="noreferrer" className="admin-btn admin-btn-secondary admin-btn-sm">
                     PDF
                   </a>
+                ) : onRegeneratePdf ? (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    onClick={() => void handleRegenerate(r.id)}
+                    disabled={regeneratingId === r.id}
+                    title="Zu diesem Rapport fehlt das PDF — aus den erfassten Stunden und Material neu erzeugen. Inhalt und Unterschrift bleiben unverändert."
+                  >
+                    {regeneratingId === r.id ? 'Erzeuge…' : 'PDF erzeugen'}
+                  </button>
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
                 )}
@@ -186,7 +225,8 @@ export function ReportsTab({
                 </div>
               )}
               Rapport vom {fmtDate(confirmDelete.report_date)}
-              {confirmDelete.created_by ? ` (${confirmDelete.created_by})` : ''} wirklich löschen?
+              {(confirmDelete.monteure || confirmDelete.created_by)
+                ? ` (${confirmDelete.monteure || confirmDelete.created_by})` : ''} wirklich löschen?
               Erfasste Stunden, Material und Fotos werden mitgelöscht, das Material wird
               ins Lager zurückgebucht. Das lässt sich nicht rückgängig machen.
             </>

@@ -105,7 +105,7 @@ export function WeeklyPlanTab() {
         <div className="admin-loading"><div className="admin-spinner" /> Wochenplan wird geladen…</div>
       ) : (
         <div className="admin-table-wrap">
-          <table className="admin-table">
+          <table className="admin-table weekly-plan-table">
             <thead>
               <tr>
                 <th style={{ width: 80 }}>KW</th>
@@ -127,7 +127,7 @@ export function WeeklyPlanTab() {
                         step="0.5"
                         min="0"
                         max="80"
-                        className="admin-form-input"
+                        className="admin-form-input weekly-plan-hours"
                         value={entry?.target_hours ?? ''}
                         placeholder={`${defaultHours} (Standard)`}
                         onChange={e => {
@@ -135,14 +135,9 @@ export function WeeklyPlanTab() {
                           if (v === '') { clearWeek(w); return }
                           setWeek(w, parseFloat(v), entry?.note ?? '')
                         }}
-                        style={{
-                          width: 130,
-                          color: entry ? undefined : 'var(--muted)',
-                        }}
+                        style={{ color: entry ? undefined : 'var(--muted)' }}
                       />
-                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--muted)' }}>
-                        = {effective}h
-                      </span>
+                      <span className="weekly-plan-effective">= {effective}h</span>
                     </td>
                     <td>
                       <input

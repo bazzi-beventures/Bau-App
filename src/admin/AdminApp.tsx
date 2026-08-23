@@ -222,7 +222,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'users':        return <UsersScreen actingRole={user.role} />
       case 'kpis':         return guard('kpis', <KpiScreen />)
       case 'document-backup': return guard('document_backup', <DocumentBackupScreen />)
-      case 'admin-tools':  return <AdminToolsScreen userRole={user.role} />
+      case 'admin-tools':  return <AdminToolsScreen userRole={user.role} enabledModules={enabledModules} />
       default:             return <ComingSoon title={SCREEN_TITLES[screen]} />
     }
   }

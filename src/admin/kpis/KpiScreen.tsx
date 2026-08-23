@@ -8,6 +8,7 @@ import MaterialTab from './tabs/MaterialTab'
 import PricingTab from './tabs/PricingTab'
 import WartungTab from './tabs/WartungTab'
 import LeistungsartTab from './tabs/LeistungsartTab'
+import { useTabStrip } from '../hooks/useTabStrip'
 import './kpi-dashboard.css'
 
 type Tab = 'uebersicht' | 'pipeline' | 'projekte' | 'finanzen' | 'arbeitszeit' | 'material' | 'pricing' | 'wartung' | 'leistungsart'
@@ -26,6 +27,7 @@ const TABS: { id: Tab; label: string; color: string }[] = [
 
 export default function KpiScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('uebersicht')
+  const tabsRef = useTabStrip(activeTab)
 
   function renderTab() {
     switch (activeTab) {
@@ -50,7 +52,7 @@ export default function KpiScreen() {
         </div>
       </div>
 
-      <div className="kpi-admin-tabs">
+      <div className="kpi-admin-tabs" ref={tabsRef}>
         {TABS.map((t) => (
           <button
             key={t.id}

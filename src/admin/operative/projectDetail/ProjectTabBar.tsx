@@ -3,6 +3,8 @@
 // vollstaendig aufgezaehlt steht — im Screen selbst gingen sie zwischen den
 // Dialogen unter.
 
+import { useTabStrip } from '../../hooks/useTabStrip'
+
 export type ProjectTab =
   | 'details' | 'documents' | 'supplier' | 'quotes' | 'reports'
   | 'invoices' | 'approvals' | 'tasks' | 'status'
@@ -23,8 +25,10 @@ export function ProjectTabBar({ active, onSelect }: {
   active: ProjectTab
   onSelect: (tab: ProjectTab) => void
 }) {
+  const tabsRef = useTabStrip(active)
+
   return (
-    <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+    <div className="kpi-admin-tabs" ref={tabsRef} style={{ marginBottom: 20 }}>
       {TABS.map(t => (
         <button
           key={t.key}

@@ -57,3 +57,20 @@ export async function deleteProjectReport(
     method: 'DELETE',
   })
 }
+
+/**
+ * Erzeugt das fehlende PDF eines bestehenden Rapports nach.
+ *
+ * Beide PDF-Pfade (Unterschrift im Chat, manuelles Erfassen) sind best-effort:
+ * schlägt der Storage-Upload fehl, steht der Rapport ohne Dokument da — und war
+ * bisher nicht mehr zu öffnen, weil Nacherzeugen nur über die Bearbeiten-Maske
+ * ging und die bei abgerechneten Rapporten gesperrt ist. Liegt bereits ein PDF
+ * vor, antwortet der Server mit 409 statt einer zweiten Fassung.
+ */
+export async function regenerateReportPdf(
+  projectId: string, reportId: number,
+): Promise<{ status?: string }> {
+  return apiFetch<{ status?: string }>(
+    `/pwa/admin/projects/${projectId}/reports/${reportId}/pdf`, { method: 'POST' },
+  )
+}

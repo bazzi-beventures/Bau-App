@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { ColumnDef, SortState } from '../types'
+import { useScrollEdge } from '../../hooks/useScrollEdge'
 
 interface Props<T> {
   data: T[]
@@ -18,6 +19,7 @@ export default function DataTable<T extends object>({
 }: Props<T>) {
   const [sort, setSort] = useState<SortState>(defaultSort ?? { key: columns[0]?.key ?? '', dir: 'desc' })
   const [page, setPage] = useState(0)
+  const scrollRef = useScrollEdge<HTMLDivElement>()
 
   const sorted = useMemo(() => {
     const k = sort.key as keyof T & string
@@ -52,44 +54,49 @@ export default function DataTable<T extends object>({
 
   return (
     <div className="kpi-bi-table-wrap">
-      <table className="admin-table kpi-bi-table">
-        <thead>
-          <tr>
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                style={{ textAlign: col.align ?? 'left', cursor: 'pointer' }}
-                onClick={() => toggleSort(col.key)}
-              >
-                {col.label}
-                {sort.key === col.key && (
-                  <span className="kpi-bi-sort">{sort.dir === 'asc' ? ' ▲' : ' ▼'}</span>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {paged.length === 0 && (
-            <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Keine Daten</td></tr>
-          )}
-          {paged.map((row, ri) => (
-            <tr
-              key={ri}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              style={onRowClick ? { cursor: 'pointer' } : undefined}
-            >
+      {/* Eigener Scroll-Container: die Tabelle darf breiter als der Viewport sein
+          (Mobile), die Pagination-Leiste darunter soll aber stehen bleiben und
+          nicht mitscrollen. */}
+      <div className="kpi-bi-table-scroll" ref={scrollRef}>
+        <table className="admin-table kpi-bi-table">
+          <thead>
+            <tr>
               {columns.map((col) => (
-                <td key={col.key} style={{ textAlign: col.align ?? 'left' }}>
-                  {col.render
-                    ? col.render((row as Record<string, unknown>)[col.key], row)
-                    : cell(col, row)}
-                </td>
+                <th
+                  key={col.key}
+                  style={{ textAlign: col.align ?? 'left', cursor: 'pointer' }}
+                  onClick={() => toggleSort(col.key)}
+                >
+                  {col.label}
+                  {sort.key === col.key && (
+                    <span className="kpi-bi-sort">{sort.dir === 'asc' ? ' ▲' : ' ▼'}</span>
+                  )}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {paged.length === 0 && (
+              <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>Keine Daten</td></tr>
+            )}
+            {paged.map((row, ri) => (
+              <tr
+                key={ri}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                style={onRowClick ? { cursor: 'pointer' } : undefined}
+              >
+                {columns.map((col) => (
+                  <td key={col.key} style={{ textAlign: col.align ?? 'left' }}>
+                    {col.render
+                      ? col.render((row as Record<string, unknown>)[col.key], row)
+                      : cell(col, row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {sorted.length > pageSize && (
         <div className="kpi-bi-pagination">

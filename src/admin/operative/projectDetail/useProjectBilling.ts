@@ -10,7 +10,7 @@ import {
   addQuoteVariant, getQuoteDetail, regenerateQuote, sendQuoteRejection, setQuoteStatus,
   type QuoteDetail,
 } from '../../../api/admin/quotes'
-import { deleteProjectReport } from '../../../api/admin/reports'
+import { deleteProjectReport, regenerateReportPdf } from '../../../api/admin/reports'
 import type { ProjectInvoice, ProjectQuote, ProjectReport } from './types'
 import { hasBillableReport } from './billingRules'
 import { invoiceWarningHint, sammelrechnungHint } from '../../utils/invoiceHints'
@@ -37,6 +37,7 @@ export interface UseProjectBilling {
   /** Vollständige Offerte fürs Bearbeiten-Formular; null, wenn das Laden scheitert. */
   loadQuoteDetail: (quoteId: number) => Promise<QuoteDetail | null>
   deleteReport: (reportId: number) => Promise<void>
+  regenerateReportPdf: (reportId: number) => Promise<void>
   regenerate: (quoteId: number) => Promise<void>
   addVariant: (quoteId: number, kind: 'variante' | 'mehrfach') => Promise<void>
   updateQuoteStatus: (quoteId: number, status: string) => Promise<void>
@@ -116,6 +117,21 @@ export function useProjectBilling(
     } catch (err) {
       cb.onToast(err instanceof Error ? err.message : 'Rapport konnte nicht gelöscht werden')
       throw err
+    }
+  }
+
+  // Fehlendes Rapport-PDF nachziehen. Kommt vor, wenn der Storage-Upload beim
+  // Unterschreiben/Erfassen scheiterte: der Rapport ist gespeichert, das Dokument
+  // fehlt — und über Bearbeiten (das sonst neu rendert) ist er nach dem Verrechnen
+  // nicht mehr erreichbar. Liegt schon ein PDF vor, antwortet der Server mit 409.
+  async function regenerateReportPdfFor(reportId: number) {
+    if (!project) return
+    try {
+      await regenerateReportPdf(project.id, reportId)
+      await reloadReports()
+      cb.onToast('PDF erzeugt')
+    } catch (err) {
+      cb.onToast(err instanceof Error ? err.message : 'PDF konnte nicht erzeugt werden')
     }
   }
 
@@ -265,6 +281,7 @@ export function useProjectBilling(
     quotes, invoices, reports,
     generatingInvoice, regeneratingQuoteId, addingVariantId, sendingRejectionId,
     reloadQuotes, reloadInvoices, reloadReports, loadQuoteDetail, deleteReport,
+    regenerateReportPdf: regenerateReportPdfFor,
     regenerate, addVariant, updateQuoteStatus, sendRejection, generate,
     markPaid, unmarkPaid, archive, send, markSentByPost,
   }

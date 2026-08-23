@@ -160,8 +160,17 @@ export async function signReport(reportId: number, signatureBase64: string): Pro
   })
 }
 
-export async function downloadRapportPdf(reportId: number): Promise<{ blob: Blob; filename: string }> {
-  return apiBlobFetch(`/pwa/chat/report/${reportId}/pdf`)
+// `awaitSignature`: wurde der Rapport GERADE unterschrieben? Dann rennt der Client
+// gegen den Hintergrund-Task, der die Unterschrift persistiert — der Server wartet
+// bis zu zehn Sekunden auf sie, statt ein Dokument ohne die eben geleistete
+// Unterschrift zu liefern. Für einen pendenten Rapport ist dieselbe Warteschleife
+// sinnlos: sein PDF (der Zwischenstand) liegt bereits, und der Monteur sähe nur
+// zehn Sekunden «PDF wird erstellt…».
+export async function downloadRapportPdf(
+  reportId: number,
+  awaitSignature = true,
+): Promise<{ blob: Blob; filename: string }> {
+  return apiBlobFetch(`/pwa/chat/report/${reportId}/pdf?await_signature=${awaitSignature}`)
 }
 
 // Selbstkorrektur: eigenen Rapport löschen (falscher Auftrag, doppelt erfasst).
@@ -182,6 +191,11 @@ export interface ProjectReport {
   created_by: string | null
   signature_timestamp: string | null
   invoice_id: number | null
+  // Hängt der Rapport an einer Rechnung, die der Kunde bereits hat (gesendet/
+  // bezahlt)? Nur dann ist die Unterschrift endgültig weg. Die blosse Verknüpfung
+  // sperrt sie nicht mehr — die Rechnungsaggregation nimmt auch unsignierte
+  // Rapporte mit, und die waren danach nie mehr nachsignierbar.
+  invoice_locked?: boolean
   created_at: string
   source: string | null
   is_own: boolean

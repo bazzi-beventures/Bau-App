@@ -332,7 +332,7 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   async function handleOpenReportPdf(report: ProjectReport) {
     setOpeningReportId(report.id)
     try {
-      const { blob, filename } = await downloadRapportPdf(report.id)
+      const { blob, filename } = await downloadRapportPdf(report.id, !!report.signature_timestamp)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -605,11 +605,13 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                 const billed = !!r.invoice_id
                 const signed = !!r.signature_timestamp
                 const canDelete = r.is_own && !billed && !signed
-                // Nachtragen unter denselben Bedingungen wie Löschen: eigener
-                // Rapport, noch ohne Unterschrift, noch nicht verrechnet. Der Server
-                // prüft dieselben Regeln nochmals (409), der Knopf ist nur die
-                // sichtbare Hälfte.
-                const canSign = canDelete
+                // Nachtragen ist grosszügiger als Löschen: eigener Rapport, noch
+                // ohne Unterschrift — und die Rechnung darf den Kunden noch nicht
+                // erreicht haben. Die blosse Verknüpfung sperrt nicht mehr, sonst
+                // wäre ein still mitverrechneter Rapport nie mehr nachsignierbar.
+                // Alt-Server ohne invoice_locked: dann zählt wieder die Verknüpfung.
+                const invoiceLocked = r.invoice_locked ?? billed
+                const canSign = r.is_own && !signed && !invoiceLocked
                 return (
                   <div key={r.id}>
                   <div
@@ -622,7 +624,9 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                       <div style={{ fontSize: 14, fontWeight: 600 }}>
                         {formatDate(r.report_date)}
                         <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: 'var(--text-muted, #71717a)' }}>
-                          {billed ? 'abgerechnet' : signed ? 'unterschrieben' : 'ohne Unterschrift'}
+                          {billed
+                            ? (invoiceLocked ? 'abgerechnet' : 'auf offener Rechnung')
+                            : signed ? 'unterschrieben' : 'ohne Unterschrift'}
                         </span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted, #71717a)', marginTop: 1 }}>

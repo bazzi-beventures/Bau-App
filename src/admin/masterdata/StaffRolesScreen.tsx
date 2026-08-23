@@ -3,6 +3,7 @@ import {
   StaffRole, getStaffRoles, upsertStaffRole, deleteStaffRole, reorderStaffRoles,
 } from '../../api/admin'
 import { useToast, ToastHost } from '../components/useToast'
+import { useTabStrip } from '../hooks/useTabStrip'
 
 // "Personal"-Screen: Tab-Layout analog zum Material-Screen. Vorerst nur der Tab
 // "Stundensätze" (die früheren "Funktionen"). Weitere Tabs können hier andocken.
@@ -10,10 +11,11 @@ type PersonalTab = 'rates'
 
 export default function StaffRolesScreen() {
   const [tab, setTab] = useState<PersonalTab>('rates')
+  const tabsRef = useTabStrip(tab)
 
   return (
     <div className="admin-page">
-      <div className="kpi-admin-tabs" style={{ marginBottom: 20 }}>
+      <div className="kpi-admin-tabs" ref={tabsRef} style={{ marginBottom: 20 }}>
         <button
           className={`kpi-admin-tab${tab === 'rates' ? ' active' : ''}`}
           onClick={() => setTab('rates')}

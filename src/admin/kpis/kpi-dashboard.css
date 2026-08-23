@@ -10,7 +10,9 @@
 
 .kpi-bi-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* --kpi-cards-cols kommt (optional) von <KpiCards columns={n} />. Ohne die
+     Variable faltet auto-fit selbst um. */
+  grid-template-columns: repeat(var(--kpi-cards-cols, auto-fit), minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -112,7 +114,18 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
+  /* Nur runde Ecken beschneiden — gescrollt wird im inneren .kpi-bi-table-scroll,
+     damit die Pagination-Leiste beim Querscrollen stehen bleibt. */
   overflow: hidden;
+}
+
+/* Querscroll für breite Tabellen. Vorher hing das overflow:hidden am Wrap und
+   hat auf dem Handy schlicht die rechten Spalten abgeschnitten. */
+.kpi-bi-table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .kpi-bi-table {
@@ -559,9 +572,115 @@
 }
 
 @media (max-width: 767px) {
+  /* ── Kennzahl-Kacheln ────────────────────────────────────
+     columns={4} ergibt auf 360px vier ~80px-Kacheln; die Werte ("CHF 2.99")
+     passen dann nicht mehr und die vierte Kachel liegt ausserhalb des
+     Viewports. Zwei Spalten (eine ganz schmal) sind hier die lesbare Grenze. */
+  .kpi-bi-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .kpi-bi-card {
+    padding: 12px 12px;
+  }
+  .kpi-bi-card-label {
+    font-size: 10px;
+    letter-spacing: 0.4px;
+  }
+  .kpi-bi-card-value {
+    font-size: 19px;
+    /* lange Zahlen (Tokens) duerfen umbrechen statt die Kachel zu sprengen */
+    overflow-wrap: anywhere;
+  }
+
+  .kpi-bi-exec-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* ── Datumsfilter (LLM-Kosten / KPI) ─────────────────────
+     Presets umbrechen statt rechts abgeschnitten zu werden, von/bis nimmt
+     die volle Zeile und teilt sie zu gleichen Teilen. */
+  .kpi-date-presets {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
   .kpi-date-btn {
     min-height: 44px;
-    padding: 8px 16px;
+    padding: 8px 14px;
     font-size: 13px;
+    flex: 1 1 auto;
+  }
+
+  .llm-cost-filter {
+    gap: 10px;
+  }
+  .llm-cost-range {
+    flex: 1 1 100%;
+    gap: 8px;
+  }
+  .llm-cost-range label {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .llm-cost-range input[type='date'] {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    min-height: 40px;
+    font-size: 13px;
+  }
+
+  /* ── Tabellen ────────────────────────────────────────────
+     Erste Spalte (der Name) bleibt beim Querscrollen stehen, sonst weiss man
+     nach zwei Wischern nicht mehr, zu welcher Zeile die Zahl gehoert. */
+  .kpi-bi-table {
+    font-size: 12.5px;
+  }
+  .kpi-bi-table th,
+  .kpi-bi-table td {
+    padding: 9px 10px;
+  }
+  .kpi-bi-table td {
+    max-width: 180px;
+  }
+  .kpi-bi-table thead th:first-child,
+  .kpi-bi-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--border);
+  }
+  .kpi-bi-table tbody tr:nth-child(even) td:first-child {
+    background: var(--surface-2);
+  }
+  .kpi-bi-table thead th:first-child {
+    background: var(--bg);
+    /* ueber der sticky-Zeile UND ueber den mitscrollenden Datenzellen */
+    z-index: 3;
+  }
+  .kpi-bi-table tbody td:first-child {
+    z-index: 1;
+  }
+
+  /* Ausblendkante rechts, solange noch Spalten folgen (Klasse kommt von
+     useScrollEdge). Ohne den Hinweis wirkt die abgeschnittene Spalte wie ein
+     Layoutfehler statt wie "hier kann man wischen". */
+  .kpi-bi-table-scroll:not(.is-scroll-end) {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  }
+
+  .kpi-bi-pagination button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* Auf sehr schmalen Geraeten (iPhone SE / 320px) wird das native Date-Input zu
+   eng — der Kalender-Button rutscht hinter den Text. Dann von/bis untereinander. */
+@media (max-width: 380px) {
+  .llm-cost-range {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

@@ -208,6 +208,30 @@ export interface KpiLlmKostenBenutzerRow extends KpiLlmKostenBase {
   benutzer_name: string
 }
 
+// ── Nutzungs-Dashboard (Spec docs/specs/nutzungs-dashboard.md) ──
+
+export interface KpiNutzungAktionRow {
+  tenant_id: string
+  datum: string // 'YYYY-MM-DD' (Europe/Zurich)
+  action: string
+  entity: string
+  platform: string
+  aktionen: number
+  /** ANZAHL beteiligter Benutzer an diesem Tag, keine Namen — Spec §5. */
+  benutzer: number
+}
+
+export interface KpiNutzungAdoptionRow {
+  tenant_id: string
+  user_id: string
+  benutzer_name: string
+  rolle: string | null
+  is_active: boolean | null
+  konto_erstellt: string | null
+  /** null = nie eingeloggt (keine pwa_sessions-Zeile). */
+  zuletzt_gesehen: string | null
+}
+
 export interface CategoryPricingRow {
   id: string
   tenant_id: string

@@ -123,8 +123,16 @@ export interface ProjectsListResponse {
   page_size: number
 }
 
+/**
+ * Sonderwert der Mehrfachfilter: "keiner". `invoiceStatus: ['none']` heisst
+ * "Projekte ohne Rechnung" — zusammen mit `lifecycle: ['abgeschlossen']` ist das
+ * die Frage "fertig, aber noch nicht verrechnet".
+ */
+export const FILTER_NONE = 'none'
+
 export interface ProjectsListQuery {
   // 'open' (Default der Maske), 'all' (offen + abgeschlossen) oder 'archived'.
+  // Bleibt gültig; `lifecycle` hat Vorrang, wo beides gesetzt ist.
   status: string
   sort: string
   dir: 'asc' | 'desc'
@@ -132,6 +140,26 @@ export interface ProjectsListQuery {
   pageSize: number
   search?: string
   projektleiterId?: string
+  // Spaltenfilter (Spec §5). Leere Arrays und leere Strings werden weggelassen —
+  // ein Filter ohne Auswahl ist kein Filter.
+  lifecycle?: string[]
+  projektleiterIds?: string[]
+  quoteStatus?: string[]
+  invoiceStatus?: string[]
+  beschaffung?: string[]
+  locality?: string[]
+  /** 'YYYY-MM-DD'; `createdTo` schliesst den genannten Tag ein. */
+  createdFrom?: string
+  createdTo?: string
+  /** "enthält" über alle Adressfelder bzw. alle Telefonnummern des Projekts. */
+  address?: string
+  phone?: string
+}
+
+export interface ProjectLocality {
+  locality: string
+  /** Anzahl Projekte — steht in der Auswahlliste hinter dem Ort. */
+  count: number
 }
 
 export async function listProjects(q: ProjectsListQuery): Promise<ProjectsListResponse> {
@@ -144,7 +172,32 @@ export async function listProjects(q: ProjectsListQuery): Promise<ProjectsListRe
   })
   if (q.search) params.set('search', q.search)
   if (q.projektleiterId) params.set('projektleiter_id', q.projektleiterId)
+  // Mehrfachauswahlen gehen als CSV raus — so liest sie der Endpoint (§5).
+  const csv: [string, string[] | undefined][] = [
+    ['lifecycle', q.lifecycle],
+    ['projektleiter_ids', q.projektleiterIds],
+    ['quote_status', q.quoteStatus],
+    ['invoice_status', q.invoiceStatus],
+    ['beschaffung', q.beschaffung],
+    ['locality', q.locality],
+  ]
+  for (const [key, values] of csv) {
+    if (values && values.length > 0) params.set(key, values.join(','))
+  }
+  if (q.createdFrom) params.set('created_from', q.createdFrom)
+  if (q.createdTo) params.set('created_to', q.createdTo)
+  if (q.address) params.set('address', q.address)
+  if (q.phone) params.set('phone', q.phone)
   return apiFetch<ProjectsListResponse>(`/pwa/admin/projects/list?${params.toString()}`)
+}
+
+/**
+ * Ortschaften, die im Bestand vorkommen, mit Trefferzahl — Wertevorrat des
+ * Ortschafts-Filters. Bewusst getrennt von `listProjects`, damit die Aggregation
+ * nicht an jedem Tastendruck in der Suche hängt (serverseitig 5 Minuten gecacht).
+ */
+export async function listProjectLocalities(): Promise<ProjectLocality[]> {
+  return apiFetch<ProjectLocality[]>('/pwa/admin/projects/localities')
 }
 
 /** Ungefilterte Liste für Auswahlfelder; die Tabelle nutzt `listProjects`. */

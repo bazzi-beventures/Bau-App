@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useTabStrip } from '../hooks/useTabStrip'
 import ConfigurationScreen from '../configuration/ConfigurationScreen'
 import ServiceStatusScreen from './ServiceStatusScreen'
 import PushTestScreen from './PushTestScreen'
 import LlmCostsScreen from '../llm/LlmCostsScreen'
+import UsageScreen from '../usage/UsageScreen'
 import MaterialCleanupScreen from './MaterialCleanupScreen'
 import UnitsPanel from './UnitsPanel'
 import ErrorLogsScreen from './ErrorLogsScreen'
@@ -13,10 +15,13 @@ import ErrorLogsScreen from './ErrorLogsScreen'
 // AdminApp.renderScreen erzwungen, hier erscheinen daher immer alle Tabs. Jeder
 // Tool-Screen bringt seinen eigenen admin-page-Rahmen (Titel + Aktionen) mit;
 // die Tab-Leiste sitzt darüber und übernimmt nur die Navigation.
-type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'units' | 'material-cleanup' | 'error-logs'
+type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'usage' | 'units' | 'material-cleanup' | 'error-logs'
 
 interface Props {
   userRole: string
+  /** Module dieses Mandanten — durchgereicht an das Nutzungs-Dashboard, das
+   *  daraus das Modul-Inventar baut (Spec docs/specs/nutzungs-dashboard.md §7c). */
+  enabledModules: string[]
 }
 
 const TABS: { id: Tool; label: string }[] = [
@@ -24,13 +29,15 @@ const TABS: { id: Tool; label: string }[] = [
   { id: 'service-status', label: 'Service-Status' },
   { id: 'push-test',      label: 'Push-Test' },
   { id: 'llm-costs',      label: 'LLM-Kosten' },
+  { id: 'usage',          label: 'Nutzung' },
   { id: 'units',          label: 'Einheiten' },
   { id: 'material-cleanup', label: 'Materialdatenbereinigung' },
   { id: 'error-logs',     label: 'Error-Logs' },
 ]
 
-export default function AdminToolsScreen({ userRole }: Props) {
+export default function AdminToolsScreen({ userRole, enabledModules }: Props) {
   const [active, setActive] = useState<Tool>('configuration')
+  const tabsRef = useTabStrip(active)
 
   function renderTool() {
     switch (active) {
@@ -38,6 +45,7 @@ export default function AdminToolsScreen({ userRole }: Props) {
       case 'service-status': return <ServiceStatusScreen />
       case 'push-test':      return <PushTestScreen />
       case 'llm-costs':      return <LlmCostsScreen />
+      case 'usage':          return <UsageScreen enabledModules={enabledModules} />
       case 'units':          return <UnitsPanel />
       case 'material-cleanup': return <MaterialCleanupScreen />
       case 'error-logs':     return <ErrorLogsScreen />
@@ -47,7 +55,7 @@ export default function AdminToolsScreen({ userRole }: Props) {
   return (
     <>
       <div className="admin-tools-tabs">
-        <div className="kpi-admin-tabs">
+        <div className="kpi-admin-tabs" ref={tabsRef}>
           {TABS.map(t => (
             <button
               key={t.id}

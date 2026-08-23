@@ -4137,3 +4137,15 @@ button.admin-list-item {
   color: var(--success);
   background: var(--success-soft);
 }
+
+/* ─── Wochenplan-Tabelle (Admin-Tools → Konfiguration) ────── */
+
+.weekly-plan-hours {
+  width: 130px;
+}
+
+.weekly-plan-effective {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted, var(--text-muted));
+}

@@ -187,3 +187,90 @@ describe('ReportsTab — Bearbeiten', () => {
     expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
   })
 })
+
+describe('ReportsTab — Monteur statt Erfasser', () => {
+  // Der Befund aus dem Feld: derselbe Rapport nannte in der Liste das Büro
+  // (created_by) und im PDF den Monteur aus den erfassten Stunden.
+  it('zeigt den Monteur, nicht den Erfasser', () => {
+    render(<ReportsTab reports={[makeReport({
+      source: 'admin_manual', created_by: 'Isabelle Zecchini', monteure: 'Franco Schäfler',
+    })]} />)
+    expect(screen.getByText(/Franco Schäfler/)).toBeInTheDocument()
+  })
+
+  it('nennt den Erfasser als Zusatz, wenn er nicht selbst vor Ort war', () => {
+    render(<ReportsTab reports={[makeReport({
+      source: 'admin_manual', created_by: 'Isabelle Zecchini', monteure: 'Franco Schäfler',
+    })]} />)
+    expect(screen.getByText(/erfasst von Isabelle Zecchini/)).toBeInTheDocument()
+  })
+
+  it('nennt den Erfasser nicht doppelt, wenn er der Monteur ist', () => {
+    render(<ReportsTab reports={[makeReport({
+      created_by: 'Franco Schäfler', monteure: 'Franco Schäfler',
+    })]} />)
+    expect(screen.queryByText(/erfasst von/)).not.toBeInTheDocument()
+  })
+
+  it('fällt ohne monteure auf created_by zurück (ältere Antwort, Rapport ohne Stunden)', () => {
+    render(<ReportsTab reports={[makeReport({ created_by: 'Chef', monteure: null })]} />)
+    expect(screen.getByText(/Chef/)).toBeInTheDocument()
+  })
+
+  it('nennt im Löschen-Dialog den Monteur', async () => {
+    render(<ReportsTab
+      reports={[makeReport({ created_by: 'Isabelle Zecchini', monteure: 'Franco Schäfler' })]}
+      onDelete={vi.fn()}
+    />)
+    await userEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    expect(screen.getByText(/\(Franco Schäfler\)/)).toBeInTheDocument()
+  })
+})
+
+describe('ReportsTab — fehlendes PDF nacherzeugen', () => {
+  // Der Befund aus dem Feld: ein unterschriebener, bereits abgerechneter Rapport
+  // stand ohne Dokument da (Storage-Upload beim Signieren gescheitert). Er war
+  // damit gar nicht mehr zu öffnen — Bearbeiten, das sonst neu rendert, sperrt
+  // das billed-Gate.
+  const missingPdf = { storage_path: null, pdf_url: null }
+
+  it('bietet «PDF erzeugen» statt der toten Zeile «kein PDF»', () => {
+    render(<ReportsTab reports={[makeReport(missingPdf)]} onRegeneratePdf={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'PDF erzeugen' })).toBeInTheDocument()
+    expect(screen.queryByText('kein PDF')).not.toBeInTheDocument()
+  })
+
+  it('bietet den Knopf auch am abgerechneten Rapport', () => {
+    // Das PDF ist abgeleitet, nicht Inhalt: neu rendern ändert weder Stunden noch
+    // Material. Ohne diese Ausnahme bliebe genau der Fall aus dem Feld unlesbar.
+    render(<ReportsTab
+      reports={[makeReport({ ...missingPdf, invoice_id: 77 })]}
+      onRegeneratePdf={vi.fn()}
+    />)
+    expect(screen.getByText('Abgerechnet')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PDF erzeugen' })).toBeInTheDocument()
+  })
+
+  it('reicht die Rapport-id an den Aufrufer', async () => {
+    const onRegeneratePdf = vi.fn().mockResolvedValue(undefined)
+    render(<ReportsTab reports={[makeReport({ ...missingPdf, id: 42 })]} onRegeneratePdf={onRegeneratePdf} />)
+    await userEvent.click(screen.getByRole('button', { name: 'PDF erzeugen' }))
+    expect(onRegeneratePdf).toHaveBeenCalledWith(42)
+  })
+
+  it('zeigt den Knopf nicht, wenn bereits ein PDF vorliegt', () => {
+    // Der Kunde hat die erste Fassung — es darf keine zweite unter derselben
+    // Nummer entstehen (der Server lehnt das zusätzlich mit 409 ab).
+    render(<ReportsTab
+      reports={[makeReport({ storage_path: 'reports/RAP-1.pdf' })]}
+      onRegeneratePdf={vi.fn()}
+    />)
+    expect(screen.queryByRole('button', { name: 'PDF erzeugen' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'PDF' })).toBeInTheDocument()
+  })
+
+  it('bleibt ohne den Prop bei der alten Anzeige', () => {
+    render(<ReportsTab reports={[makeReport(missingPdf)]} />)
+    expect(screen.getByText('kein PDF')).toBeInTheDocument()
+  })
+})
