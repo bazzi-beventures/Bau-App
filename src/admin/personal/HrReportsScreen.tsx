@@ -576,6 +576,14 @@ export default function HrReportsScreen() {
                             </td>
                             <td className="secondary">
                               {s.break_minutes > 0 ? `${s.break_minutes} min` : '—'}
+                              {(s.auto_break_minutes ?? 0) > 0 && (
+                                <span
+                                  style={{ display: 'block', fontSize: 11, color: 'var(--warning, #b58105)' }}
+                                  title="Automatischer Pausenabzug — vom Mitarbeitenden über einen Korrekturantrag widerlegbar"
+                                >
+                                  davon {s.auto_break_minutes} autom.
+                                </span>
+                              )}
                             </td>
                             <td className="primary">{fmtHours(s.total_minutes)}</td>
                           </tr>

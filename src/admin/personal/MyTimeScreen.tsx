@@ -11,6 +11,7 @@ import {
   VacationEntitlement,
 } from '../../api/chat'
 import { apiFetch, ApiError, isOfflineError } from '../../api/client'
+import { UserInfo } from '../../api/auth'
 import { breakInputValue, correctionError, correctionIncomplete, parseBreakMinutes } from '../../api/correction'
 import BerichtScreen, { BerichtType } from '../../screens/BerichtScreen'
 import { useToast, ToastHost } from '../components/useToast'
@@ -130,6 +131,9 @@ const IconEdit = () => (
 )
 
 interface Props {
+  // Nur für die Feature-Flags (automatischer Pausenabzug) — der Screen selbst
+  // arbeitet weiterhin mit dem eingeloggten Konto des API-Aufrufs.
+  user?: UserInfo | null
   onLoggedOut: () => void
 }
 
@@ -142,7 +146,7 @@ interface ActionCard {
   disabled?: boolean
 }
 
-export default function MyTimeScreen({ onLoggedOut }: Props) {
+export default function MyTimeScreen({ user = null, onLoggedOut }: Props) {
   const [loadingAction, setLoadingAction] = useState<ZeitAction | null>(null)
   const { toast, showToast } = useToast(4000)
   const [stempel, setStempel] = useState<StempelState>(() => loadStempelState())
@@ -734,6 +738,7 @@ export default function MyTimeScreen({ onLoggedOut }: Props) {
             </button>
             <BerichtScreen
               berichtType={berichtModal}
+              user={user}
               onBack={() => setBerichtModal(null)}
               onNavHome={() => setBerichtModal(null)}
               onNavRapport={() => setBerichtModal(null)}

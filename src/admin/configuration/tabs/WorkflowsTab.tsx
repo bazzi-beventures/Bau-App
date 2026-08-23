@@ -277,6 +277,26 @@ function FeatureField({
       </div>
     )
   }
+  if (field.type === 'text') {
+    // Einzeiliger Freitext (z.B. die Beschriftung einer automatisch ergänzten
+    // Belegposition). Breiter als die Zahlenfelder: hier steht ein Satzfragment,
+    // das auf einem Kundendokument landet, und es soll ganz lesbar sein.
+    return (
+      <div style={{ opacity: disabled ? 0.5 : 1 }}>
+        <label className="admin-form-label">{field.label}</label>
+        <input
+          type="text"
+          className="admin-form-input"
+          value={typeof value === 'string' ? value : ''}
+          maxLength={field.max_length}
+          disabled={disabled}
+          onChange={e => onChange(e.target.value)}
+          style={{ width: '100%', maxWidth: 360 }}
+        />
+        {field.help && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{field.help}</div>}
+      </div>
+    )
+  }
   if (field.type === 'select') {
     return (
       <div style={{ opacity: disabled ? 0.5 : 1 }}>

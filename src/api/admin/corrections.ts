@@ -14,6 +14,10 @@ export interface Correction {
   current_clock_in: string | null
   current_clock_out: string | null
   current_break_minutes: number | null
+  // Wieviel der Ist-Pause aus der Regel `automatische_pause` stammt. Der Admin
+  // entscheidet sonst blind darüber, ob er seiner eigenen Regel oder dem
+  // Mitarbeitenden glaubt.
+  current_auto_break_minutes?: number | null
   reason: string | null
   status: string
 }

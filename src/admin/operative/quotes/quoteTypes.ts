@@ -79,5 +79,10 @@ export type EditExtraRow = EditFreeRow & {
   category?: string | null
   positions?: ConfirmedPosition[]
 }
-export type EditChargeRow = { description: string; total_price: string }
+// `werkora_bonus` markiert die automatisch ergänzte Endziffern-Aufrundung
+// (Feature `werkora_bonus`). Das Flag wird beim Bearbeiten unverändert
+// zurückgeschickt, damit das Backend die Zeile beim Neurechnen wiedererkennt und
+// aus der Basis nimmt — ginge es verloren, zählte der Aufschlag beim nächsten
+// Speichern zur Basis und der Preis wanderte bei jeder Bearbeitung nach oben.
+export type EditChargeRow = { description: string; total_price: string; werkora_bonus?: boolean }
 export type EditTravelRow = { description: string; total_price: string }

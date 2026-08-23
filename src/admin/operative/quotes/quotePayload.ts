@@ -48,7 +48,14 @@ export function specialItems(rows: SpecialRow[]): QuoteItem[] {
 export function descPriceItems(rows: (ExtraChargeRow | EditChargeRow | EditTravelRow)[]): QuoteItem[] {
   return rows
     .filter(r => r.description && parseNum(r.total_price) > 0)
-    .map(r => ({ description: r.description, total_price: parseNum(r.total_price) }))
+    .map(r => ({
+      description: r.description,
+      total_price: parseNum(r.total_price),
+      // Markierung der automatischen Endziffern-Aufrundung unverändert
+      // durchreichen (siehe EditChargeRow) — nur setzen, wenn sie dran war,
+      // damit gewöhnliche Zeilen unverändert wie bisher aussehen.
+      ...('werkora_bonus' in r && r.werkora_bonus ? { werkora_bonus: true } : {}),
+    }))
 }
 
 /** Montagepositionen: immer 1 × Pauschale, Betrag = Zeilentotal. */

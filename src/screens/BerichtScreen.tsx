@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react'
-import { fetchMonthlyData, fetchWeeklyData, fetchVacationEntitlement, MonthlyReportData, WeeklyReportData, ReportData, VacationEntitlement } from '../api/chat'
+import { fetchMonthlyData, fetchWeeklyData, fetchVacationEntitlement, submitCorrectionRequest, MonthlyReportData, WeeklyReportData, ReportData, VacationEntitlement } from '../api/chat'
 import { ApiError, apiBlobFetch, isOfflineError } from '../api/client'
+import { autoBreakConfig, objectionExpired, OBJECTION_EXPIRED_HINT } from '../api/autoBreak'
+import { UserInfo } from '../api/auth'
 
 export type BerichtType = 'monthly' | 'weekly-this' | 'weekly-last'
 
 interface Props {
   berichtType: BerichtType
   logoUrl?: string
+  // Optional: die Admin-Ansicht (MyTimeScreen) bindet denselben Bericht ohne
+  // Nutzerkontext ein — dann entfällt nur die Kennzeichnung der Regel-Pause.
+  user?: UserInfo | null
   onBack: () => void
   onNavHome: () => void
   onNavRapport: () => void
@@ -22,13 +27,84 @@ function fmt_hours(h: number): string {
   return `${sign}${hh}:${mm.toString().padStart(2, '0')}`
 }
 
-export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
+export default function BerichtScreen({ berichtType, logoUrl, user = null, onBack, onNavHome, onNavRapport, onNavProfile, onLoggedOut }: Props) {
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfMsg, setPdfMsg] = useState<{ text: string; isError: boolean } | null>(null)
   const [vacation, setVacation] = useState<VacationEntitlement | null>(null)
+
+  // ── «Keine Pause gemacht» je Bericht-Zeile ────────────────────────────────
+  // Hier sieht der Monteur seine älteren Tage — und damit die Abzüge, die beim
+  // Ausstempeln nur einmal kurz aufgeblitzt sind. Der Antrag geht aus der
+  // aufgezeichneten Zeile direkt raus, ohne Formular: Datum und Zeiten stehen
+  // schon da, die Pause wird auf 0 gesetzt (docs/specs/automatische-pause.md §3.5).
+  const autoBreak = autoBreakConfig(user)
+  const [objecting, setObjecting] = useState<string | null>(null)
+  const [objectionMsg, setObjectionMsg] = useState<{ text: string; isError: boolean } | null>(null)
+  const [objected, setObjected] = useState<Set<string>>(new Set())
+
+  async function objectNoBreak(dateIso: string, clockIn: string, clockOut: string) {
+    if (!dateIso || objecting) return
+    setObjecting(dateIso)
+    setObjectionMsg(null)
+    try {
+      const res = await submitCorrectionRequest({
+        date: dateIso,
+        clock_in: clockIn,
+        clock_out: clockOut,
+        break_minutes: 0,
+        reason: 'Keine Pause gemacht',
+      })
+      setObjected(prev => new Set(prev).add(dateIso))
+      setObjectionMsg({ text: res.reply, isError: !res.action_taken })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      let text = 'Fehler beim Einreichen. Bitte erneut versuchen.'
+      if (isOfflineError(err)) text = 'Keine Internetverbindung'
+      else if (err instanceof ApiError && err.status === 409 && err.message === 'auto_break_objection_expired') {
+        text = OBJECTION_EXPIRED_HINT
+      } else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
+        text = 'Für diesen Tag ist bereits eine Absenz genehmigt.'
+      } else if (err instanceof ApiError && err.status === 400) {
+        text = err.message
+      }
+      setObjectionMsg({ text, isError: true })
+    } finally {
+      setObjecting(null)
+    }
+  }
+
+  /** Die Zelle «Pause» inkl. Kennzeichnung und Widerspruchs-Knopf. */
+  function breakCell(minutes: number, autoMinutes: number, dateIso: string, clockIn: string, clockOut: string) {
+    const hasAuto = autoMinutes > 0
+    const tooLate = hasAuto && objectionExpired(dateIso, autoBreak)
+    const usable = hasAuto && !tooLate && !objected.has(dateIso) && clockIn !== '—' && clockOut !== '—'
+    return (
+      <td className="bericht-muted">
+        {minutes > 0 ? `${minutes}'` : '—'}
+        {hasAuto && (
+          <>
+            <span className="bericht-auto-break"> davon {autoMinutes}' autom.</span>
+            {objected.has(dateIso) ? (
+              <span className="bericht-auto-break">Antrag eingereicht</span>
+            ) : tooLate ? (
+              <span className="bericht-auto-break" title={OBJECTION_EXPIRED_HINT}>Frist abgelaufen</span>
+            ) : usable ? (
+              <button
+                className="bericht-objection-btn"
+                disabled={objecting !== null}
+                onClick={() => void objectNoBreak(dateIso, clockIn, clockOut)}
+              >
+                {objecting === dateIso ? '…' : 'Keine Pause gemacht'}
+              </button>
+            ) : null}
+          </>
+        )}
+      </td>
+    )
+  }
 
   useEffect(() => {
     async function load() {
@@ -125,7 +201,7 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
                   <td><span className="bericht-weekday">{t.wochentag}</span> {t.datum.slice(0, 5)}</td>
                   <td className="bericht-mono">{t.clock_in}</td>
                   <td className="bericht-mono">{t.clock_out}</td>
-                  <td className="bericht-muted">{t.pause_min > 0 ? `${t.pause_min}'` : '—'}</td>
+                  {breakCell(t.pause_min, t.auto_pause_min ?? 0, t.datum_iso, t.clock_in, t.clock_out)}
                   <td className="bericht-mono bericht-bold">{t.stunden_str}</td>
                 </tr>
               ))}
@@ -183,7 +259,7 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
                   <td><span className="bericht-weekday">{day.weekday}</span> {day.date.slice(0, 5)}</td>
                   <td className="bericht-mono">{day.clock_in}</td>
                   <td className="bericht-mono">{day.clock_out}</td>
-                  <td className="bericht-muted">{day.break_min > 0 ? `${day.break_min}'` : '—'}</td>
+                  {breakCell(day.break_min, day.auto_break_min ?? 0, day.date_iso, day.clock_in, day.clock_out)}
                   <td className="bericht-mono bericht-bold">{fmt_hours(day.net_hours)}</td>
                   <td className="bericht-proj">{day.net_hours > 0 ? (day.projects || day.absence) : (day.absence || day.projects)}</td>
                 </tr>
@@ -252,6 +328,14 @@ export default function BerichtScreen({ berichtType, logoUrl, onBack, onNavHome,
         )}
         {error && (
           <div className="action-result action-result-error" style={{ margin: '16px 24px' }}>{error}</div>
+        )}
+        {objectionMsg && (
+          <div
+            className={`action-result${objectionMsg.isError ? ' action-result-error' : ''}`}
+            style={{ margin: '16px 24px' }}
+          >
+            {objectionMsg.text}
+          </div>
         )}
         {!loading && !error && data && (
           data.type === 'monthly' ? renderMonthly(data) : renderWeekly(data as WeeklyReportData)

@@ -161,7 +161,10 @@ export interface QuoteDetail {
     category?: string | null
     positions?: ConfirmedPosition[]
   }[]
-  extra_charge_items: { description: string; total_price: number }[]
+  // `werkora_bonus`: automatisch ergänzte Endziffern-Aufrundung (Feature
+  // `werkora_bonus`). Beim Bearbeiten unverändert zurückschicken — das Backend
+  // erkennt die Zeile daran und nimmt sie aus der Rechenbasis.
+  extra_charge_items: { description: string; total_price: number; werkora_bonus?: boolean }[]
   installation_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   special_items: { description: string; quantity: number; unit: string; unit_price: number; total_price: number }[]
   labor_discount_pct: number

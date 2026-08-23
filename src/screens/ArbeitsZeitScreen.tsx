@@ -1,14 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, CorrectionPayload } from '../api/chat'
+import { zeitAction, ZeitAction, submitCorrectionRequest, getCorrectionStatus, getZeitStatus, CorrectionPayload, ZeitStatus } from '../api/chat'
 import { ApiError, isNetworkError, isOfflineError } from '../api/client'
 import { drainActions, isQueueStuck, loadQueue, saveQueue } from '../api/zeitQueue'
 import { breakInputValue, correctionError, correctionIncomplete, parseBreakMinutes } from '../api/correction'
+import {
+  autoBreakConfig, autoBreakRuleText, hasAutoBreak, noBreakPrefill,
+  objectionExpired, OBJECTION_EXPIRED_HINT,
+} from '../api/autoBreak'
+import { UserInfo } from '../api/auth'
 import { BerichtType } from './BerichtScreen'
 
 interface Props {
   displayName: string
   logoUrl?: string
   role?: string
+  user?: UserInfo | null
   onNavHome: () => void
   onNavRapport: () => void
   onNavProjekte: () => void
@@ -88,7 +94,7 @@ const ACTIONS: Action[] = [
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
+export default function ArbeitsZeitScreen({ logoUrl, role, user = null, onNavHome, onNavRapport, onNavProjekte, onNavProfile, onLoggedOut, onOpenBericht, onNavAbsenzen }: Props) {
   // Gleiche Regel wie im HomeScreen: `user_light` ist reiner Zeiterfasser —
   // kein Chat, keine Projekte (docs/Admin_Handbuch.md §12). Der Tab stand hier
   // trotzdem, weil `role` zwar durchgereicht, aber nie benutzt wurde: der Monteur
@@ -166,6 +172,32 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
   const [pendingCorrection, setPendingCorrection] = useState<{ id: string; date: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // ── Automatischer Pausenabzug ────────────────────────────────────────────
+  // Der Widerlegungsweg existiert bereits (der Korrekturantrag) — er ist nur zu
+  // umständlich. Hier wird er vorbefüllt: der Monteur bestätigt, statt seine
+  // Zeiten aus dem Kopf abzutippen (docs/specs/automatische-pause.md §3.5).
+  const autoBreak = autoBreakConfig(user)
+  const [lastSession, setLastSession] = useState<ZeitStatus['last_session']>(null)
+
+  useEffect(() => {
+    if (!autoBreak) return
+    let cancelled = false
+    getZeitStatus()
+      .then(st => { if (!cancelled) setLastSession(st.last_session ?? null) })
+      .catch(() => { /* nur die Vorbefüllung — der Screen funktioniert auch ohne */ })
+    return () => { cancelled = true }
+  }, [autoBreak])
+
+  const canObject = hasAutoBreak(lastSession) && !objectionExpired(lastSession!.date, autoBreak)
+  const objectionTooLate = hasAutoBreak(lastSession) && !canObject
+
+  function openNoBreakForm() {
+    if (!lastSession) return
+    setCorrForm(noBreakPrefill(lastSession))
+    setShowCorrection(true)
+    setResult(null)
+  }
+
   useEffect(() => {
     if (!pendingCorrection) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -209,6 +241,11 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
       if (isOfflineError(err)) text = 'Keine Internetverbindung'
       else if (err instanceof ApiError && err.status === 409 && err.message === 'absence_on_date') {
         text = 'Für diesen Tag ist bereits eine Absenz genehmigt — keine Zeitkorrektur möglich.'
+      }
+      // Die Frist schliesst den Self-Service, nicht den Anspruch — deshalb sagt
+      // die Meldung, wohin man sich stattdessen wendet, statt nur "abgelehnt".
+      else if (err instanceof ApiError && err.status === 409 && err.message === 'auto_break_objection_expired') {
+        text = OBJECTION_EXPIRED_HINT
       }
       // 400 trägt vom Endpoint bereits deutschen Klartext (unplausible Zeiten) —
       // den zeigen statt ihn hinter der generischen Meldung zu verstecken.
@@ -426,6 +463,33 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
           <div className="menu-chevron">›</div>
         </div>
 
+        {/* Keine Pause gemacht — nur bei aktiver Regel und tatsächlichem Abzug.
+            Zwei Taps: antippen, absenden. Die Zeiten kommen aus der Aufzeichnung. */}
+        {hasAutoBreak(lastSession) && (
+          <div
+            className="menu-item"
+            onClick={() => { if (canObject && loadingIdx === null) openNoBreakForm() }}
+            style={{ opacity: canObject && loadingIdx === null ? 1 : 0.5 }}
+          >
+            <div className="menu-icon menu-icon-amber">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                <line x1="4" y1="2" x2="20" y2="22"/>
+              </svg>
+            </div>
+            <div className="menu-text">
+              <div className="menu-label">Keine Pause gemacht</div>
+              <div className="menu-sub">
+                {objectionTooLate
+                  ? OBJECTION_EXPIRED_HINT
+                  : `${lastSession!.auto_break_minutes} Min wurden am ${lastSession!.date} automatisch abgezogen`}
+              </div>
+            </div>
+            {canObject && <div className="menu-chevron">›</div>}
+          </div>
+        )}
+
         {/* Arbeitszeit korrigieren */}
         <div
           className="menu-item"
@@ -448,6 +512,9 @@ export default function ArbeitsZeitScreen({ logoUrl, role, onNavHome, onNavRappo
         {/* Korrektur-Formular */}
         {showCorrection && (
           <div className="correction-form">
+            {autoBreak && (
+              <div className="corr-hint">{autoBreakRuleText(autoBreak)}</div>
+            )}
             <div className="corr-row">
               <label className="corr-label">Datum</label>
               <input

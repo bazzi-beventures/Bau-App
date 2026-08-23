@@ -17,8 +17,14 @@ export function useTenantSetting<T>(opts: {
   // nicht stabil abbildet (Map/Set, irrelevante Reihenfolge), eigene
   // Serialisierung mitgeben.
   serialize?: (value: T) => string
-  // Reload-Auslöser (z.B. das gewählte Jahr im Wochenplan).
-  deps?: unknown[]
+  // Reload-Auslöser (z.B. das gewählte Jahr im Wochenplan): ändert er sich,
+  // lädt der Hook neu.
+  //
+  // Ein einzelner Wert, KEIN deps-Array. Ein durchgereichtes Array kann der
+  // React Compiler nicht prüfen (`react-hooks/use-memo` will ein Literal), und
+  // gebraucht wurde ohnehin nie mehr als ein Auslöser. Wer mehrere braucht,
+  // gibt einen zusammengesetzten Schlüssel (z.B. `${jahr}-${mandant}`).
+  reloadKey?: unknown
 }) {
   const { load, save, onToast, savedMsg } = opts
   const serialize = opts.serialize ?? ((v: T) => JSON.stringify(v))
@@ -38,8 +44,11 @@ export function useTenantSetting<T>(opts: {
     } finally {
       setLoading(false)
     }
+    // load/serialize/onToast kommen bei jedem Render neu und wuerden den Hook
+    // in eine Endlosschleife treiben; der Reload haengt bewusst allein am
+    // reloadKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, opts.deps ?? [])
+  }, [opts.reloadKey])
 
   useEffect(() => { void reload() }, [reload])
 

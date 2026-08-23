@@ -101,6 +101,27 @@ export async function zeitAction(action: ZeitAction, opts: ZeitActionOptions = {
   })
 }
 
+// Stempel-Status inkl. der zuletzt abgeschlossenen Session. Letztere dient dem
+// Korrekturformular als Vorlage — ohne sie müsste der Monteur seine Zeiten aus
+// dem Kopf eintippen, und genau das ist heute die Hürde beim Widerlegen eines
+// automatischen Pausenabzugs (docs/specs/automatische-pause.md §3.5).
+export interface ZeitStatus {
+  status: 'active' | 'inactive' | 'on_break'
+  clock_in: string | null
+  since_minutes: number
+  last_session?: {
+    date: string
+    clock_in: string | null
+    clock_out: string | null
+    break_minutes: number
+    auto_break_minutes: number
+  } | null
+}
+
+export async function getZeitStatus(): Promise<ZeitStatus> {
+  return apiFetch<ZeitStatus>('/pwa/status', { method: 'GET' })
+}
+
 export interface CorrectionPayload {
   date: string
   clock_in: string
@@ -260,7 +281,7 @@ export interface MonthlyReportData {
   monat_name: string
   jahr: number
   erstellt_am: string
-  tage: { datum: string; wochentag: string; clock_in: string; clock_out: string; pause_min: number; stunden_str: string }[]
+  tage: { datum: string; datum_iso: string; wochentag: string; clock_in: string; clock_out: string; pause_min: number; auto_pause_min?: number; stunden_str: string }[]
   arbeitstage: number
   total_stunden_str: string
   soll_stunden_str: string
@@ -274,7 +295,7 @@ export interface WeeklyReportData {
   period_start: string
   period_end: string
   staff_name: string
-  days: { date: string; weekday: string; clock_in: string; clock_out: string; break_min: number; net_hours: number; projects: string; absence: string }[]
+  days: { date: string; date_iso: string; weekday: string; clock_in: string; clock_out: string; break_min: number; auto_break_min?: number; net_hours: number; projects: string; absence: string }[]
   total_net_hours: number
   soll_hours: number
   saldo: number

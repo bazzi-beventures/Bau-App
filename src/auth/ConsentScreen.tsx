@@ -1,14 +1,19 @@
 import { useState } from 'react'
-import { acceptConsent } from '../api/auth'
+import { acceptConsent, UserInfo } from '../api/auth'
+import { autoBreakConfig, autoBreakRuleText } from '../api/autoBreak'
 import { TenantLogo } from '../App'
 
 interface Props {
   logoUrl: string
   displayName: string
+  // Nur für die Feature-Flags: bei aktiver Pausenregelung zeigt der Screen
+  // zusätzlich die **konkrete** Regel des Betriebs.
+  user?: UserInfo | null
   onAccepted: () => void
 }
 
-export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Props) {
+export default function ConsentScreen({ logoUrl, displayName, user = null, onAccepted }: Props) {
+  const autoBreak = autoBreakConfig(user)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -27,9 +32,9 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
   return (
     <div className="auth-screen consent-screen">
       <TenantLogo logoUrl={logoUrl} />
-      <div className="auth-title">Datenschutzerklärung</div>
+      <div className="auth-title">Datenschutz &amp; Nutzungsbedingungen</div>
       <div className="auth-sub">Hallo {displayName.split(' ')[0]}, bitte lies und bestätige Folgendes:</div>
-      <div className="consent-version">Version 4 · Juli 2026</div>
+      <div className="consent-version">Version 5 · August 2026</div>
 
       <div className="consent-box">
         <p><strong>Gespeicherte Daten:</strong></p>
@@ -39,6 +44,32 @@ export default function ConsentScreen({ logoUrl, displayName, onAccepted }: Prop
           <li>Tagesberichte, Projektdaten und Materialverbrauch</li>
           <li>Fotos von der Baustelle</li>
           <li>Abwesenheiten (Urlaub, Krankheit)</li>
+        </ul>
+
+        <p><strong>Arbeitszeit und Pausen:</strong></p>
+        <ul>
+          <li>
+            Deine Stempelzeiten (Ein-/Ausstempeln, Pausen) werden zur Arbeitszeit- und
+            Lohnabrechnung gespeichert und deinem Betrieb angezeigt.
+          </li>
+          <li>
+            Hat dein Betrieb eine <strong>automatische Pausenregelung</strong> aktiviert, wird dir
+            an Tagen mit zu wenig gestempelter Pause die fehlende Pause abgezogen — in der Regel
+            die gesetzliche Mindestpause (15 Min ab 5.5 Std., 30 Min ab 7 Std., 60 Min ab 9 Std.
+            Anwesenheit). Der Abzug ist in der App als <strong>«automatisch»</strong> gekennzeichnet.
+          </li>
+          <li>
+            <strong>Hast du keine Pause gemacht, korrigierst du das selbst:</strong> Arbeitszeit →
+            «Arbeitszeit korrigieren». Der Antrag geht an deinen Vorgesetzten. Dafür hast du
+            <strong> 14 Tage</strong> Zeit; danach meldest du dich direkt bei ihm.
+          </li>
+          <li>
+            Massgeblich für die Pausenregelung ist dein Arbeitsvertrag bzw. das Personalreglement
+            deines Betriebs — nicht diese App.
+          </li>
+          {autoBreak && (
+            <li><strong>Bei deinem Betrieb gilt:</strong> {autoBreakRuleText(autoBreak)}</li>
+          )}
         </ul>
 
         <p><strong>Externe Datenverarbeitung:</strong></p>

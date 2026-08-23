@@ -75,6 +75,10 @@ function CorrectionDetail({ c }: { c: Correction }) {
             {c.current_break_minutes != null && c.current_break_minutes !== c.requested_break_minutes && (
               <span style={{ textDecoration: 'line-through', color: 'var(--muted)', marginRight: 6 }}>
                 {c.current_break_minutes} Min.
+                {/* Der Ist-Wert kann eine Vermutung der Regel sein, kein Stempel.
+                    Ohne diese Kennzeichnung entscheidet der Admin blind darüber,
+                    ob er seiner eigenen Regel oder dem Mitarbeitenden glaubt. */}
+                {(c.current_auto_break_minutes ?? 0) > 0 && ` (davon ${c.current_auto_break_minutes} automatisch)`}
               </span>
             )}
             <span style={{ color: c.current_break_minutes !== c.requested_break_minutes ? '#22c55e' : 'inherit' }}>

@@ -133,7 +133,7 @@ export async function resolveScheduleDistances(
 
 // ─── Tenant Feature-Flags (Workflows) ───────────────────────
 
-export type FeatureFieldType = 'bool' | 'number' | 'select' | 'number_list' | 'key_list'
+export type FeatureFieldType = 'bool' | 'number' | 'select' | 'number_list' | 'key_list' | 'text'
 
 export interface FeatureFieldSchema {
   key: string
@@ -143,6 +143,8 @@ export interface FeatureFieldSchema {
   min?: number
   max?: number
   step?: number
+  /** Nur `text`: Zeichenobergrenze, gespiegelt aus feature_registry.validate_override. */
+  max_length?: number
   options?: { value: string; label: string }[]
 }
 

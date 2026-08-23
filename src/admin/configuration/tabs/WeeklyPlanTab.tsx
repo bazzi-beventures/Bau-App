@@ -37,7 +37,7 @@ export function WeeklyPlanTab() {
     savedMsg: 'Wochenplan gespeichert',
     // Map serialisiert JSON zu {} — deshalb sortierte Einträge vergleichen.
     serialize: map => JSON.stringify(Array.from(map.entries()).sort(([a], [b]) => a - b)),
-    deps: [year],
+    reloadKey: year,
   })
 
   function setWeek(week: number, target_hours: number, note: string) {

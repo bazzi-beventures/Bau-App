@@ -17,7 +17,18 @@ const GATED = [
   'react-hooks/purity',    // unreine Aufrufe (Date.now(), Math.random()) im Render
   'react-hooks/globals',   // Modul-Variablen im Render mutiert
   'no-empty',              // leerer Block ohne erklärenden Kommentar
+  // Seit 2026-08-23 dazu (Bestand auf 0 abgebaut):
+  'react-hooks/immutability',               // Zugriff vor der Deklaration; Mutation gehookter Werte
+  'react-hooks/use-memo',                   // nicht statisch pruefbare Dependency-Liste
+  'react-hooks/preserve-manual-memoization',// manuelle Memoisierung, die der Compiler nicht halten kann
 ]
+
+// ACHTUNG, Job-NAME: der Check heisst in der CI weiterhin
+// "ESLint-Gate (refs/purity/globals/no-empty) – blockierend" und nennt damit vier
+// von sieben Regeln. Der Name bleibt, weil er als Required Check in der Branch
+// Protection von main UND develop steht — Umbenennen laesst jeden PR auf
+// "Expected" haengen, bis jemand die GitHub-Settings nachzieht. Dasselbe gilt
+// beim Ruff-Gate, siehe CLAUDE.md.
 
 const eslint = new ESLint()
 const results = await eslint.lintFiles(['.'])

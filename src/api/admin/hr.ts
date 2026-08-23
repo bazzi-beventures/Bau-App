@@ -18,6 +18,10 @@ export interface HrSession {
   clock_in: string
   clock_out: string | null
   break_minutes: number
+  // Anteil an break_minutes, den die Regel `automatische_pause` gesetzt hat
+  // (nicht gestempelt). Ohne diese Kennzeichnung liest sich eine Regel-Pause
+  // im Timesheet wie ein Stempel.
+  auto_break_minutes?: number
   total_minutes: number | null
   // ArG-Befunde zu dieser Session (Text je Verstoss).
   violations?: string[]

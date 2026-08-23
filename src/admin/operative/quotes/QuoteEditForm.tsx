@@ -56,7 +56,10 @@ export function QuoteEditForm({ quote, onDone, onCancel, onDirtyChange }: Props)
       supplier_id: i.supplier_id, category: i.category, positions: i.positions,
     })), applyEkMargin)
   const extraCharges = useRowList<EditChargeRow>(() =>
-    quote.extra_charge_items.map(i => ({ description: i.description, total_price: String(i.total_price) })))
+    quote.extra_charge_items.map(i => ({
+      description: i.description, total_price: String(i.total_price),
+      werkora_bonus: i.werkora_bonus,
+    })))
   const travel = useRowList<EditTravelRow>(() =>
     quote.travel_items.map(i => ({ description: i.description, total_price: String(i.total_price) })))
   const installation = useRowList<InstallationRow>(() =>

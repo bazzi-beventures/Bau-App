@@ -8,6 +8,7 @@ import UsageScreen from '../usage/UsageScreen'
 import MaterialCleanupScreen from './MaterialCleanupScreen'
 import UnitsPanel from './UnitsPanel'
 import ErrorLogsScreen from './ErrorLogsScreen'
+import WerkoraBonusScreen from './WerkoraBonusScreen'
 
 // Admin-Tools bündelt Konfiguration, Service-Status und Push-Test unter einem
 // Sidebar-Eintrag und schaltet zwischen ihnen per Tab um. Alle drei Tools sind
@@ -15,7 +16,7 @@ import ErrorLogsScreen from './ErrorLogsScreen'
 // AdminApp.renderScreen erzwungen, hier erscheinen daher immer alle Tabs. Jeder
 // Tool-Screen bringt seinen eigenen admin-page-Rahmen (Titel + Aktionen) mit;
 // die Tab-Leiste sitzt darüber und übernimmt nur die Navigation.
-type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'usage' | 'units' | 'material-cleanup' | 'error-logs'
+type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'usage' | 'units' | 'material-cleanup' | 'error-logs' | 'werkora-bonus'
 
 interface Props {
   userRole: string
@@ -33,6 +34,11 @@ const TABS: { id: Tool; label: string }[] = [
   { id: 'units',          label: 'Einheiten' },
   { id: 'material-cleanup', label: 'Materialdatenbereinigung' },
   { id: 'error-logs',     label: 'Error-Logs' },
+  // Bewusst immer sichtbar statt nur bei aktivem Feature: der Reiter ist ohnehin
+  // superadmin-only, und der Screen sagt selbst, wenn das Feature aus ist. Ihn
+  // auszublenden hiesse, dass ein Superadmin nach dem Einschalten erst neu laden
+  // muss — und dass der Bestand aus der Zeit, in der es lief, unerreichbar wird.
+  { id: 'werkora-bonus',  label: 'Werkora Bonus' },
 ]
 
 export default function AdminToolsScreen({ userRole, enabledModules }: Props) {
@@ -49,6 +55,7 @@ export default function AdminToolsScreen({ userRole, enabledModules }: Props) {
       case 'units':          return <UnitsPanel />
       case 'material-cleanup': return <MaterialCleanupScreen />
       case 'error-logs':     return <ErrorLogsScreen />
+      case 'werkora-bonus':  return <WerkoraBonusScreen />
     }
   }
 

@@ -420,6 +420,7 @@ export default function App() {
       <ConsentScreen
         logoUrl={effectiveLogo}
         displayName={user.display_name}
+        user={user}
         onAccepted={() => {
           getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('home'))
         }}
@@ -483,6 +484,7 @@ export default function App() {
         displayName={user.display_name}
         logoUrl={effectiveLogo}
         role={user.role}
+        user={user}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onNavProjekte={() => setScreen('projekte')}
@@ -545,6 +547,7 @@ export default function App() {
       <BerichtScreen
         berichtType={berichtType}
         logoUrl={effectiveLogo}
+        user={user}
         onBack={() => setScreen('arbeitszeit')}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}

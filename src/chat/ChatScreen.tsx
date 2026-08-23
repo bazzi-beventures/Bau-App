@@ -200,17 +200,6 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const initialSentRef = useRef(false)
-  useEffect(() => {
-    if (!initialMessage || initialSentRef.current) return
-    initialSentRef.current = true
-    // Bindung SOFORT setzen, nicht erst wenn die Antwort da ist: verlässt der
-    // Monteur den Chat währenddessen, muss der Draft das Projekt schon tragen.
-    if (initialProject) setPendingProject(initialProject)
-    handleResponseStream(initialMessage, initialProject)
-    onInitialMessageConsumed?.()
-  }, [initialMessage])
-
   function addMessage(msg: Omit<Message, 'id'>) {
     setMessages(prev => [...prev, { ...msg, id: nextId() }])
   }
@@ -374,6 +363,23 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setLoading(false)
     }
   }
+
+  // Steht BEWUSST hier unten, direkt hinter handleResponseStream: als
+  // Funktionsdeklaration ist sie zwar gehoben und weiter oben aufrufbar, aber
+  // der React Compiler meldet den Zugriff vor der Deklaration zu Recht — die
+  // eingefangene Bindung wuerde nicht mitziehen, wenn sich die Funktion aendert
+  // (react-hooks/immutability). Dies ist der letzte useEffect der Komponente,
+  // das Verschieben aendert die Reihenfolge der Effekte also nicht.
+  const initialSentRef = useRef(false)
+  useEffect(() => {
+    if (!initialMessage || initialSentRef.current) return
+    initialSentRef.current = true
+    // Bindung SOFORT setzen, nicht erst wenn die Antwort da ist: verlässt der
+    // Monteur den Chat währenddessen, muss der Draft das Projekt schon tragen.
+    if (initialProject) setPendingProject(initialProject)
+    handleResponseStream(initialMessage, initialProject)
+    onInitialMessageConsumed?.()
+  }, [initialMessage])
 
   async function handleConfirm() {
     setPendingConfirm(false)

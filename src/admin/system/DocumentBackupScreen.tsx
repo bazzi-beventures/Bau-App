@@ -33,6 +33,33 @@ function formatRemaining(expiresAt: string | null): string {
 const isActive = (j: DocumentBackupJob | null): boolean =>
   j?.status === 'pending' || j?.status === 'running'
 
+// Die Schleife liegt BEWUSST ausserhalb der Komponente. Als rekursives
+// useCallback rief sie sich aus ihrem eigenen Initializer heraus auf — der
+// React Compiler meldet das zu Recht (react-hooks/immutability): die
+// eingefangene Bindung zieht nicht mit, wenn sich die Funktion aendert. Hier
+// gibt es das Problem nicht, und die Schleife ist nebenbei fuer sich lesbar.
+//
+// Rekursives setTimeout, kein setInterval: der naechste Aufruf startet erst
+// POLL_MS NACH der letzten Antwort. Bei POLL_MS = 3000 und einer langsamen
+// Abfrage wuerden sich Requests sonst ueberholen.
+function startPolling(
+  id: number,
+  timer: { current: ReturnType<typeof setTimeout> | null },
+  onJob: (job: DocumentBackupJob) => void,
+) {
+  const tick = async () => {
+    try {
+      const next = await getDocumentBackup(id)
+      onJob(next)
+      if (!isActive(next)) return
+    } catch {
+      // transienter Fehler → später erneut versuchen
+    }
+    timer.current = setTimeout(tick, POLL_MS)
+  }
+  timer.current = setTimeout(tick, POLL_MS)
+}
+
 export default function DocumentBackupScreen() {
   const [job, setJob] = useState<DocumentBackupJob | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,16 +79,7 @@ export default function DocumentBackupScreen() {
   // Polling-Schleife: solange der Job pending/running ist, alle POLL_MS nachfragen.
   const poll = useCallback((id: number) => {
     clearPoll()
-    pollRef.current = setTimeout(async () => {
-      try {
-        const next = await getDocumentBackup(id)
-        setJob(next)
-        if (isActive(next)) poll(id)
-      } catch {
-        // transienter Fehler → später erneut versuchen
-        poll(id)
-      }
-    }, POLL_MS)
+    startPolling(id, pollRef, setJob)
   }, [])
 
   useEffect(() => {

@@ -190,7 +190,7 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
       case 'tasks':        return showTaskBoard
         ? <TaskBoardScreen onNav={guardedNav} onBadgeChange={loadDashboard} />
         : <ComingSoon title="Kein Zugriff" />
-      case 'my-time':      return guard('timekeeping', <MyTimeScreen onLoggedOut={onLoggedOut} />)
+      case 'my-time':      return guard('timekeeping', <MyTimeScreen user={user} onLoggedOut={onLoggedOut} />)
       case 'staff':        return <StaffScreen />
       case 'bulk-clockin': return guard('timekeeping', <BulkClockInScreen />)
       case 'absences':     return guard('hr', <AbsencesScreen onBadgeChange={loadDashboard} canton={canton} />)
