@@ -88,6 +88,65 @@ describe('SupportForm', () => {
     expect(screen.queryByText('a.jpg')).toBeNull()
   })
 
+  // ── Strg+V ────────────────────────────────────────────────────────────────
+  // Der übliche Weg zu einem Screenshot ist Win+Shift+S — der Ausschnitt liegt
+  // dann NUR in der Zwischenablage. Ohne Einfügen müsste der Nutzer ihn erst
+  // abspeichern, um ihn über den Dateidialog anhängen zu können.
+
+  // Zwischenablage-Bilder sind unter Windows PNG. Der Dateiname, den der Code
+  // vergibt, folgt dem MIME-Typ der Datei — nicht dem, was im Item steht.
+  const png = (size = 1024) =>
+    new File([new Uint8Array(size)], 'image.png', { type: 'image/png' })
+
+  function pasteEvent(items: Array<{ kind: string; type: string; file?: File }>) {
+    return {
+      clipboardData: {
+        items: items.map(i => ({ ...i, getAsFile: () => i.file ?? null })),
+      },
+    }
+  }
+
+  it('hängt ein Bild aus der Zwischenablage an', () => {
+    render(<SupportForm route="dashboard" appContext="pwa" />)
+    fireEvent.paste(
+      screen.getByLabelText('Was ist passiert?'),
+      pasteEvent([{ kind: 'file', type: 'image/png', file: png() }]),
+    )
+    // Eigener Name statt "image.png": Zwischenablage-Bilder heissen sonst alle gleich.
+    expect(screen.getByText('Eingefügtes Bild 1.png')).toBeTruthy()
+  })
+
+  it('lässt eingefügten Text unangetastet', () => {
+    // Nur Bilder werden abgefangen — normales Text-Einfügen muss weiter im Feld
+    // landen, sonst nimmt der Handler dem Nutzer das gewohnte Strg+V weg.
+    render(<SupportForm route="dashboard" appContext="pwa" />)
+    const feld = screen.getByLabelText('Was ist passiert?')
+    const evt = pasteEvent([{ kind: 'string', type: 'text/plain' }])
+    fireEvent.paste(feld, evt)
+    expect(screen.queryByText(/Eingefügtes Bild/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('zählt eingefügte Bilder gegen dieselbe Obergrenze', () => {
+    render(<SupportForm route="dashboard" appContext="pwa" />)
+    const feld = screen.getByLabelText('Was ist passiert?')
+    for (let i = 0; i < 4; i++) {
+      fireEvent.paste(feld, pasteEvent([{ kind: 'file', type: 'image/png', file: png() }]))
+    }
+    expect(screen.queryByText('Eingefügtes Bild 4.png')).toBeNull()
+    expect(screen.getByRole('alert').textContent).toMatch(/Maximal 3/)
+  })
+
+  it('weist ein zu grosses eingefügtes Bild ab', () => {
+    render(<SupportForm route="dashboard" appContext="pwa" />)
+    fireEvent.paste(
+      screen.getByLabelText('Was ist passiert?'),
+      pasteEvent([{ kind: 'file', type: 'image/png', file: png(11 * 1024 * 1024) }]),
+    )
+    expect(screen.getByRole('alert').textContent).toMatch(/zu gross/)
+    expect(screen.queryByText(/Eingefügtes Bild/)).toBeNull()
+  })
+
   it('nennt vor dem Absenden, was mitgeschickt wird', () => {
     // Transparenzhinweis ist Teil der DSGVO-Antwort (Spec §9) — er darf nicht
     // stillschweigend verschwinden.

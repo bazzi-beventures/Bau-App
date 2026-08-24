@@ -36,7 +36,7 @@ export default function SupportForm({ route, appContext }: Props) {
   const [reference, setReference] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  function addFiles(selected: FileList | null) {
+  function addFiles(selected: ArrayLike<File> | null) {
     if (!selected) return
     const next: File[] = []
     let localError = ''
@@ -50,6 +50,36 @@ export default function SupportForm({ route, appContext }: Props) {
     setError(localError)
     // Input leeren, damit dieselbe Datei erneut gewählt werden kann.
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  /**
+   * Screenshot aus der Zwischenablage einfügen (Strg+V).
+   *
+   * Der übliche Weg unter Windows ist Win+Shift+S → Strg+V; der Ausschnitt
+   * landet nur in der Zwischenablage, nie als Datei auf der Platte. Ohne diesen
+   * Handler müsste der Nutzer ihn erst irgendwo speichern, um ihn über den
+   * Dateidialog anhängen zu können — genau die Hürde, an der eine Meldung
+   * ungeschrieben bleibt.
+   *
+   * Bilder aus der Zwischenablage haben oft gar keinen oder immer denselben
+   * Namen ("image.png"), was in der Liste unbrauchbar ist. Deshalb bekommen sie
+   * hier einen eigenen, durchnummerierten Namen.
+   */
+  function handlePaste(e: React.ClipboardEvent) {
+    const images: File[] = []
+    for (const item of Array.from(e.clipboardData?.items ?? [])) {
+      if (item.kind !== 'file' || !item.type.startsWith('image/')) continue
+      const file = item.getAsFile()
+      if (!file) continue
+      const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      images.push(new File([file], `Eingefügtes Bild ${files.length + images.length + 1}.${ext}`,
+                           { type: file.type }))
+    }
+    if (images.length === 0) return
+    // Nur bei Bildern abfangen: eingefügter TEXT muss weiterhin normal im Feld
+    // landen — auch das gehört zu «einfügen können».
+    e.preventDefault()
+    addFiles(images)
   }
 
   function removeFile(index: number) {
@@ -99,7 +129,11 @@ export default function SupportForm({ route, appContext }: Props) {
   }
 
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+    // onPaste am ganzen Formular, nicht nur am Textfeld: nach dem Anhängen des
+    // ersten Bildes liegt der Fokus oft nicht mehr im Textfeld, und ein zweites
+    // Strg+V soll trotzdem ankommen.
+    <div onPaste={handlePaste}
+         style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
       <label htmlFor="support-message" style={{ fontSize: '0.9rem', fontWeight: 600 }}>
         Was ist passiert?
       </label>
@@ -138,6 +172,9 @@ export default function SupportForm({ route, appContext }: Props) {
         >
           Screenshot anhängen ({files.length}/{MAX_SUPPORT_FILES})
         </button>
+        <div style={{ marginTop: 4, fontSize: '0.75rem', opacity: 0.7 }}>
+          Oder mit Strg+V einfügen — ein Ausschnitt aus Win+Shift+S reicht.
+        </div>
       </div>
 
       {files.length > 0 && (
