@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ReportsTab } from './tabs'
+import { ReportsTab, reportStatusBadge } from './tabs'
 import type { ProjectReport } from './tabs'
 
 function makeReport(over: Partial<ProjectReport> = {}): ProjectReport {
@@ -272,5 +272,176 @@ describe('ReportsTab — fehlendes PDF nacherzeugen', () => {
   it('bleibt ohne den Prop bei der alten Anzeige', () => {
     render(<ReportsTab reports={[makeReport(missingPdf)]} />)
     expect(screen.getByText('kein PDF')).toBeInTheDocument()
+  })
+})
+
+// ── Teilrapport / Gesamtrapport (docs/specs/teilrapport.md §6.3) ──
+
+describe('ReportsTab — Teilrapport-Badges', () => {
+  it('markiert den freien Teilrapport als offen', () => {
+    expect(reportStatusBadge(makeReport({ is_partial: true }))).toMatchObject({
+      label: 'Teilrapport – offen', cls: 'admin-badge-warning',
+    })
+  })
+
+  it('markiert den gebündelten Teilrapport als gebündelt', () => {
+    expect(reportStatusBadge(makeReport({ is_partial: true, merged_into_report_id: 100 })).label)
+      .toBe('Teilrapport – gebündelt')
+  })
+
+  it('unterscheidet unterschriebenen, unsignierten und aufgelösten Gesamtrapport', () => {
+    expect(reportStatusBadge(makeReport({ is_aggregate: true })).label)
+      .toBe('Gesamtrapport – ohne Unterschrift')
+    expect(reportStatusBadge(makeReport({
+      is_aggregate: true, signature_timestamp: '2026-08-08T10:00:00Z',
+    })).label).toBe('Gesamtrapport')
+    expect(reportStatusBadge(makeReport({
+      is_aggregate: true, signature_timestamp: '2026-08-08T10:00:00Z',
+      dissolved_at: '2026-08-09T08:00:00Z',
+    })).label).toBe('Gesamtrapport – aufgelöst')
+  })
+
+  it('lässt «Abgerechnet» alles andere schlagen', () => {
+    expect(reportStatusBadge(makeReport({ is_partial: true, invoice_id: 9 })).label)
+      .toBe('Abgerechnet')
+  })
+})
+
+describe('ReportsTab — Bündeln und Auflösen', () => {
+  it('zeigt den Bündeln-Knopf erst ab einem freien Teilrapport', () => {
+    const { rerender } = render(
+      <ReportsTab reports={[makeReport()]} teilrapportEnabled onAggregate={vi.fn()} />,
+    )
+    expect(screen.queryByRole('button', { name: /Gesamtrapport erstellen/ })).not.toBeInTheDocument()
+
+    rerender(
+      <ReportsTab reports={[makeReport({ is_partial: true })]} teilrapportEnabled onAggregate={vi.fn()} />,
+    )
+    expect(screen.getByRole('button', { name: /Gesamtrapport erstellen \(1\)/ })).toBeInTheDocument()
+  })
+
+  it('zeigt ihn ohne Feature nicht — das Badge aber schon', () => {
+    render(<ReportsTab reports={[makeReport({ is_partial: true })]} onAggregate={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Gesamtrapport erstellen/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Teilrapport – offen')).toBeInTheDocument()
+  })
+
+  it('schickt genau die angehakten IDs ans Backend', async () => {
+    const user = userEvent.setup()
+    const onAggregate = vi.fn(async () => {})
+    render(
+      <ReportsTab
+        reports={[
+          makeReport({ id: 1, is_partial: true, report_date: '2026-08-05' }),
+          makeReport({ id: 2, is_partial: true, report_date: '2026-08-06' }),
+        ]}
+        teilrapportEnabled
+        onAggregate={onAggregate}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: /Gesamtrapport erstellen \(2\)/ }))
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(boxes.map(b => b.checked)).toEqual([true, true])
+
+    await user.click(boxes[0])
+    await user.click(screen.getByRole('button', { name: 'Gesamtrapport erstellen' }))
+    expect(onAggregate).toHaveBeenCalledWith([2])
+  })
+
+  it('sperrt Bearbeiten und Löschen am gebündelten Teilrapport', () => {
+    render(
+      <ReportsTab
+        reports={[makeReport({
+          source: 'admin_manual', is_partial: true, merged_into_report_id: 100,
+        })]}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Löschen' })).not.toBeInTheDocument()
+  })
+
+  it('benennt beim Auflösen des unterschriebenen Gesamtrapports ausdrücklich das PDF', async () => {
+    const user = userEvent.setup()
+    render(
+      <ReportsTab
+        reports={[makeReport({
+          id: 100, is_aggregate: true, signature_timestamp: '2026-08-08T10:00:00Z',
+        })]}
+        onDissolve={vi.fn(async () => {})}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Auflösen' }))
+    expect(screen.getByText(/Der Kunde hat dieses PDF unterschrieben/)).toBeInTheDocument()
+  })
+
+  it('bietet das Auflösen am abgerechneten Gesamtrapport nicht an', () => {
+    render(
+      <ReportsTab
+        reports={[makeReport({ id: 100, is_aggregate: true, invoice_id: 7 })]}
+        onDissolve={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Auflösen' })).not.toBeInTheDocument()
+  })
+})
+
+
+// ── Abnahme durch den Projektleiter (Migration 20260824d) ──
+
+describe('ReportsTab — ohne Unterschrift abschliessen', () => {
+  it('bietet den Knopf am nicht abgenommenen Gesamtrapport an', () => {
+    render(
+      <ReportsTab
+        reports={[makeReport({ id: 100, is_aggregate: true })]}
+        onAccept={vi.fn(async () => {})}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Ohne Unterschrift abschliessen' })).toBeInTheDocument()
+  })
+
+  it('bietet ihn nicht mehr an, sobald unterschrieben oder schon abgeschlossen', () => {
+    const { rerender } = render(
+      <ReportsTab
+        reports={[makeReport({
+          id: 100, is_aggregate: true, signature_timestamp: '2026-08-08T10:00:00Z',
+        })]}
+        onAccept={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Ohne Unterschrift abschliessen' })).not.toBeInTheDocument()
+
+    rerender(
+      <ReportsTab
+        reports={[makeReport({
+          id: 100, is_aggregate: true, pl_accepted_at: '2026-08-20T09:00:00Z',
+        })]}
+        onAccept={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Ohne Unterschrift abschliessen' })).not.toBeInTheDocument()
+  })
+
+  it('nennt im Dialog, wie viele Einsätze verrechenbar werden', async () => {
+    const user = userEvent.setup()
+    render(
+      <ReportsTab
+        reports={[
+          makeReport({ id: 100, is_aggregate: true }),
+          makeReport({ id: 1, is_partial: true, merged_into_report_id: 100 }),
+          makeReport({ id: 2, is_partial: true, merged_into_report_id: 100 }),
+        ]}
+        onAccept={vi.fn(async () => {})}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Ohne Unterschrift abschliessen' }))
+    expect(screen.getByText(/2\s*Einsätze werden verrechenbar/)).toBeInTheDocument()
+  })
+
+  it('zeigt das eigene Badge für den abgeschlossenen Gesamtrapport', () => {
+    expect(reportStatusBadge(makeReport({
+      is_aggregate: true, pl_accepted_at: '2026-08-20T09:00:00Z',
+    })).label).toBe('Gesamtrapport – ohne Unterschrift abgeschlossen')
   })
 })

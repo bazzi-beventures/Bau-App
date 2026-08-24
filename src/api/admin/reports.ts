@@ -74,3 +74,53 @@ export async function regenerateReportPdf(
     `/pwa/admin/projects/${projectId}/reports/${reportId}/pdf`, { method: 'POST' },
   )
 }
+
+/**
+ * Bündelt Teilrapporte zu einem Gesamtrapport (docs/specs/teilrapport.md §5.5).
+ *
+ * Der Behälter entsteht ohne Unterschrift — die holt der Monteur in der App beim
+ * Kunden. Bis dahin ist keiner der gebündelten Einsätze verrechenbar. Bündelt
+ * jemand parallel dieselbe Baustelle, antwortet der Server mit 409 statt einem
+ * halb gefüllten Gesamtrapport.
+ */
+export async function aggregateProjectReports(
+  projectId: string, reportIds: number[],
+): Promise<{ status: string; report_id: number }> {
+  return apiFetch(`/pwa/admin/projects/${projectId}/reports/aggregate`, {
+    method: 'POST',
+    body: JSON.stringify({ report_ids: reportIds }),
+  })
+}
+
+/**
+ * Löst einen Gesamtrapport auf. Nur hier — nicht in der Monteur-App — lässt sich
+ * auch ein bereits UNTERSCHRIEBENER auflösen: der bleibt dann samt PDF stehen und
+ * wird als aufgelöst markiert (der Kunde hat den Beleg). Der unsignierte wird
+ * gelöscht. Abgerechnet sperrt der Server mit 409.
+ */
+export async function dissolveAggregateReport(
+  projectId: string, reportId: number,
+): Promise<{ status: string; released: number; deleted: boolean }> {
+  return apiFetch(`/pwa/admin/projects/${projectId}/reports/${reportId}/dissolve`, {
+    method: 'POST',
+  })
+}
+
+/**
+ * Schliesst einen Gesamtrapport OHNE Kundenunterschrift ab (Migration 20260824d).
+ *
+ * Der Ausweg für die Baustelle, auf der niemand mehr unterschreibt: ohne ihn
+ * blieben die erfassten Stunden dauerhaft unverrechenbar — der unsignierte
+ * Behälter öffnet das Rechnungs-Tor nicht, und ein im Chat erfasster Teilrapport
+ * lässt sich nicht nachträglich zum gewöhnlichen Rapport machen.
+ *
+ * Danach sind der Behälter und alle seine Teilrapporte verrechenbar. Das PDF trägt
+ * «Abgeschlossen durch … — ohne Kundenunterschrift».
+ */
+export async function acceptAggregateReport(
+  projectId: string, reportId: number,
+): Promise<{ status: string; report_id: number; children: number }> {
+  return apiFetch(`/pwa/admin/projects/${projectId}/reports/${reportId}/accept`, {
+    method: 'POST',
+  })
+}

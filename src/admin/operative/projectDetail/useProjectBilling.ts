@@ -10,7 +10,10 @@ import {
   addQuoteVariant, getQuoteDetail, regenerateQuote, sendQuoteRejection, setQuoteStatus,
   type QuoteDetail,
 } from '../../../api/admin/quotes'
-import { deleteProjectReport, regenerateReportPdf } from '../../../api/admin/reports'
+import {
+  acceptAggregateReport, aggregateProjectReports, deleteProjectReport,
+  dissolveAggregateReport, regenerateReportPdf,
+} from '../../../api/admin/reports'
 import type { ProjectInvoice, ProjectQuote, ProjectReport } from './types'
 import { hasBillableReport } from './billingRules'
 import { invoiceWarningHint, sammelrechnungHint } from '../../utils/invoiceHints'
@@ -38,6 +41,11 @@ export interface UseProjectBilling {
   loadQuoteDetail: (quoteId: number) => Promise<QuoteDetail | null>
   deleteReport: (reportId: number) => Promise<void>
   regenerateReportPdf: (reportId: number) => Promise<void>
+  /** Teilrapporte bündeln bzw. eine Bündelung auflösen (docs/specs/teilrapport.md §6.3). */
+  aggregateReports: (reportIds: number[]) => Promise<void>
+  dissolveAggregate: (reportId: number) => Promise<void>
+  /** Gesamtrapport ohne Kundenunterschrift abschliessen (docs/specs/teilrapport.md, Nachtrag). */
+  acceptAggregate: (reportId: number) => Promise<void>
   regenerate: (quoteId: number) => Promise<void>
   addVariant: (quoteId: number, kind: 'variante' | 'mehrfach') => Promise<void>
   updateQuoteStatus: (quoteId: number, status: string) => Promise<void>
@@ -135,6 +143,53 @@ export function useProjectBilling(
     }
   }
 
+  async function aggregateReports(reportIds: number[]) {
+    if (!project) return
+    try {
+      await aggregateProjectReports(project.id, reportIds)
+      await reloadReports()
+      cb.onToast(
+        `Gesamtrapport über ${reportIds.length} Einsätze erstellt — `
+        + 'die Unterschrift holt der Monteur in der App.',
+      )
+    } catch (err) {
+      // Wirft weiter: der Dialog bleibt offen und die Auswahl erhalten, damit ein
+      // Konflikt («bitte Liste neu laden») nicht die ganze Zusammenstellung kostet.
+      cb.onToast(err instanceof Error ? err.message : 'Gesamtrapport konnte nicht erstellt werden')
+      throw err
+    }
+  }
+
+  async function dissolveAggregate(reportId: number) {
+    if (!project) return
+    try {
+      const res = await dissolveAggregateReport(project.id, reportId)
+      await reloadReports()
+      cb.onToast(res.deleted
+        ? `Bündelung aufgelöst — ${res.released} Teilrapport${res.released === 1 ? '' : 'e'} wieder frei.`
+        : `Bündelung aufgelöst — der unterschriebene Beleg bleibt als aufgelöst bestehen, `
+          + `${res.released} Teilrapport${res.released === 1 ? '' : 'e'} wieder frei.`)
+    } catch (err) {
+      cb.onToast(err instanceof Error ? err.message : 'Bündelung konnte nicht aufgelöst werden')
+      throw err
+    }
+  }
+
+  async function acceptAggregate(reportId: number) {
+    if (!project) return
+    try {
+      const res = await acceptAggregateReport(project.id, reportId)
+      await reloadReports()
+      cb.onToast(
+        `Gesamtrapport ohne Kundenunterschrift abgeschlossen — `
+        + `${res.children} Einsätze sind jetzt verrechenbar.`,
+      )
+    } catch (err) {
+      cb.onToast(err instanceof Error ? err.message : 'Gesamtrapport konnte nicht abgeschlossen werden')
+      throw err
+    }
+  }
+
   async function regenerate(quoteId: number) {
     setRegeneratingQuoteId(quoteId)
     try {
@@ -195,7 +250,12 @@ export function useProjectBilling(
         project_name: project.name,
         project_id: project.id,
         use_quote: useQuote,
-        work_description: '',
+        // work_description bewusst NICHT mitschicken: das Backend unterscheidet
+        // `undefined` (= aus den Rapporten ableiten) von `''` (= bewusst geleert, kein
+        // Block auf dem PDF). Hier stand ein hartes '' — dieser Dialog hat kein
+        // Beschrieb-Feld, also unterdrückte er den Block «Ausgeführte Arbeiten» auf
+        // JEDER Rechnung aus dem Projektdetail, während der Rechnungen-Screen (mit
+        // Textarea) ihn immer zeigte.
         remark,
       })
       cb.onToast(
@@ -282,6 +342,7 @@ export function useProjectBilling(
     generatingInvoice, regeneratingQuoteId, addingVariantId, sendingRejectionId,
     reloadQuotes, reloadInvoices, reloadReports, loadQuoteDetail, deleteReport,
     regenerateReportPdf: regenerateReportPdfFor,
+    aggregateReports, dissolveAggregate, acceptAggregate,
     regenerate, addVariant, updateQuoteStatus, sendRejection, generate,
     markPaid, unmarkPaid, archive, send, markSentByPost,
   }

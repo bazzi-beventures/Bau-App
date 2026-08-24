@@ -165,6 +165,10 @@ export interface ReportEditPayload {
   art_der_arbeit?: string[] | null
   // Einbauort des Einsatzes (reports.einbauort). null = nicht erfasst.
   einbauort?: string | null
+  // Teilrapport (docs/specs/teilrapport.md). `merged_into_report_id` gesetzt heisst:
+  // der Rapport steckt in einem Gesamtrapport und ist gesperrt.
+  is_partial?: boolean | null
+  merged_into_report_id?: number | null
   staff: { staff_id: string | null; name: string; hours: number; hour_type: string }[]
   materials: { art_nr: string; amount: number; item_name?: string }[]
   kleinmaterial: { item_name: string; count: number; amount_chf: number } | null
@@ -232,6 +236,14 @@ export function ReportCreateForm({
   const [beratung, setBeratung] = useState(false)
   // Garantie je Einsatz. Vorbelegt aus dem Projekt, aber eigenständig korrigierbar.
   const [isWarranty, setIsWarranty] = useState(!!project.is_warranty)
+  // Teilrapport (docs/specs/teilrapport.md §6.3): ein Einsatz einer mehrtägigen
+  // Baustelle, ohne Kundenunterschrift. Anders als «Garantiefall» KEINE Vorbelegung
+  // aus dem Projekt — ob ein Einsatz Teil einer Serie ist, weiss nur, wer ihn erfasst.
+  const [isPartial, setIsPartial] = useState(false)
+  const [teilrapportEnabled, setTeilrapportEnabled] = useState(false)
+  // Gebündelt = gesperrt (Spec §3.3). Das Gate lehnt das Bearbeiten ohnehin ab, aber
+  // die Maske soll es vorher sagen statt beim Speichern.
+  const [isMerged, setIsMerged] = useState(false)
   // Leistungsart je Einsatz. Vorbelegt aus dem Projekt (nur kanonische Werte — im
   // Bestand stehen dort teils Alt-Werte, die das Backend nicht annimmt).
   const [artDerArbeit, setArtDerArbeit] = useState<string[]>(
@@ -301,9 +313,12 @@ export function ReportCreateForm({
 
   useEffect(() => {
     getMe()
-      .then(me => setEinbauortEnabled(isFeatureEnabled(me, 'material_standort')))
-      // Fehler ist unkritisch: ohne Flag fehlt nur das Einbauort-Feld, der Rest des
-      // Formulars funktioniert unverändert.
+      .then(me => {
+        setEinbauortEnabled(isFeatureEnabled(me, 'material_standort'))
+        setTeilrapportEnabled(isFeatureEnabled(me, 'teilrapport'))
+      })
+      // Fehler ist unkritisch: ohne Flag fehlt nur das Einbauort-Feld bzw. die
+      // Teilrapport-Checkbox, der Rest des Formulars funktioniert unverändert.
       .catch(() => {})
   }, [])
 
@@ -323,6 +338,8 @@ export function ReportCreateForm({
         setMassaufnahme(!!r.massaufnahme)
         setBeratung(!!r.beratung)
         setIsWarranty(!!r.is_warranty)
+        setIsPartial(!!r.is_partial)
+        setIsMerged(!!r.merged_into_report_id)
         setArtDerArbeit(WORK_TYPES.map(w => w.value).filter(v => (r.art_der_arbeit ?? []).includes(v)))
         setEinbauort(r.einbauort ?? '')
         setRows(
@@ -634,6 +651,7 @@ export function ReportCreateForm({
         beratung: boolean
         is_warranty: boolean
         art_der_arbeit: string[]
+        is_partial?: boolean
         einbauort?: string
         materials?: { art_nr: string; amount: number }[]
         kleinmaterial?: { item_name: string; count: number; amount_chf: number }
@@ -657,6 +675,11 @@ export function ReportCreateForm({
         // Feld vom Projekt. Eine leer geräumte Leiste ist eine Aussage.
         art_der_arbeit: artDerArbeit,
       }
+      // Teilrapport nur bei aktivem Flag mitschicken — ohne es hat der Projektleiter
+      // gar kein Häkchen gesehen, und das Backend liesse beim Bearbeiten sonst den
+      // Bestandswert stehen. Genau das ist gewollt: ein abgeschaltetes Feature darf
+      // einen bestehenden Teilrapport nicht still zum gewöhnlichen Rapport machen.
+      if (teilrapportEnabled) payload.is_partial = isPartial
       // Einbauort nur bei aktivem Flag mitschicken — ohne es hat der Projektleiter
       // gar kein Feld gesehen. Der (auch leere) String geht dann immer mit: beim
       // Bearbeiten ist ein geleertes Feld eine Aussage und löscht den Ort, während
@@ -822,6 +845,27 @@ export function ReportCreateForm({
             />
             Garantiefall
           </label>
+          {/* Teilrapport: nur mit Feature, und gesperrt sobald der Rapport in einem
+              Gesamtrapport steckt — das Gate lehnt die Bearbeitung dann ohnehin ab
+              (docs/specs/teilrapport.md §6.3). */}
+          {teilrapportEnabled && (
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              opacity: isMerged ? 0.6 : 1,
+            }}>
+              <input
+                type="checkbox"
+                checked={isPartial}
+                disabled={isMerged}
+                onChange={e => setIsPartial(e.target.checked)}
+              />
+              Teilrapport
+              <InfoHint text={isMerged
+                ? 'Dieser Teilrapport gehört bereits zu einem Gesamtrapport und lässt sich nicht mehr ändern. Löse die Bündelung im Reiter «Rapporte» auf, wenn du ihn anpassen musst.'
+                : 'Ein Einsatz einer mehrtägigen Baustelle — ohne Kundenunterschrift. Am Schluss werden die Teilrapporte zu einem Gesamtrapport gebündelt, den der Kunde einmal unterschreibt. Bis dahin wird ein Teilrapport NICHT verrechnet.'}
+              />
+            </label>
+          )}
         </div>
       </fieldset>
 

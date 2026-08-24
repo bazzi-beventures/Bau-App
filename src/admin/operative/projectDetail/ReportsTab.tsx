@@ -36,15 +36,124 @@ interface ReportsTabProps {
   onUploadFile?: (category: ProjectFileCategory, files: File[]) => void
   onDeleteFile?: (fileId: string) => void
   onRenameFile?: (fileId: string, filename: string) => Promise<void>
+  // Teilrapport (docs/specs/teilrapport.md §6.3). Alle drei optional — fehlen sie,
+  // sieht der Reiter aus wie vor dem Feature.
+  //
+  // `teilrapportEnabled` schaltet nur das BÜNDELN: das Auflösen bleibt erreichbar,
+  // damit ein Mandant, der das Feature versehentlich abschaltet, nicht auf
+  // gebündelten und damit gesperrten Rapporten sitzenbleibt (Spec §5.5).
+  teilrapportEnabled?: boolean
+  onAggregate?: (reportIds: number[]) => Promise<void>
+  onDissolve?: (reportId: number) => Promise<void>
+  // Gesamtrapport ohne Kundenunterschrift abschliessen. Wie das Auflösen bewusst
+  // NICHT ans Feature gebunden: ein Mandant, der es abschaltet, muss bestehende
+  // Bündelungen noch abschliessen können — sonst bleiben die Stunden gefangen.
+  onAccept?: (reportId: number) => Promise<void>
+}
+
+// Status-Badge einer Rapportzeile. Rein und exportiert, damit die Zustandslogik
+// ohne Rendern prüfbar ist.
+//
+// Reihenfolge = Endgültigkeit: was abgerechnet ist, ist abgerechnet — egal wie es
+// gebündelt war. Danach der Behälter (er trägt die Unterschrift), dann das
+// gebündelte Kind, dann der freie Teilrapport. Der bekommt bewusst ein
+// WARN-Badge: der teure Fehler ist nicht der falsche Betrag, sondern der
+// vergessene Einsatz (docs/specs/teilrapport.md §3.5).
+export function reportStatusBadge(r: ProjectReport): { label: string; cls: string; title?: string } {
+  if (r.invoice_id) return { label: 'Abgerechnet', cls: 'admin-badge-closed' }
+  if (r.is_aggregate) {
+    if (r.dissolved_at) {
+      return {
+        label: 'Gesamtrapport – aufgelöst', cls: 'admin-badge-warning',
+        title: 'Die Bündelung wurde aufgelöst. Das unterschriebene PDF bleibt als Beleg '
+             + 'bestehen, zählt aber nicht mehr als Abnahme — die Teilrapporte sind wieder frei.',
+      }
+    }
+    if (r.signature_timestamp) {
+      return { label: 'Gesamtrapport', cls: 'admin-badge-paid',
+               title: 'Vom Kunden unterschrieben — er deckt alle gebündelten Einsätze ab.' }
+    }
+    if (r.pl_accepted_at) {
+      return { label: 'Gesamtrapport – ohne Unterschrift abgeschlossen', cls: 'admin-badge-sent',
+               title: 'Vom Projektleiter abgeschlossen, weil keine Kundenunterschrift mehr zu '
+                    + 'holen war. Zählt als Abnahme — die Einsätze sind verrechenbar.' }
+    }
+    return { label: 'Gesamtrapport – ohne Unterschrift', cls: 'admin-badge-warning',
+             title: 'Noch nicht abgenommen. Bis dahin sind weder er noch seine '
+                  + 'Teilrapporte verrechenbar.' }
+  }
+  if (r.is_partial) {
+    return r.merged_into_report_id
+      ? { label: 'Teilrapport – gebündelt', cls: 'admin-badge-sent',
+          title: 'Gehört zu einem Gesamtrapport und ist gesperrt (kein Bearbeiten, kein Löschen).' }
+      : { label: 'Teilrapport – offen', cls: 'admin-badge-warning',
+          title: 'Noch keinem Gesamtrapport zugeordnet — dieser Einsatz wird NICHT verrechnet.' }
+  }
+  if (r.signature_timestamp) return { label: 'Unterschrieben', cls: 'admin-badge-paid' }
+  if (r.source === 'admin_manual') return { label: 'Manuell', cls: 'admin-badge-sent' }
+  return { label: 'Pendent', cls: 'admin-badge-open' }
 }
 
 export function ReportsTab({
   reports, onShowCreateForm, paperRapportUrl, onDelete, onEdit, onRegeneratePdf,
   files, uploading, uploadingCategory, onUploadFile, onDeleteFile, onRenameFile,
+  teilrapportEnabled, onAggregate, onDissolve, onAccept,
 }: ReportsTabProps) {
   const [confirmDelete, setConfirmDelete] = useState<ProjectReport | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [regeneratingId, setRegeneratingId] = useState<number | null>(null)
+  // Bündeln: `null` = Dialog zu, sonst die angehakten IDs (vorausgewählt: alle).
+  const [aggregateSelection, setAggregateSelection] = useState<number[] | null>(null)
+  const [aggregating, setAggregating] = useState(false)
+  const [confirmDissolve, setConfirmDissolve] = useState<ProjectReport | null>(null)
+  const [dissolving, setDissolving] = useState(false)
+  const [confirmAccept, setConfirmAccept] = useState<ProjectReport | null>(null)
+  const [accepting, setAccepting] = useState(false)
+
+  // Die freien Teilrapporte stehen bereits in `reports` — anders als in der
+  // Monteur-PWA braucht es dafür keinen zweiten Fetch: der Admin-Reiter lädt
+  // ohnehin ALLE Rapporte des Projekts, samt der vier Teilrapport-Spalten.
+  const openPartials = reports.filter(r => r.is_partial && !r.merged_into_report_id && !r.invoice_id)
+
+  async function handleAggregate() {
+    if (!onAggregate || !aggregateSelection?.length) return
+    setAggregating(true)
+    try {
+      await onAggregate(aggregateSelection)
+      setAggregateSelection(null)
+    } catch {
+      // Grund steht im Toast des Aufrufers (z.B. «bitte Liste neu laden») — der
+      // Dialog bleibt offen, damit die Auswahl nicht verloren geht.
+    } finally {
+      setAggregating(false)
+    }
+  }
+
+  async function handleAccept() {
+    if (!onAccept || !confirmAccept) return
+    setAccepting(true)
+    try {
+      await onAccept(confirmAccept.id)
+      setConfirmAccept(null)
+    } catch {
+      // Grund im Toast; der Dialog bleibt offen
+    } finally {
+      setAccepting(false)
+    }
+  }
+
+  async function handleDissolve() {
+    if (!onDissolve || !confirmDissolve) return
+    setDissolving(true)
+    try {
+      await onDissolve(confirmDissolve.id)
+      setConfirmDissolve(null)
+    } catch {
+      // wie oben: Grund im Toast, Dialog bleibt offen
+    } finally {
+      setDissolving(false)
+    }
+  }
 
   // Fehler meldet der Aufrufer als Toast; hier zählt nur, dass der Knopf wieder
   // klickbar wird, damit ein zweiter Versuch möglich bleibt.
@@ -94,6 +203,16 @@ export function ReportsTab({
               Papier-Rapport (PDF)
             </a>
           )}
+          {teilrapportEnabled && onAggregate && openPartials.length > 0 && aggregateSelection === null && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-secondary"
+              onClick={() => setAggregateSelection(openPartials.map(r => r.id))}
+              title="Offene Teilrapporte zu einem Gesamtrapport bündeln, den der Kunde einmal unterschreibt. Bis zur Unterschrift wird keiner davon verrechnet."
+            >
+              Gesamtrapport erstellen ({openPartials.length})
+            </button>
+          )}
           {onShowCreateForm && (
             <button
               type="button"
@@ -105,6 +224,59 @@ export function ReportsTab({
           )}
         </div>
       </div>
+      {aggregateSelection !== null && (
+        <div style={{
+          padding: 14, marginBottom: 14, borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--surface-2)',
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+            Welche Einsätze soll der Gesamtrapport abdecken?
+          </div>
+          {openPartials.map(p => (
+            <label key={p.id} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              padding: '4px 0', fontSize: 13, cursor: 'pointer',
+            }}>
+              <input
+                type="checkbox"
+                checked={aggregateSelection.includes(p.id)}
+                onChange={() => setAggregateSelection(prev => (prev ?? []).includes(p.id)
+                  ? (prev ?? []).filter(id => id !== p.id)
+                  : [...(prev ?? []), p.id])}
+              />
+              <span style={{ minWidth: 0 }}>
+                <strong>{fmtDate(p.report_date)}</strong>
+                <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
+                  {p.monteure || p.created_by || '—'}
+                </span>
+                {p.description ? <span style={{ color: 'var(--muted)' }}> · {p.description}</span> : null}
+              </span>
+            </label>
+          ))}
+          <div style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0' }}>
+            Der Gesamtrapport entsteht ohne Unterschrift — sie holt der Monteur in der
+            App beim Kunden. Bis dahin ist keiner der gebündelten Einsätze verrechenbar.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-primary"
+              onClick={() => void handleAggregate()}
+              disabled={aggregating || aggregateSelection.length === 0}
+            >
+              {aggregating ? 'Wird erstellt…' : 'Gesamtrapport erstellen'}
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-btn-sm admin-btn-secondary"
+              onClick={() => setAggregateSelection(null)}
+              disabled={aggregating}
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
       {reports.length === 0 ? (
         <div style={{ color: 'var(--muted)', fontSize: 13 }}>Noch keine Rapporte für dieses Projekt.</div>
       ) : (
@@ -123,21 +295,24 @@ export function ReportsTab({
             const erfasser = r.monteure && r.created_by && r.created_by !== r.monteure
               ? r.created_by
               : null
-            // Priorität: Abgerechnet > Unterschrieben > Manuell > Pendent.
-            const status: { label: string; cls: string } = billed
-              ? { label: 'Abgerechnet', cls: 'admin-badge-closed' }
-              : signed
-                ? { label: 'Unterschrieben', cls: 'admin-badge-paid' }
-                : manual
-                  ? { label: 'Manuell', cls: 'admin-badge-sent' }
-                  : { label: 'Pendent', cls: 'admin-badge-open' }
+            const status = reportStatusBadge(r)
+            // Gebündelt = gesperrt, auch vor der Unterschrift (Spec §3.3). Der Server
+            // lehnt es ohnehin ab; der Knopf soll gar nicht erst dastehen.
+            const merged = !!r.merged_into_report_id
+            // Auflösen: der Projektleiter darf auch den unterschriebenen — als
+            // Einziger (Spec §3.6). Verrechnet ist Schluss.
+            const canDissolve = !!onDissolve && !!r.is_aggregate && !billed && !r.dissolved_at
+            // Abschliessen: nur der noch nicht abgenommene Behälter. Unterschrieben
+            // ist die stärkere Abnahme, aufgelöst und verrechnet sind Endzustände.
+            const canAccept = !!onAccept && !!r.is_aggregate && !billed && !r.dissolved_at
+              && !signed && !r.pl_accepted_at
             return (
               <ActionRow key={r.id} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 18 }}>📋</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(r.report_date)}</span>
-                    <span className={`admin-badge ${status.cls}`}>{status.label}</span>
+                    <span className={`admin-badge ${status.cls}`} title={status.title}>{status.label}</span>
                     {r.is_warranty && (
                       <span
                         className="admin-badge admin-badge-warning"
@@ -170,7 +345,27 @@ export function ReportsTab({
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>kein PDF</span>
                 )}
-                {onEdit && manual && !billed && !signed && (
+                {canAccept && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    onClick={() => setConfirmAccept(r)}
+                    title="Ohne Kundenunterschrift abschliessen — wenn beim Kunden keine Unterschrift mehr zu holen ist. Danach sind die gebündelten Einsätze verrechenbar."
+                  >
+                    Ohne Unterschrift abschliessen
+                  </button>
+                )}
+                {canDissolve && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm admin-btn-secondary"
+                    onClick={() => setConfirmDissolve(r)}
+                    title="Die Bündelung auflösen — die Teilrapporte werden wieder frei und lassen sich neu zusammenstellen."
+                  >
+                    Auflösen
+                  </button>
+                )}
+                {onEdit && manual && !billed && !signed && !merged && (
                   <button
                     type="button"
                     className="admin-btn admin-btn-sm admin-btn-secondary"
@@ -180,7 +375,7 @@ export function ReportsTab({
                     Bearbeiten
                   </button>
                 )}
-                {onDelete && !billed && (
+                {onDelete && !billed && !merged && (
                   <button
                     type="button"
                     className="admin-btn admin-btn-sm admin-btn-danger"
@@ -212,6 +407,68 @@ export function ReportsTab({
             onRename={onRenameFile}
           />
         </div>
+      )}
+
+      {confirmAccept && (
+        <ConfirmDialog
+          title="Ohne Kundenunterschrift abschliessen?"
+          message={
+            <>
+              Der Gesamtrapport vom {fmtDate(confirmAccept.report_date)} gilt danach als
+              abgenommen — {' '}
+              {reports.filter(x => x.merged_into_report_id === confirmAccept.id).length}{' '}
+              Einsätze werden verrechenbar. Auf dem PDF steht statt der Unterschrift
+              «Abgeschlossen durch {'{'}dein Name{'}'} — ohne Kundenunterschrift».
+              <div style={{ marginTop: 8, color: 'var(--muted)' }}>
+                Gedacht für die Baustelle, auf der keine Unterschrift mehr zu holen ist.
+                Ist der Kunde noch erreichbar, lass ihn in der Mitarbeiter-App
+                unterschreiben — das ist der stärkere Beleg.
+              </div>
+            </>
+          }
+          confirmLabel="Abschliessen"
+          busyLabel="Wird abgeschlossen…"
+          busy={accepting}
+          variant="primary"
+          onCancel={() => { if (!accepting) setConfirmAccept(null) }}
+          onConfirm={() => void handleAccept()}
+        />
+      )}
+
+      {confirmDissolve && (
+        <ConfirmDialog
+          title="Bündelung auflösen?"
+          message={
+            <>
+              {confirmDissolve.signature_timestamp || confirmDissolve.pl_accepted_at ? (
+                <>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                    {confirmDissolve.signature_timestamp
+                      ? 'Der Kunde hat dieses PDF unterschrieben.'
+                      : 'Dieser Gesamtrapport ist bereits abgeschlossen.'}
+                  </div>
+                  Der Beleg bleibt bestehen und wird als aufgelöst markiert — er zählt
+                  danach nicht mehr als Abnahme. Die {' '}
+                  {reports.filter(x => x.merged_into_report_id === confirmDissolve.id).length}{' '}
+                  Teilrapporte werden wieder frei und brauchen eine neue Unterschrift,
+                  bevor sie verrechnet werden können.
+                </>
+              ) : (
+                <>
+                  Die gebündelten Teilrapporte werden wieder frei und lassen sich neu
+                  zusammenstellen. Der Gesamtrapport vom {fmtDate(confirmDissolve.report_date)} {' '}
+                  verschwindet — er war noch nicht unterschrieben, es geht kein Beleg verloren.
+                </>
+              )}
+            </>
+          }
+          confirmLabel="Auflösen"
+          busyLabel="Wird aufgelöst…"
+          busy={dissolving}
+          variant={confirmDissolve.signature_timestamp || confirmDissolve.pl_accepted_at ? 'danger' : 'primary'}
+          onCancel={() => { if (!dissolving) setConfirmDissolve(null) }}
+          onConfirm={() => void handleDissolve()}
+        />
       )}
 
       {confirmDelete && (

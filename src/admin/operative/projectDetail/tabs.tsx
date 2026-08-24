@@ -6,7 +6,7 @@ export { APPROVAL_STATUS_LABELS, APPROVAL_STATUS_BADGE, groupByParent } from './
 export { CATEGORY_LABELS } from './FileSection'
 export { DocumentsTab, SupplierDocumentsTab } from './DocumentsTab'
 export { QuotesTab } from './QuotesTab'
-export { ReportsTab } from './ReportsTab'
+export { ReportsTab, reportStatusBadge } from './ReportsTab'
 export { InvoicesTab } from './InvoicesTab'
 export { ApprovalsTab } from './ApprovalsTab'
 export { TasksTab } from './TasksTab'

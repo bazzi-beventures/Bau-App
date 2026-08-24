@@ -525,6 +525,7 @@ export default function App() {
     inner = (
       <ProjekteScreen
         logoUrl={effectiveLogo}
+        user={user}
         onNavHome={() => setScreen('home')}
         onNavRapport={() => setScreen('rapport')}
         onStartRapport={(projectName) => void startRapport(projectName)}

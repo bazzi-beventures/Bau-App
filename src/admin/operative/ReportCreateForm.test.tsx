@@ -1045,3 +1045,70 @@ describe('ReportCreateForm', () => {
     expect('einbauort' in lastPostBody()).toBe(false)
   })
 })
+
+// ── Teilrapport (docs/specs/teilrapport.md §6.3) ──
+//
+// Die Checkbox hängt am Feature-Flag; das Häkchen wandert als `is_partial` in die
+// Nutzlast. Ohne Flag geht das Feld GAR NICHT mit — das Backend liesse beim
+// Bearbeiten sonst den Bestandswert stehen, und genau das ist gewollt: ein
+// abgeschaltetes Feature darf einen bestehenden Teilrapport nicht still zum
+// gewöhnlichen Rapport machen (und damit seine Verrechenbarkeit ändern).
+
+describe('ReportCreateForm — Teilrapport', () => {
+  function withTeilrapport() {
+    vi.mocked(getMe).mockResolvedValue(
+      { feature_flags: { teilrapport: { enabled: true } } } as never,
+    )
+  }
+
+  it('zeigt die Checkbox nur mit Feature-Flag', async () => {
+    renderForm([makeQuote()])
+    expect(screen.queryByLabelText(/Teilrapport/)).not.toBeInTheDocument()
+
+    withTeilrapport()
+    renderForm([makeQuote()])
+    expect(await screen.findByLabelText(/Teilrapport/)).toBeInTheDocument()
+  })
+
+  it('ist per Default nicht angehakt — der gewöhnliche Rapport bleibt der Normalfall', async () => {
+    withTeilrapport()
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    const box = await screen.findByLabelText(/Teilrapport/) as HTMLInputElement
+    expect(box.checked).toBe(false)
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().is_partial).toBe(false)
+  })
+
+  it('schickt is_partial, wenn der Projektleiter das Häkchen setzt', async () => {
+    withTeilrapport()
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.click(await screen.findByLabelText(/Teilrapport/))
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect(lastPostBody().is_partial).toBe(true)
+  })
+
+  it('schickt ohne Flag gar kein is_partial-Feld', async () => {
+    const user = userEvent.setup()
+    renderForm([makeQuote()])
+
+    await user.selectOptions(screen.getByLabelText('Mitarbeiter 1'), 's1')
+    await user.type(screen.getByLabelText('Stunden 1'), '4')
+    await user.click(screen.getByRole('button', { name: 'Rapport speichern' }))
+
+    await waitFor(() => expect(postFired()).toBe(true))
+    expect('is_partial' in lastPostBody()).toBe(false)
+  })
+})

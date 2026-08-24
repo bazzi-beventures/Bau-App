@@ -71,6 +71,8 @@ function report(over: Record<string, unknown> = {}) {
 }
 
 const NOOP = {
+  // Ohne Feature-Flags: die Teilrapport-Bedienelemente sind hier nicht das Thema.
+  user: null,
   onNavHome: () => {},
   onNavRapport: () => {},
   onNavArbeitszeit: () => {},

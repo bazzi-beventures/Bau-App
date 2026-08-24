@@ -32,7 +32,12 @@ export interface GenerateInvoiceInput {
   project_id: string
   // true = aus der akzeptierten Offerte abrechnen statt aus den Rapporten.
   use_quote: boolean
-  work_description: string
+  // Arbeitsbeschrieb «Ausgeführte Arbeiten». Drei Zustände, die das Backend
+  // unterscheidet (GenerateInvoiceRequest): weglassen = aus den Rapporten ableiten,
+  // '' = bewusst geleert (kein Block auf dem PDF), Text = genau dieser Text. Ein
+  // Aufrufer ohne Eingabefeld lässt das Feld deshalb weg — ein hartes '' unterdrückt
+  // den Block, statt ihn abzuleiten.
+  work_description?: string
   remark: string
 }
 

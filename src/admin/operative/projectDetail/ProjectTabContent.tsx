@@ -27,7 +27,7 @@ export function ProjectTabContent({
   tab, project, documents, billing, approvals, tasks,
   beschaffungSteps, beschaffung, beschaffungAt, beschaffungSource,
   savingBeschaffung, onBeschaffungChange,
-  quoteDraftExists, dankEnabled, absageEnabled,
+  quoteDraftExists, dankEnabled, absageEnabled, teilrapportEnabled,
   useAcceptedQuote, onUseAcceptedQuoteChange, defaultInvoiceEmail,
   currentUserId,
   onShowQuoteForm, onShowReportForm, onEditReport, onEditQuote,
@@ -51,6 +51,8 @@ export function ProjectTabContent({
   quoteDraftExists: boolean
   dankEnabled: boolean
   absageEnabled: boolean
+  /** Feature «teilrapport»: schaltet Checkbox und Bündeln-Knopf (nicht das Auflösen). */
+  teilrapportEnabled: boolean
   useAcceptedQuote: boolean
   onUseAcceptedQuoteChange: (v: boolean) => void
   defaultInvoiceEmail: string
@@ -136,6 +138,10 @@ export function ProjectTabContent({
           onDelete={billing.deleteReport}
           onEdit={onEditReport}
           onRegeneratePdf={billing.regenerateReportPdf}
+          teilrapportEnabled={teilrapportEnabled}
+          onAggregate={billing.aggregateReports}
+          onDissolve={billing.dissolveAggregate}
+          onAccept={billing.acceptAggregate}
           paperRapportUrl={apiUrl(`/pwa/admin/projects/${project.id}/paper-rapport.pdf`)}
           files={documents.files}
           uploading={documents.uploading}

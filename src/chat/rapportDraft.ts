@@ -50,6 +50,16 @@ export interface RapportDraftState {
   workTypesCollected?: boolean
   collectedWorkTypes?: string[]
   suggestedWorkTypes?: string[]
+  // Abschluss-Wahl des Bestätigungsschritts: Teilrapport statt Unterschrift jetzt
+  // (docs/specs/teilrapport.md §6.1). Ohne den Draft wäre die Auswahl nach einem
+  // Navigationswechsel weg. Reines ZUSATZfeld — kein APP_DATA_VERSION-Schritt
+  // nötig (siehe CLAUDE.md: nur Umbenennen/Entfernen/Shape-Änderung verlangt eine
+  // Migration); ältere Entwürfe lesen `undefined` und beginnen bei «Unterschrift
+  // jetzt», der Vorauswahl-Default.
+  partialChosen?: boolean
+  // Der zuletzt gespeicherte Rapport war ein Teilrapport — dann zeigt der
+  // Abschluss den Hinweis statt des Unterschriftspads.
+  savedAsPartial?: boolean
 }
 
 interface StoredDraft extends RapportDraftState {

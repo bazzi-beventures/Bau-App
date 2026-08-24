@@ -38,7 +38,10 @@ const RULES: { test: RegExp; module: UsageModule }[] = [
   // Rapport-Aktionen der Monteur-Seite. Muss VOR der Material-Regel stehen —
   // sonst schnappt sich /material/ das `report_kleinmaterial_recorded` und der
   // Rapport landet unter Lager.
-  { test: /^(report_|log_report)|rapport/,       module: 'rapport' },
+  // `aggregate_report` fuer den Sammelrapport (Teilrapporte buendeln/aufloesen) —
+  // die Aktionen heissen `create_/dissolve_aggregate_report` und traegen weder das
+  // Praefix `report_` noch das Wort "rapport".
+  { test: /^(report_|log_report)|rapport|aggregate_report/, module: 'rapport' },
   // Mandanten-Einstellungen und Superadmin-Werkzeuge. Vor /schedul/, sonst
   // zählt `admin_update_tenant_scheduling` als Einsatzplanung.
   { test: /tenant_|superadmin_push|support_ticket/, module: 'konfiguration' },
@@ -211,6 +214,9 @@ const ACTION_LABELS: Record<string, string> = {
 
   // ── Rapporte ──
   log_report: 'Rapport erfasst',
+  create_aggregate_report: 'Gesamtrapport erstellt',
+  dissolve_aggregate_report: 'Gesamtrapport aufgelöst',
+  accept_aggregate_report: 'Gesamtrapport ohne Unterschrift abgeschlossen',
   report_kleinmaterial_recorded: 'Kleinmaterial erfasst',
   report_ersatzteile_recorded: 'Ersatzteile erfasst',
   admin_paper_rapport_pdf: 'Papier-Rapport erzeugt',

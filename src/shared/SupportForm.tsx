@@ -34,6 +34,8 @@ export default function SupportForm({ route, appContext }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [reference, setReference] = useState('')
+  /** Angehängt, aber nicht gespeichert (Storage-Fehler). 0 = alles da. */
+  const [lostFiles, setLostFiles] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   function addFiles(selected: ArrayLike<File> | null) {
@@ -94,6 +96,11 @@ export default function SupportForm({ route, appContext }: Props) {
     try {
       const created = await sendSupportTicket(text, files, { route, appContext })
       setReference(created.reference)
+      // Der Server zählt, was wirklich im Storage liegt. Weicht das ab, ist ein
+      // Bild verloren — das gehört in die Quittung, statt dass der Nutzer glaubt,
+      // der Support sehe seinen Screenshot. `?? files.length` = kein Fehlalarm,
+      // falls eine ältere Antwort das Feld nicht führt.
+      setLostFiles(Math.max(0, files.length - (created.attachment_count ?? files.length)))
       setMessage('')
       setFiles([])
     } catch (e) {
@@ -113,9 +120,17 @@ export default function SupportForm({ route, appContext }: Props) {
         <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
           Wir schauen sie uns an. Notiere dir die Nummer, falls du nachfragen möchtest.
         </div>
+        {lostFiles > 0 && (
+          <div role="alert" style={{ fontSize: '0.85rem', color: 'var(--danger, #ef4444)' }}>
+            {lostFiles === 1
+              ? 'Ein Bild konnte nicht gespeichert werden'
+              : `${lostFiles} Bilder konnten nicht gespeichert werden`} — der Text der
+            Meldung ist angekommen. Bitte melde dich, wenn das Bild wichtig ist.
+          </div>
+        )}
         <button
           type="button"
-          onClick={() => setReference('')}
+          onClick={() => { setReference(''); setLostFiles(0) }}
           style={{
             alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8,
             border: '1px solid var(--border, #e5e7eb)', background: 'transparent',

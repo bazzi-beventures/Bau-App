@@ -19,6 +19,8 @@ export interface ProjectFeatures {
   dankMail: boolean
   /** Feature «offerte_absage_mail» — „Absage senden" bei abgelehnten Offerten. */
   absageMail: boolean
+  /** Feature «teilrapport» — Teilrapport-Checkbox und Bündeln-Knopf im Rapport-Reiter. */
+  teilrapport: boolean
   /** Leer = Feature «beschaffungsstatus» aus; sonst die konfigurierten Schritte. */
   beschaffungSteps: BeschaffungStep[]
   /** Der angemeldete Benutzer — entscheidet, wer eine Freigabe visieren darf. */
@@ -30,6 +32,7 @@ const NONE: ProjectFeatures = {
   geruestfach: false,
   dankMail: false,
   absageMail: false,
+  teilrapport: false,
   beschaffungSteps: [],
   currentUserId: null,
 }
@@ -44,6 +47,7 @@ export function useProjectFeatures(): ProjectFeatures {
         geruestfach: isFeatureEnabled(me, 'geruestfach'),
         dankMail: isFeatureEnabled(me, 'offerte_dank_mail'),
         absageMail: isFeatureEnabled(me, 'offerte_absage_mail'),
+        teilrapport: isFeatureEnabled(me, 'teilrapport'),
         beschaffungSteps: isFeatureEnabled(me, 'beschaffungsstatus')
           ? enabledBeschaffungSteps(getFeature(me, 'beschaffungsstatus'))
           : [],

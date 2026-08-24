@@ -31,3 +31,49 @@ describe('hasBillableReport', () => {
     ).toBe(true)
   })
 })
+
+// ── Teilrapport-Ausnahmen (docs/specs/teilrapport.md §3.4 b) ──
+// Spiegelbild von is_invoice_ready_report — läuft die Maske hier auseinander,
+// bietet sie einen Rechnungslauf an, den der Server mit 400 ablehnt.
+
+describe('hasBillableReport — Teilrapport', () => {
+  it('lässt einen Teilrapport das Tor nie öffnen — auch nicht als admin_manual', () => {
+    expect(hasBillableReport([{ source: 'admin_manual', is_partial: true } as never])).toBe(false)
+    expect(hasBillableReport([{
+      signature_timestamp: null, source: 'chat', is_partial: true,
+    } as never])).toBe(false)
+  })
+
+  it('lässt den unterschriebenen Gesamtrapport das Tor öffnen', () => {
+    expect(hasBillableReport([{
+      signature_timestamp: '2026-08-08T10:00:00Z', source: 'chat',
+    } as never])).toBe(true)
+  })
+
+  it('lässt den vom Büro gebündelten Gesamtrapport erst unterschrieben zählen', () => {
+    // source 'admin_manual' allein reicht beim Behälter nicht — er ist keine
+    // Erfassung, sondern der Träger der Kunden-Unterschrift.
+    expect(hasBillableReport([{
+      source: 'admin_manual', is_aggregate: true,
+    } as never])).toBe(false)
+    expect(hasBillableReport([{
+      source: 'admin_manual', is_aggregate: true,
+      signature_timestamp: '2026-08-08T10:00:00Z',
+    } as never])).toBe(true)
+  })
+
+  it('lässt den vom PL ohne Unterschrift abgeschlossenen Gesamtrapport zählen', () => {
+    // Der Ausweg für die Baustelle ohne Unterschrift — sonst blieben die Stunden
+    // dauerhaft unverrechenbar.
+    expect(hasBillableReport([{
+      source: 'chat', is_aggregate: true, pl_accepted_at: '2026-08-20T09:00:00Z',
+    } as never])).toBe(true)
+  })
+
+  it('übergeht den aufgelösten Gesamtrapport', () => {
+    expect(hasBillableReport([{
+      signature_timestamp: '2026-08-08T10:00:00Z', source: 'chat',
+      dissolved_at: '2026-08-09T08:00:00Z',
+    } as never])).toBe(false)
+  })
+})

@@ -52,6 +52,10 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
+  // Teilrapport (docs/specs/teilrapport.md §6.1): schaltet nur die Auswahl im
+  // Bestätigungsschritt. Die Regeln (Verrechnung, Gates, PDF) hängen serverseitig
+  // an den Daten, nicht am Flag.
+  const teilrapportEnabled = isFeatureEnabled(user, 'teilrapport')
 
   function greetingMessage(): Message {
     return {
@@ -100,6 +104,13 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   const [pendingDisambiguation, setPendingDisambiguation] = useState(() => draft?.pendingDisambiguation ?? false)
   const [pendingQuoteQuestion, setPendingQuoteQuestion] = useState(() => draft?.pendingQuoteQuestion ?? false)
   const [pendingSignReportId, setPendingSignReportId] = useState<number | null>(() => draft?.pendingSignReportId ?? null)
+  // Abschluss-Wahl im Bestätigungsschritt: Unterschrift jetzt oder Teilrapport.
+  // Im Draft, damit sie eine Navigation überlebt — sonst stünde der Monteur nach
+  // dem Zurückspringen wieder auf «Unterschrift jetzt».
+  const [partialChosen, setPartialChosen] = useState(() => draft?.partialChosen ?? false)
+  // Der eben gespeicherte Rapport war ein Teilrapport: statt des Unterschriftspads
+  // kommt der Hinweis, dass die Unterschrift auf dem Gesamtrapport erfolgt.
+  const [savedAsPartial, setSavedAsPartial] = useState(() => draft?.savedAsPartial ?? false)
   // Projekt des laufenden Rapports — damit «Rapport erstellen» im selben Projekt in
   // den laufenden Rapport zurückspringt, statt ihn stillschweigend zu verwerfen.
   const [pendingProject, setPendingProject] = useState<string | null>(() => draft?.pendingProject ?? null)
@@ -119,6 +130,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
     pendingSignReportId, downloadReportId, reportSigned,
     workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject,
+    partialChosen, savedAsPartial,
   }
 
   // Rapport-Zwischenstand persistieren, sobald sich relevanter State ändert.
@@ -128,7 +140,8 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   }, [user.authorized_user_id, messages, kleinCollected, ersatzCollected, collectedKlein,
       collectedErsatz, summaryItems, pendingConfirm, pendingDisambiguation, pendingQuoteQuestion,
       pendingSignReportId, downloadReportId, reportSigned,
-      workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject])
+      workTypesCollected, collectedWorkTypes, suggestedWorkTypes, pendingProject,
+      partialChosen, savedAsPartial])
 
   // Reload und Tab-schliessen: der Browser fragt selbst nach, solange ein Rapport
   // offen ist. Best effort und mit zwei Einschränkungen — der Text ist der des
@@ -229,6 +242,10 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setSuggestedWorkTypes(suggested)
       setCollectedWorkTypes(suggested)
       setWorkTypesCollected(suggested.length > 0)
+      // Abschluss-Vorauswahl: «Teilrapport», wenn das Projekt bereits einen freien
+      // Teilrapport hat — wer einmal so arbeitet, meint in aller Regel den nächsten
+      // Tag derselben Serie. Sonst «Unterschrift jetzt» (docs/specs/teilrapport.md §3.10).
+      setPartialChosen(res.pending_summary?.preselect_partial ?? false)
     } else if (res.action_taken === 'disambiguate') {
       setPendingDisambiguation(true)
       setPendingConfirm(false)
@@ -264,7 +281,18 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setSuggestedWorkTypes([])
       setSummaryItems([])
     } else if (res.action_taken === 'report_saved' && res.report_id) {
-      setPendingSignReportId(Number(res.report_id))
+      // Teilrapport: kein Unterschriftspad. Die eine Unterschrift kommt am Schluss
+      // auf dem Gesamtrapport — direkt in den Abschluss mit PDF-Knopf und Hinweis.
+      // Der Server entscheidet das (`is_partial` in der Antwort), nicht der Client:
+      // hätte er das Flag verworfen, zeigte die PWA sonst einen falschen Zustand.
+      const savedPartial = res.is_partial === true
+      setSavedAsPartial(savedPartial)
+      if (savedPartial) {
+        setPendingSignReportId(null)
+        setDownloadReportId(Number(res.report_id))
+      } else {
+        setPendingSignReportId(Number(res.report_id))
+      }
       setReportSigned(false)
       setPendingConfirm(false)
       setPendingDisambiguation(false)
@@ -389,6 +417,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
         kleinmaterial: collectedKlein,
         ersatzteile: collectedErsatz.map(it => ({ art_nr: it.art_nr, amount: it.amount })),
         art_der_arbeit: collectedWorkTypes,
+        is_partial: partialSelectable && partialChosen,
       })
       addMessage({ role: 'bot', text: res.reply, timestamp: now(), action_taken: res.action_taken })
       handleActionState(res)
@@ -486,6 +515,9 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     && ersatzteilEnabled && !ersatzCollected
   const confirmReady = pendingConfirm && !workTypeStepPending && !kleinStepPending && !ersatzStepPending
   const hasExtras = !!collectedKlein?.amount_chf || collectedErsatz.length > 0
+  // Die Abschluss-Wahl gibt es nur mit dem Feature. Ohne es bleibt alles wie bisher:
+  // speichern, dann unterschreiben.
+  const partialSelectable = teilrapportEnabled
 
   return (
     <div className="chat-screen">
@@ -648,9 +680,40 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                 </div>
               </div>
             )}
+            {/* Abschluss: Unterschrift jetzt oder Teilrapport (die eine Unterschrift
+                kommt am Schluss auf dem Gesamtrapport). Vorausgewählt ist, was das
+                Projekt nahelegt — docs/specs/teilrapport.md §3.10. */}
+            {partialSelectable && (
+              <div className="abschluss-wahl">
+                <div className="abschluss-wahl-label">Abschluss</div>
+                <div className="abschluss-wahl-options">
+                  <button
+                    type="button"
+                    className={`abschluss-wahl-option${partialChosen ? '' : ' is-active'}`}
+                    aria-pressed={!partialChosen}
+                    onClick={() => setPartialChosen(false)}
+                  >
+                    Unterschrift jetzt
+                  </button>
+                  <button
+                    type="button"
+                    className={`abschluss-wahl-option${partialChosen ? ' is-active' : ''}`}
+                    aria-pressed={partialChosen}
+                    onClick={() => setPartialChosen(true)}
+                  >
+                    Teilrapport
+                  </button>
+                </div>
+                <div className="abschluss-wahl-hint">
+                  {partialChosen
+                    ? 'Die Unterschrift holst du am Schluss auf dem Gesamtrapport.'
+                    : 'Der Kunde unterschreibt gleich nach dem Speichern.'}
+                </div>
+              </div>
+            )}
             <div className="confirm-buttons">
               <button className="confirm-btn confirm-btn-yes" onClick={handleConfirm}>
-                Speichern
+                {partialSelectable && partialChosen ? 'Teilrapport speichern' : 'Speichern'}
               </button>
               <button className="confirm-btn confirm-btn-no" onClick={handleCancel}>
                 Abbrechen
@@ -682,6 +745,16 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
               </button>
             </div>
           </>
+        )}
+
+        {/* Teilrapport gespeichert: statt des Unterschriftspads der Hinweis, wo die
+            Unterschrift herkommt — sonst sähe der Monteur ein übersprungenes
+            Unterschriftsfeld und hielte den Rapport für unfertig. */}
+        {savedAsPartial && downloadReportId !== null && (
+          <div className="teilrapport-hinweis">
+            Teilrapport gespeichert — die Unterschrift holst du am Schluss auf dem
+            Gesamtrapport (Projekt → «Gesamtrapport erstellen»).
+          </div>
         )}
 
         {/* PDF Download button — shown after signature is done or skipped */}

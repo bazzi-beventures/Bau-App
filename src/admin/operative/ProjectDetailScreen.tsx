@@ -357,6 +357,7 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
           quoteDraftExists={quoteDraftExists}
           dankEnabled={features.dankMail}
           absageEnabled={features.absageMail}
+          teilrapportEnabled={features.teilrapport}
           useAcceptedQuote={useAcceptedQuote}
           onUseAcceptedQuoteChange={setUseAcceptedQuote}
           defaultInvoiceEmail={form.selectedCustomer?.email ?? project.customer?.email ?? ''}

@@ -31,6 +31,9 @@ export interface ChatResponse {
   outcome?: ZeitOutcome
   transcription?: string
   report_id?: number | string
+  // Der gespeicherte Rapport ist ein Teilrapport: der Chat überspringt dann den
+  // Unterschriftsschritt (docs/specs/teilrapport.md §6.1).
+  is_partial?: boolean
   correction_id?: string
   disambiguation?: DisambiguationOption[]
   pending_summary?: {
@@ -43,6 +46,10 @@ export interface ChatResponse {
     einbauort?: string
     // Vorauswahl der Leistungsart-Chips (aus dem Projekt geerbt).
     art_der_arbeit?: string[]
+    // Vorauswahl «Teilrapport» im Abschluss-Schritt: das Projekt hat bereits einen
+    // freien Teilrapport (docs/specs/teilrapport.md §3.10). Fehlt beim Alt-Server →
+    // «Unterschrift jetzt», die gewöhnliche Vorauswahl.
+    preselect_partial?: boolean
   }
 }
 
@@ -157,6 +164,10 @@ export interface ConfirmExtras {
   // Angekreuzte Leistungsart (reports.art_der_arbeit). undefined = nichts gesagt,
   // dann bleibt die Vorbelegung aus dem Projekt stehen; [] heisst "keine".
   art_der_arbeit?: string[]
+  // Teilrapport statt Rapport mit Unterschrift: gleiche Erfassung, nur ohne
+  // Unterschriftsschritt — die eine Unterschrift kommt am Schluss auf dem
+  // Gesamtrapport (docs/specs/teilrapport.md §3.2).
+  is_partial?: boolean
 }
 
 export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatResponse> {
@@ -166,6 +177,7 @@ export async function confirmReport(extras: ConfirmExtras = {}): Promise<ChatRes
       kleinmaterial: extras.kleinmaterial ?? null,
       ersatzteile: extras.ersatzteile ?? [],
       art_der_arbeit: extras.art_der_arbeit ?? null,
+      is_partial: extras.is_partial ?? false,
     }),
   })
 }
@@ -220,10 +232,42 @@ export interface ProjectReport {
   created_at: string
   source: string | null
   is_own: boolean
+  // Teilrapport/Sammelrapport (docs/specs/teilrapport.md). Alle vier optional:
+  // ein Alt-Server ohne die Spalten liefert sie nicht, dann verhält sich die Liste
+  // wie vor dem Feature.
+  is_partial?: boolean
+  is_aggregate?: boolean
+  merged_into_report_id?: number | null
+  dissolved_at?: string | null
+  // Vom Projektleiter ohne Kundenunterschrift abgeschlossen (20260824d).
+  pl_accepted_at?: string | null
 }
 
 export async function fetchProjectReports(projectId: string): Promise<ProjectReport[]> {
   return apiFetch<ProjectReport[]>(`/pwa/projects/${projectId}/reports`)
+}
+
+// ─── Teilrapport → Gesamtrapport (docs/specs/teilrapport.md §5.5) ───
+
+export async function fetchOpenPartialReports(projectId: string): Promise<ProjectReport[]> {
+  return apiFetch<ProjectReport[]>(`/pwa/projects/${projectId}/partial-reports`)
+}
+
+export async function createAggregateReport(
+  projectId: string, reportIds: number[],
+): Promise<{ status: string; report_id: number }> {
+  return apiFetch(`/pwa/projects/${projectId}/aggregate-report`, {
+    method: 'POST',
+    body: JSON.stringify({ report_ids: reportIds }),
+  })
+}
+
+export async function dissolveAggregateReport(
+  projectId: string, reportId: number,
+): Promise<{ status: string; released: number }> {
+  return apiFetch(`/pwa/projects/${projectId}/aggregate-report/${reportId}/dissolve`, {
+    method: 'POST',
+  })
 }
 
 // ─── Häufig benutzte Ersatzteile (Rapport-Abschluss) ─────────

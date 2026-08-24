@@ -851,6 +851,53 @@ input, textarea { font-family: var(--font); color: var(--text); }
   cursor: pointer;
 }
 
+/* Abschluss-Wahl im Bestätigungsschritt: Unterschrift jetzt oder Teilrapport
+   (docs/specs/teilrapport.md §6.1). Zwei grosse Flächen statt Radiobuttons — die
+   Auswahl wird auf der Baustelle mit Handschuhen getroffen. */
+.abschluss-wahl {
+  margin: 12px 16px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.abschluss-wahl-label {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.abschluss-wahl-options { display: flex; gap: 8px; }
+.abschluss-wahl-option {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.abschluss-wahl-option.is-active {
+  border-color: var(--accent-blue, #3180ab);
+  background: rgba(49,128,171,0.12);
+  color: var(--accent-blue, #3180ab);
+}
+.abschluss-wahl-hint { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+/* Abschluss-Hinweis nach dem Speichern eines Teilrapports — er ersetzt das
+   Unterschriftspad, das hier bewusst fehlt. */
+.teilrapport-hinweis {
+  margin: 12px 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* Ersatzteil-Abfrage (kuratierte Liste, Mehrfachauswahl) — teilt sich die
    kleinmaterial-* Container/Stepper-Styles. */
 .ersatzteil-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }

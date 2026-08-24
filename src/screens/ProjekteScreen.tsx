@@ -3,7 +3,10 @@ import { apiFetch, ApiError, isNetworkError } from '../api/client'
 import {
   listProjectFiles, projectFileUrl, renameProjectFile, uploadProjectFile,
 } from '../api/projectFiles'
-import { deleteOwnRapport, downloadRapportPdf, fetchProjectReports, ProjectReport } from '../api/chat'
+import {
+  createAggregateReport, deleteOwnRapport, dissolveAggregateReport, downloadRapportPdf,
+  fetchOpenPartialReports, fetchProjectReports, ProjectReport,
+} from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import SignaturePad from '../chat/SignaturePad'
 import { SK } from '../api/storageKeys'
@@ -14,6 +17,8 @@ import {
 import { sortProjectsNewestFirst } from './projekte/sortProjects'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 import { mapsUrl } from '../shared/mapsLink'
+import { isFeatureEnabled } from '../api/modules'
+import type { UserInfo } from '../api/auth'
 import { DownloadIcon } from '../shared/DownloadIcon'
 import { formatDateTime } from '../shared/datetime'
 import { CATEGORY_LABELS, PROJECT_KIND_LABELS } from '../shared/projectDetail/types'
@@ -98,6 +103,9 @@ const LIEFERSCHEIN_CATEGORY: FileCategory = 'lieferschein'
 
 interface Props {
   logoUrl?: string
+  // Für die Feature-Abfrage (heute: `teilrapport`). Nullable wie in App.tsx —
+  // ohne User keine Bedienelemente, die an einem Flag hängen.
+  user: UserInfo | null
   onNavHome: () => void
   onNavRapport: () => void
   onStartRapport: (projectName: string) => void
@@ -154,9 +162,48 @@ function MapsAddress({ address }: { address: string }) {
   )
 }
 
+// Zustands-Etikett einer Rapportzeile. Rein, damit die Zustandslogik testbar ist —
+// und weil sie in beiden Listen (PWA und Admin) dieselbe sein muss.
+//
+// Reihenfolge = Endgültigkeit: was verrechnet ist, ist verrechnet, egal wie es
+// gebündelt war. Dann der Behälter, dann das gebündelte Kind, dann das freie —
+// beim freien Teilrapport ist «offen» die Aussage, auf die es ankommt
+// (docs/specs/teilrapport.md §3.5: der teure Fehler ist der vergessene Einsatz).
+export function reportStatusLabel(
+  r: Pick<ProjectReport, 'invoice_id' | 'signature_timestamp' | 'is_partial' | 'is_aggregate'
+    | 'merged_into_report_id' | 'dissolved_at' | 'pl_accepted_at'>,
+  invoiceLocked: boolean,
+): { text: string; tone: 'neutral' | 'warn' } {
+  if (r.invoice_id) {
+    return { text: invoiceLocked ? 'abgerechnet' : 'auf offener Rechnung', tone: 'neutral' }
+  }
+  if (r.is_aggregate) {
+    if (r.dissolved_at) return { text: 'Gesamtrapport – aufgelöst', tone: 'warn' }
+    if (r.signature_timestamp) return { text: 'Gesamtrapport – unterschrieben', tone: 'neutral' }
+    // Vom Büro ohne Kundenunterschrift abgeschlossen: zählt als Abnahme, ist aber
+    // keine Unterschrift — der Monteur soll den Unterschied sehen.
+    if (r.pl_accepted_at) return { text: 'Gesamtrapport – vom Büro abgeschlossen', tone: 'neutral' }
+    return { text: 'Gesamtrapport – ohne Unterschrift', tone: 'warn' }
+  }
+  if (r.is_partial) {
+    return r.merged_into_report_id
+      ? { text: 'Teilrapport – im Gesamtrapport', tone: 'neutral' }
+      : { text: 'Teilrapport – offen', tone: 'warn' }
+  }
+  return {
+    text: r.signature_timestamp ? 'unterschrieben' : 'ohne Unterschrift',
+    tone: 'neutral',
+  }
+}
+
 type ViewMode = 'grid' | 'timeline'
 
-export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onStartRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport, onStartRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
+  // Teilrapport (docs/specs/teilrapport.md §6.2): das Flag schaltet den
+  // Bündeln-Knopf. Die Badges hängen NICHT daran — sie beschreiben den Zustand der
+  // Daten, und ein abgeschaltetes Flag darf einen gebündelten Rapport nicht
+  // aussehen lassen wie einen gewöhnlichen.
+  const teilrapportEnabled = isFeatureEnabled(user, 'teilrapport')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
@@ -181,6 +228,16 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
   // erreichbar. Ein Rapport zur Zeit, sonst hat der Monteur zwei Unterschriftsfelder
   // untereinander und weiss nicht mehr, welches zu welchem Tag gehört.
   const [signingReportId, setSigningReportId] = useState<number | null>(null)
+  // Bündeln (docs/specs/teilrapport.md §6.2): der Dialog steht in der Rapportliste,
+  // vorausgewählt sind alle freien Teilrapporte. `null` = zu, sonst die angehakten IDs.
+  // Die freien Teilrapporte kommen aus der eigenen Route, nicht aus `reports`:
+  // der Server filtert dort zusätzlich verrechnete heraus und prüft das Feature —
+  // eine lokal gefilterte Liste könnte etwas anbieten, was das Gate danach ablehnt.
+  const [openPartials, setOpenPartials] = useState<ProjectReport[]>([])
+  const [aggregateSelection, setAggregateSelection] = useState<number[] | null>(null)
+  const [aggregating, setAggregating] = useState(false)
+  const [dissolvingId, setDissolvingId] = useState<number | null>(null)
+  const [aggregateError, setAggregateError] = useState<string | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadCategory, setUploadCategory] = useState<FileCategory>('fotos')
@@ -214,17 +271,26 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
     setComments([])
     setTasks([])
     setReports([])
+    setOpenPartials([])
+    setAggregateSelection(null)
+    setAggregateError(null)
     setLoadingDetail(true)
     Promise.all([
       listProjectFiles(SCOPE, selected.id).catch(() => [] as ProjectFile[]),
       apiFetch(`/pwa/projects/${selected.id}/comments`).catch(() => []) as Promise<ProjectComment[]>,
       apiFetch(`/pwa/projects/${selected.id}/tasks`).catch(() => []) as Promise<ProjectTask[]>,
       fetchProjectReports(selected.id).catch(() => [] as ProjectReport[]),
-    ]).then(([f, c, t, r]) => {
+      // Ohne Feature gar kein Request — die Route antwortet dann mit 403, und ein
+      // erwarteter Fehler im Netzwerk-Log ist Lärm.
+      teilrapportEnabled
+        ? fetchOpenPartialReports(selected.id).catch(() => [] as ProjectReport[])
+        : Promise.resolve([] as ProjectReport[]),
+    ]).then(([f, c, t, r, p]) => {
       setFiles(f)
       setComments(c)
       setTasks(t)
       setReports(r)
+      setOpenPartials(p)
     }).finally(() => setLoadingDetail(false))
   }, [selected?.id])
 
@@ -368,6 +434,66 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
         : 'Rapport konnte nicht gelöscht werden. Bitte melde dich beim Projektleiter.')
     } finally {
       setDeletingReportId(null)
+    }
+  }
+
+  async function handleAggregate() {
+    if (!selected || !aggregateSelection || aggregateSelection.length === 0) return
+    setAggregating(true)
+    setAggregateError(null)
+    try {
+      const res = await createAggregateReport(selected.id, aggregateSelection)
+      // Beide Listen frisch holen statt lokal zusammenzubauen: der Behälter trägt
+      // einen vom Server gebauten Beschrieb (Datum + Arbeit je Einsatz), und die
+      // Kinder sind ab jetzt gesperrt. Ein selbst gestrickter Zwischenzustand wiche
+      // davon ab — und die freien Teilrapporte sind es nicht mehr.
+      const [fresh, freshPartials] = await Promise.all([
+        fetchProjectReports(selected.id),
+        fetchOpenPartialReports(selected.id).catch(() => [] as ProjectReport[]),
+      ])
+      setReports(fresh)
+      setOpenPartials(freshPartials)
+      setAggregateSelection(null)
+      // Direkt in die Unterschrift — dafür wurde gebündelt. Es ist derselbe
+      // Signatur-Weg wie beim gewöhnlichen Rapport (POST /pwa/chat/sign/{id}).
+      setSigningReportId(res.report_id)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      setAggregateError(err instanceof Error && err.message
+        ? err.message
+        : 'Der Gesamtrapport konnte nicht erstellt werden.')
+    } finally {
+      setAggregating(false)
+    }
+  }
+
+  async function handleDissolve(report: ProjectReport) {
+    if (!selected) return
+    if (!window.confirm(
+      'Bündelung auflösen? Die Teilrapporte werden wieder frei und lassen sich neu '
+      + 'zusammenstellen. Der Gesamtrapport selbst verschwindet.'
+    )) return
+    setDissolvingId(report.id)
+    setAggregateError(null)
+    try {
+      await dissolveAggregateReport(selected.id, report.id)
+      const [fresh, freshPartials] = await Promise.all([
+        fetchProjectReports(selected.id),
+        // Ohne Feature keine Liste — auflösen bleibt trotzdem erreichbar (Spec §5.5),
+        // nur den Bündeln-Dialog gibt es dann nicht.
+        teilrapportEnabled
+          ? fetchOpenPartialReports(selected.id).catch(() => [] as ProjectReport[])
+          : Promise.resolve([] as ProjectReport[]),
+      ])
+      setReports(fresh)
+      setOpenPartials(freshPartials)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      setAggregateError(err instanceof Error && err.message
+        ? err.message
+        : 'Der Gesamtrapport konnte nicht aufgelöst werden.')
+    } finally {
+      setDissolvingId(null)
     }
   }
 
@@ -601,17 +727,130 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
           {!loadingDetail && reports.length > 0 && (
             <div className="projekte-detail-card">
               <div className="projekte-detail-title">Rapporte</div>
+
+              {/* Gesamtrapport erstellen: sichtbar ab EINEM freien Teilrapport.
+                  Vorausgewählt sind alle — der Normalfall ist «die ganze Woche», und
+                  Abwählen ist ein Klick. Auch die Teilrapporte der Kollegen stehen zur
+                  Wahl: wer am Freitag beim Kunden ist, holt die Unterschrift für alle
+                  (docs/specs/teilrapport.md §3.8). */}
+              {teilrapportEnabled && openPartials.length > 0 && aggregateSelection === null && (
+                <button
+                  type="button"
+                  onClick={() => setAggregateSelection(openPartials.map(r => r.id))}
+                  style={{
+                    width: '100%', padding: '10px 12px', marginBottom: 4,
+                    borderRadius: 10, border: '1px solid var(--accent-blue)',
+                    background: 'transparent', color: 'var(--accent-blue)',
+                    fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  📋 Gesamtrapport erstellen ({openPartials.length} Teilrapport{openPartials.length === 1 ? '' : 'e'})
+                </button>
+              )}
+
+              {aggregateSelection !== null && (
+                <div style={{
+                  padding: 12, marginBottom: 8, borderRadius: 10,
+                  border: '1px solid var(--accent-blue)', background: 'var(--surface, transparent)',
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+                    Welche Einsätze soll der Kunde unterschreiben?
+                  </div>
+                  {openPartials.map(p => {
+                    const checked = aggregateSelection.includes(p.id)
+                    return (
+                      <label key={p.id} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        padding: '6px 0', cursor: 'pointer',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setAggregateSelection(prev => (prev ?? []).includes(p.id)
+                            ? (prev ?? []).filter(id => id !== p.id)
+                            : [...(prev ?? []), p.id])}
+                          style={{ width: 18, height: 18, flex: 'none', marginTop: 2 }}
+                        />
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600 }}>{formatDate(p.report_date)}</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted, #71717a)', marginLeft: 8 }}>
+                            {p.is_own ? 'von dir' : (p.created_by || 'Kollege')}
+                          </span>
+                          {p.description && (
+                            <span style={{
+                              display: 'block', fontSize: 13,
+                              color: 'var(--text-muted, #71717a)', whiteSpace: 'pre-wrap',
+                            }}>
+                              {p.description}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    )
+                  })}
+                  {aggregateError && (
+                    <div style={{ fontSize: 13, color: '#e53e3e', marginTop: 8 }}>{aggregateError}</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleAggregate()}
+                      disabled={aggregating || aggregateSelection.length === 0}
+                      style={{
+                        flex: 1, minHeight: 44, borderRadius: 10, border: 'none',
+                        background: aggregateSelection.length === 0
+                          ? 'var(--surface-2, #d4d4d8)' : 'var(--accent-blue)',
+                        color: aggregateSelection.length === 0 ? 'var(--text-muted, #71717a)' : '#fff',
+                        fontSize: 14, fontWeight: 600,
+                        cursor: aggregating || aggregateSelection.length === 0 ? 'default' : 'pointer',
+                      }}
+                    >
+                      {aggregating ? 'Wird erstellt…' : '✍️ Unterschrift holen'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAggregateSelection(null); setAggregateError(null) }}
+                      disabled={aggregating}
+                      style={{
+                        flex: 'none', minHeight: 44, padding: '0 14px', borderRadius: 10,
+                        border: '1px solid var(--border, #e5e7eb)', background: 'transparent',
+                        color: 'var(--text-muted, #71717a)', fontSize: 14, fontWeight: 600,
+                        cursor: aggregating ? 'default' : 'pointer',
+                      }}
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {reports.map(r => {
                 const billed = !!r.invoice_id
                 const signed = !!r.signature_timestamp
-                const canDelete = r.is_own && !billed && !signed
+                // Gebündelt heisst gesperrt — auch vor der Unterschrift (Spec §3.3).
+                // Der Server lehnt es ohnehin ab; der Knopf soll gar nicht erst dastehen.
+                const merged = !!r.merged_into_report_id
+                const canDelete = r.is_own && !billed && !signed && !merged
                 // Nachtragen ist grosszügiger als Löschen: eigener Rapport, noch
                 // ohne Unterschrift — und die Rechnung darf den Kunden noch nicht
                 // erreicht haben. Die blosse Verknüpfung sperrt nicht mehr, sonst
                 // wäre ein still mitverrechneter Rapport nie mehr nachsignierbar.
                 // Alt-Server ohne invoice_locked: dann zählt wieder die Verknüpfung.
                 const invoiceLocked = r.invoice_locked ?? billed
-                const canSign = r.is_own && !signed && !invoiceLocked
+                const status = reportStatusLabel(r, invoiceLocked)
+                // Der Teilrapport wird nicht einzeln unterschrieben — dafür gibt es
+                // den Gesamtrapport. Der Behälter dagegen schon: er IST der Zweck.
+                //
+                // Beim Gesamtrapport zählt `is_own` NICHT: er kann vom Kollegen oder
+                // vom Projektleiter gebündelt worden sein (Spec §3.8/§6.3), und
+                // unterschreiben lässt ihn, wer beim Kunden steht. Beim gewöhnlichen
+                // Rapport bleibt es beim eigenen — dort ist die Unterschrift ein
+                // Nachtrag zur eigenen Aufnahme.
+                const canSign = !signed && !invoiceLocked && !r.is_partial
+                  && (r.is_aggregate ? (!r.dissolved_at && !r.pl_accepted_at) : r.is_own)
+                // Auflösen: eigener, unsignierter, unverrechneter Behälter (Spec §3.6).
+                // Den signierten löst nur der Projektleiter auf.
+                const canDissolve = r.is_own && !!r.is_aggregate && !signed && !billed && !r.dissolved_at
                 return (
                   <div key={r.id}>
                   <div
@@ -623,10 +862,13 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>
                         {formatDate(r.report_date)}
-                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: 'var(--text-muted, #71717a)' }}>
-                          {billed
-                            ? (invoiceLocked ? 'abgerechnet' : 'auf offener Rechnung')
-                            : signed ? 'unterschrieben' : 'ohne Unterschrift'}
+                        <span style={{
+                          marginLeft: 8, fontSize: 12, fontWeight: 500,
+                          color: status.tone === 'warn'
+                            ? 'var(--accent-orange, #d97706)'
+                            : 'var(--text-muted, #71717a)',
+                        }}>
+                          {status.text}
                         </span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted, #71717a)', marginTop: 1 }}>
@@ -664,6 +906,22 @@ export default function ProjekteScreen({ logoUrl, onNavHome, onNavRapport, onSta
                           }}
                         >
                           ✍️ Unterschrift
+                        </button>
+                      )}
+                      {canDissolve && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDissolve(r)}
+                          disabled={dissolvingId === r.id}
+                          style={{
+                            padding: '6px 10px', borderRadius: 8,
+                            border: '1px solid var(--text-muted, #71717a)', background: 'transparent',
+                            color: 'var(--text-muted, #71717a)', fontSize: 13, fontWeight: 600,
+                            cursor: dissolvingId === r.id ? 'default' : 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {dissolvingId === r.id ? '…' : 'Bündelung auflösen'}
                         </button>
                       )}
                       {canDelete && (

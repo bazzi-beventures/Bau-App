@@ -62,6 +62,16 @@ export interface ProjectReport {
   // Badge NEBEN dem Status: es ersetzt «Abgerechnet»/«Manuell» nicht, sondern
   // ergänzt sie — beim Verrechnen ist genau diese Kombination die interessante.
   is_warranty?: boolean | null
+  // Teilrapport/Sammelrapport (docs/specs/teilrapport.md). Alle vier optional: ein
+  // Alt-Server ohne die Spalten liefert sie nicht, dann sieht die Liste aus wie vor
+  // dem Feature. Sie tragen das Status-Badge und die Bündeln/Auflösen-Knöpfe.
+  is_partial?: boolean | null
+  is_aggregate?: boolean | null
+  merged_into_report_id?: number | null
+  dissolved_at?: string | null
+  // Vom Projektleiter ohne Kundenunterschrift abgeschlossen (Migration 20260824d) —
+  // dieselbe Abnahme-Wirkung wie die Unterschrift, aber ausdrücklich keine.
+  pl_accepted_at?: string | null
 }
 
 // Aufgaben/Hinweise am Projekt: dieselbe Zeile, die die Monteur-PWA abhakt
