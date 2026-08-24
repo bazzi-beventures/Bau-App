@@ -17,6 +17,7 @@ import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import HelpBubble from './shared/HelpBubble'
 import { consumeBack } from './shared/backButton'
+import { trackNav } from './shared/breadcrumbs'
 import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
 import { clearDraft, loadDraft } from './chat/rapportDraft'
@@ -166,6 +167,18 @@ export default function App() {
 
   // Keep ref in sync so the popstate handler always sees the latest screen
   useEffect(() => { screenRef.current = screen }, [screen])
+
+  // Diagnose-Breadcrumb je Screenwechsel (Spec docs/specs/support-ticket.md §5.3).
+  // Im Effekt, nicht im Render: `trackNav` schreibt in einen Modul-Puffer, und
+  // ein Seiteneffekt während des Renders wäre ein Purity-Verstoss.
+  //
+  // Steht HIER oben und nicht unten bei der Hilfe-Blase, obwohl er thematisch
+  // dorthin gehört: unterhalb liegen die frühen Returns (`screen === 'loading'`,
+  // `screen === 'pin'`). Ein Hook dahinter wird im ersten Render (screen =
+  // 'loading') gar nicht erreicht und ab dem Wechsel auf 'login'/'home' plötzlich
+  // schon — React zählt dann mehr Hooks als zuvor, wirft Fehler #310 und
+  // unmountet den GANZEN Baum: weisse Seite statt App.
+  useEffect(() => { trackNav(screen) }, [screen])
 
   // Push a history entry on every screen change so the back button has something to pop
   useEffect(() => {
@@ -575,12 +588,17 @@ export default function App() {
   // sonst über dem Senden-Button. Und eine zweite Hilfe-Chat-Blase über dem Rapport-Bot
   // wäre ohnehin doppelt.
   // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_pwa' = unabhängiger
-  // Schalter für die Mitarbeiter-App (Default an).
-  const showHelpBubble =
-    !!user &&
-    hasModule(user, 'help_bot') &&
-    isFeatureEnabled(user, 'help_bot_pwa') &&
-    !['loading', 'login', 'pin', 'consent', 'admin', 'rapport'].includes(screen)
+  // Schalter für die Mitarbeiter-App (Default an). Für den Support-Knopf gilt
+  // dasselbe Muster mit 'support'/'support_pwa' — bewusst OHNE Abhängigkeit vom
+  // Hilfe-Bot (Spec docs/specs/support-ticket.md §6.1): ein Mandant ohne KI-Hilfe
+  // soll trotzdem Probleme melden können.
+  const onBubbleScreen =
+    !!user && !['loading', 'login', 'pin', 'consent', 'admin', 'rapport'].includes(screen)
+  const showHelp =
+    onBubbleScreen && hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_pwa')
+  const showSupport =
+    onBubbleScreen && hasModule(user, 'support') && isFeatureEnabled(user, 'support_pwa')
+  const showHelpBubble = showHelp || showSupport
 
   return (
     <>
@@ -589,7 +607,15 @@ export default function App() {
       {pushBanner}
       {updateBanner}
       {inner}
-      {showHelpBubble && <HelpBubble columnMaxWidth={480} />}
+      {showHelpBubble && (
+        <HelpBubble
+          columnMaxWidth={480}
+          showHelp={showHelp}
+          showSupport={showSupport}
+          route={screen}
+          appContext="pwa"
+        />
+      )}
     </>
   )
 }

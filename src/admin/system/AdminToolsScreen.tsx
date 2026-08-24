@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useTabStrip } from '../hooks/useTabStrip'
+import { useIsMobile } from '../useIsMobile'
 import ConfigurationScreen from '../configuration/ConfigurationScreen'
 import ServiceStatusScreen from './ServiceStatusScreen'
 import PushTestScreen from './PushTestScreen'
@@ -8,15 +8,23 @@ import UsageScreen from '../usage/UsageScreen'
 import MaterialCleanupScreen from './MaterialCleanupScreen'
 import UnitsPanel from './UnitsPanel'
 import ErrorLogsScreen from './ErrorLogsScreen'
+import SupportTicketsScreen from './SupportTicketsScreen'
 import WerkoraBonusScreen from './WerkoraBonusScreen'
 
-// Admin-Tools bündelt Konfiguration, Service-Status und Push-Test unter einem
-// Sidebar-Eintrag und schaltet zwischen ihnen per Tab um. Alle drei Tools sind
-// superadmin-only — der Zugriff wird vom Sidebar-Eintrag bzw. dem Guard in
-// AdminApp.renderScreen erzwungen, hier erscheinen daher immer alle Tabs. Jeder
-// Tool-Screen bringt seinen eigenen admin-page-Rahmen (Titel + Aktionen) mit;
-// die Tab-Leiste sitzt darüber und übernimmt nur die Navigation.
-type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'usage' | 'units' | 'material-cleanup' | 'error-logs' | 'werkora-bonus'
+// Admin-Tools bündelt den ganzen Werkzeugkasten unter einem Sidebar-Eintrag.
+// Alle Tools sind superadmin-only — der Zugriff wird vom Sidebar-Eintrag bzw.
+// dem Guard in AdminApp.renderScreen erzwungen, hier erscheint daher immer die
+// vollständige Liste. Jeder Tool-Screen bringt seinen eigenen admin-page-Rahmen
+// (Titel + Aktionen) mit; die Navigation daneben macht nur die Auswahl.
+//
+// Warum eine senkrechte Liste und keine Reiterleiste wie sonst im Admin: bei
+// zehn Werkzeugen mit langen Namen ("Materialdatenbereinigung") passte die
+// Leiste nicht mehr in eine Zeile und bekam auf dem Desktop eine waagrechte
+// Bildlaufleiste — die Hälfte der Werkzeuge war unsichtbar, obwohl daneben
+// Platz frei war. Senkrecht stehen alle zehn gleichzeitig da und die Liste
+// verträgt auch das elfte. Auf dem Handy fehlt diese Spalte schlicht an
+// Breite; dort wird dieselbe Liste zu einem Auswahlfeld über dem Werkzeug.
+type Tool = 'configuration' | 'service-status' | 'push-test' | 'llm-costs' | 'usage' | 'units' | 'material-cleanup' | 'error-logs' | 'support' | 'werkora-bonus'
 
 interface Props {
   userRole: string
@@ -34,6 +42,10 @@ const TABS: { id: Tool; label: string }[] = [
   { id: 'units',          label: 'Einheiten' },
   { id: 'material-cleanup', label: 'Materialdatenbereinigung' },
   { id: 'error-logs',     label: 'Error-Logs' },
+  // Support-Eingang (Spec docs/specs/support-ticket.md): Dashboard + Liste.
+  // Neben den Error-Logs, weil man beim Bearbeiten einer Meldung regelmässig
+  // in den Fehlerbestand desselben Zeitfensters schaut.
+  { id: 'support',        label: 'Support' },
   // Bewusst immer sichtbar statt nur bei aktivem Feature: der Reiter ist ohnehin
   // superadmin-only, und der Screen sagt selbst, wenn das Feature aus ist. Ihn
   // auszublenden hiesse, dass ein Superadmin nach dem Einschalten erst neu laden
@@ -43,7 +55,7 @@ const TABS: { id: Tool; label: string }[] = [
 
 export default function AdminToolsScreen({ userRole, enabledModules }: Props) {
   const [active, setActive] = useState<Tool>('configuration')
-  const tabsRef = useTabStrip(active)
+  const isMobile = useIsMobile()
 
   function renderTool() {
     switch (active) {
@@ -55,26 +67,46 @@ export default function AdminToolsScreen({ userRole, enabledModules }: Props) {
       case 'units':          return <UnitsPanel />
       case 'material-cleanup': return <MaterialCleanupScreen />
       case 'error-logs':     return <ErrorLogsScreen />
+      case 'support':        return <SupportTicketsScreen />
       case 'werkora-bonus':  return <WerkoraBonusScreen />
     }
   }
 
-  return (
-    <>
-      <div className="admin-tools-tabs">
-        <div className="kpi-admin-tabs" ref={tabsRef}>
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={`kpi-admin-tab${active === t.id ? ' active' : ''}`}
-              onClick={() => setActive(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
+  if (isMobile) {
+    return (
+      <>
+        <div className="admin-tools-picker">
+          <label>
+            <span>Werkzeug</span>
+            <select value={active} onChange={e => setActive(e.target.value as Tool)}>
+              {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </label>
         </div>
-      </div>
-      {renderTool()}
-    </>
+        {renderTool()}
+      </>
+    )
+  }
+
+  return (
+    <div className="admin-tools-layout">
+      <nav className="admin-tools-nav" aria-label="Werkzeuge">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            className={`admin-tools-nav-item${active === t.id ? ' active' : ''}`}
+            // aria-current statt aria-selected: das hier ist eine Navigation,
+            // kein ARIA-Tablist — ein tablist müsste Pfeiltasten-Steuerung
+            // mitbringen, die es hier weder gibt noch braucht.
+            aria-current={active === t.id ? 'page' : undefined}
+            onClick={() => setActive(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      <div className="admin-tools-panel">{renderTool()}</div>
+    </div>
   )
 }

@@ -2,10 +2,16 @@
 // Backend-CI (docs/specs/refactoring-folgethemen.md §2, Ratchet-Muster aus §1).
 //
 // Warum nicht einfach `eslint .` blockierend schalten: der Bestand trägt noch
-// Errors (Stand 2026-08-23: 3) und 89 Warnings. Ein Voll-Gate wäre ab dem ersten
+// 89 Warnings (Stand 2026-08-24; Errors: 0). Ein Voll-Gate wäre ab dem ersten
 // Tag rot und damit wertlos. Stattdessen blockieren genau die Regeln, deren
 // Bestand auf 0 steht — so kann er dort nicht wieder wachsen, während der Rest
 // im informativen Lauf sichtbar bleibt.
+//
+// Was diese Liste wert ist, hat sich am 2026-08-24 gezeigt: ein `useEffect`
+// unterhalb der frühen Returns in App.tsx (react-hooks/rules-of-hooks) ging
+// durch die grüne CI und legte die Staging-PWA komplett lahm — React #310
+// unmountet den ganzen Baum, der Nutzer sieht eine weisse Seite. ESLint hatte
+// es im informativen Lauf als Error gemeldet; nur blockiert hat es niemand.
 //
 // Eine Regel kommt hinzu, sobald ihr Bestand 0 ist. Umgekehrt darf hier NIE
 // etwas herausgenommen werden, um einen Lauf grün zu bekommen — dann ist der
@@ -21,6 +27,8 @@ const GATED = [
   'react-hooks/immutability',               // Zugriff vor der Deklaration; Mutation gehookter Werte
   'react-hooks/use-memo',                   // nicht statisch pruefbare Dependency-Liste
   'react-hooks/preserve-manual-memoization',// manuelle Memoisierung, die der Compiler nicht halten kann
+  // Seit 2026-08-24 dazu (letzter verbliebener Error abgebaut):
+  'react-hooks/rules-of-hooks',             // Hook bedingt/nach einem fruehen Return aufgerufen
 ]
 
 // ACHTUNG, Job-NAME: der Check heisst in der CI weiterhin

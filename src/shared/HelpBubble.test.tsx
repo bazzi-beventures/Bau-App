@@ -108,3 +108,49 @@ describe('HelpBubble — gemerkte Position beim Start', () => {
     expect(fab.style.right).not.toBe('')
   })
 })
+
+
+// ── Hilfe/Support-Matrix (Spec docs/specs/support-ticket.md §6.1) ──────────
+//
+// Die Blase trägt jetzt zwei unabhängig schaltbare Teile. Was hier geprüft wird,
+// ist die Kombinationslogik: welcher Inhalt erscheint bei welcher Schalterstellung.
+
+describe('HelpBubble — Hilfe und Support unabhängig schaltbar', () => {
+  const openPanel = () => {
+    const fab = getFab()
+    fireEvent.pointerDown(fab, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerUp(fab, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.click(fab)
+  }
+
+  it('zeigt nur den Chat, wenn Support aus ist', () => {
+    render(<HelpBubble showHelp showSupport={false} />)
+    openPanel()
+    expect(screen.queryByTestId('helpbot')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /Problem melden/ })).toBeNull()
+  })
+
+  it('ist direkt das Meldeformular, wenn nur Support an ist', () => {
+    // Ein Reiter, den man nicht wechseln kann, wäre nur Dekoration.
+    render(<HelpBubble showHelp={false} showSupport />)
+    openPanel()
+    expect(screen.queryByTestId('helpbot')).toBeNull()
+    expect(screen.queryByLabelText('Was ist passiert?')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /^Fragen$/ })).toBeNull()
+  })
+
+  it('zeigt Reiter, wenn beide an sind — Chat zuerst', () => {
+    render(<HelpBubble showHelp showSupport />)
+    openPanel()
+    expect(screen.queryByTestId('helpbot')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Problem melden/ }))
+    expect(screen.queryByLabelText('Was ist passiert?')).not.toBeNull()
+  })
+
+  it('nennt im Titel, was aktiv ist', () => {
+    render(<HelpBubble showHelp={false} showSupport />)
+    openPanel()
+    expect(screen.getByText('Support')).toBeTruthy()
+  })
+})
+

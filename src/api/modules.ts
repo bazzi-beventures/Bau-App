@@ -20,6 +20,7 @@ export type ModuleName =
   | 'aftersales'
   | 'document_backup'
   | 'task_board'
+  | 'support'
 
 export function hasModule(user: UserInfo | null, name: ModuleName): boolean {
   if (!user) return false

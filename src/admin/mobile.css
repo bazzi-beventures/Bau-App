@@ -512,13 +512,9 @@
     min-height: 44px;
   }
 
-  /* Admin-Tools-Tableiste: Padding an das mobile .admin-page (var(--s-4))
-     anpassen, damit der erste Tab mit dem Tool-Screen darunter fluchtet. */
-  .admin-tools-tabs {
-    padding: var(--s-3) var(--s-4) 0;
-    max-width: 100%;
-    overflow: hidden;
-  }
+  /* Die Admin-Tools haben auf dem Handy keine Reiterleiste mehr, sondern ein
+     Auswahlfeld (.admin-tools-picker, siehe admin.css) — für zehn Werkzeuge mit
+     langen Namen ist eine Scrollleiste auf Handybreite unbrauchbar. */
 
   /* ─── Confirm dialog → bottom sheet ──────────────────── */
 

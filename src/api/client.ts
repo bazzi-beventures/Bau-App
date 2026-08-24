@@ -1,3 +1,4 @@
+import { trackApiError } from '../shared/breadcrumbs'
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 // Absolute URL für direkte Browser-Navigation (z.B. <a href> in neuem Tab).
@@ -58,6 +59,15 @@ function handleExpiredSession(status: number, detail: string, path: string): boo
 }
 
 async function parseErrorDetail(res: Response): Promise<string> {
+  // Diagnose-Breadcrumb (Spec docs/specs/support-ticket.md §5.3). Hier, weil
+  // JEDER Fehlerpfad des Clients durch diese Funktion läuft — ein Aufruf statt
+  // drei. Festgehalten werden nur Pfad und Statuscode, nie Inhalte: die Spur
+  // verlässt mit einer Support-Meldung den Mandanten.
+  try {
+    trackApiError(new URL(res.url).pathname, res.status)
+  } catch {
+    /* res.url leer/relativ (Testumgebung) — die Spur ist Beiwerk, nie ein Fehler */
+  }
   let detail: unknown = res.statusText
   try {
     const body = await res.json()

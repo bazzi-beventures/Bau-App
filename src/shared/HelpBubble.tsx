@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import HelpBot from './HelpBot'
+import SupportForm from './SupportForm'
 
 interface Props {
   /** Vorschlagsfragen, die im Chat als Quick-Action-Buttons erscheinen. */
   suggestions?: string[]
+  /** Hilfe-Chat anzeigen (Modul `help_bot` + Flag). Default true. */
+  showHelp?: boolean
+  /** «Problem melden» anzeigen (Modul `support` + Flag). Default false.
+   *  Spec docs/specs/support-ticket.md §6.1 — beide Teile sind unabhängig
+   *  schaltbar; die Blase erscheint, sobald EINER aktiv ist. */
+  showSupport?: boolean
+  /** Aktueller Screen — wandert als `route` in eine Support-Meldung. */
+  route?: string
+  /** In welcher App die Blase sitzt (fürs Ticket). */
+  appContext?: 'pwa' | 'admin' 
   /** Wenn gesetzt: FAB/Panel werden auf eine zentrierte Spalte dieser Breite
    *  ausgerichtet (Mitarbeiter-PWA, max-width 480). Ohne Wert: echte Ecke
    *  unten rechts (Admin-Layout über volle Breite). */
@@ -93,8 +104,15 @@ function loadRawPos(): Pos | null {
  *
  * Modul-Gating macht der Aufrufer (nur rendern wenn hasModule(user,'help_bot')).
  */
-export default function HelpBubble({ suggestions, columnMaxWidth }: Props) {
+export default function HelpBubble({
+  suggestions, columnMaxWidth,
+  showHelp = true, showSupport = false, route = '', appContext = 'pwa',
+}: Props) {
   const [open, setOpen] = useState(false)
+  // Startansicht: gibt es beide Teile, beginnt die Blase beim Chat. Ist nur
+  // Support aktiv, IST das Panel direkt das Meldeformular — ein Reiter, den
+  // man nicht wechseln kann, wäre nur Dekoration.
+  const [tab, setTab] = useState<'help' | 'support'>(showHelp ? 'help' : 'support')
   const [insetBottom, setInsetBottom] = useState(0)
   const [pos, setPos] = useState<Pos | null>(() => {
     const raw = loadRawPos()
@@ -201,7 +219,7 @@ export default function HelpBubble({ suggestions, columnMaxWidth }: Props) {
       {open && (
         <div
           role="dialog"
-          aria-label="Hilfe-Chat"
+          aria-label="Hilfe und Support"
           style={{
             position: 'fixed',
             ...panelAnchor,
@@ -222,7 +240,9 @@ export default function HelpBubble({ suggestions, columnMaxWidth }: Props) {
             padding: '12px 16px', borderBottom: '1px solid var(--border, #e5e7eb)',
             flexShrink: 0,
           }}>
-            <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>Hilfe</div>
+            <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>
+              {showHelp && showSupport ? 'Hilfe & Support' : (showHelp ? 'Hilfe' : 'Support')}
+            </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Hilfe schliessen"
@@ -238,9 +258,38 @@ export default function HelpBubble({ suggestions, columnMaxWidth }: Props) {
             </button>
           </div>
 
-          {/* Chat füllt den Rest */}
+          {/* Reiter nur, wenn es wirklich etwas zu wechseln gibt */}
+          {showHelp && showSupport && (
+            <div style={{
+              display: 'flex', gap: 4, padding: '8px 12px 0',
+              borderBottom: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
+            }}>
+              {([['help', 'Fragen'], ['support', 'Problem melden']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  aria-pressed={tab === id}
+                  style={{
+                    padding: '6px 10px', border: 'none', cursor: 'pointer',
+                    background: 'transparent', color: 'inherit', font: 'inherit',
+                    borderBottom: tab === id
+                      ? '2px solid var(--accent-blue, #1e3a5f)'
+                      : '2px solid transparent',
+                    fontWeight: tab === id ? 600 : 400,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Inhalt füllt den Rest */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            <HelpBot suggestions={suggestions} />
+            {tab === 'support' || !showHelp
+              ? <SupportForm route={route} appContext={appContext} />
+              : <HelpBot suggestions={suggestions} />}
           </div>
         </div>
       )}

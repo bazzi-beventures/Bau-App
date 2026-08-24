@@ -35,6 +35,7 @@ import DocumentBackupScreen from './system/DocumentBackupScreen'
 import AdminToolsScreen from './system/AdminToolsScreen'
 import KpiScreen from './kpis/KpiScreen'
 import HelpBubble from '../shared/HelpBubble'
+import { trackNav } from '../shared/breadcrumbs'
 import { hasModule, isFeatureEnabled } from '../api/modules'
 import { Theme, loadTheme, applyTheme, toggleTheme as flipTheme } from '../theme'
 import './tokens.css'
@@ -168,9 +169,15 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
   )
 
   const isSuperadmin = user.role === 'superadmin'
+  // Diagnose-Breadcrumb je Screenwechsel (Spec docs/specs/support-ticket.md §5.3).
+  useEffect(() => { trackNav(screen) }, [screen])
+
   // Modul 'help_bot' = Master-Schalter; Feature-Flag 'help_bot_admin' = unabhängiger
-  // Schalter für den Admin-Bereich (Default an).
-  const showHelpBubble = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
+  // Schalter für den Admin-Bereich (Default an). Support analog mit
+  // 'support'/'support_admin', unabhängig vom Hilfe-Bot (Spec §6.1).
+  const showHelp = hasModule(user, 'help_bot') && isFeatureEnabled(user, 'help_bot_admin')
+  const showSupport = hasModule(user, 'support') && isFeatureEnabled(user, 'support_admin')
+  const showHelpBubble = showHelp || showSupport
   // Modul 'task_board' schaltet das Board an/ab; das gleichnamige Feature-Flag
   // hält nur die Schwellwert-Parameter (feature_registry.py).
   const showTaskBoard = hasModule(user, 'task_board')
@@ -298,7 +305,14 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
           badges={badges}
         />
       )}
-      {showHelpBubble && <HelpBubble />}
+      {showHelpBubble && (
+        <HelpBubble
+          showHelp={showHelp}
+          showSupport={showSupport}
+          route={screen}
+          appContext="admin"
+        />
+      )}
       {pendingNav && (
         <UnsavedChangesDialog
           saving={savingPendingNav}

@@ -41,7 +41,7 @@ const RULES: { test: RegExp; module: UsageModule }[] = [
   { test: /^(report_|log_report)|rapport/,       module: 'rapport' },
   // Mandanten-Einstellungen und Superadmin-Werkzeuge. Vor /schedul/, sonst
   // zählt `admin_update_tenant_scheduling` als Einsatzplanung.
-  { test: /tenant_|superadmin_push/,             module: 'konfiguration' },
+  { test: /tenant_|superadmin_push|support_ticket/, module: 'konfiguration' },
   { test: /aftersales/,                          module: 'aftersales' },
   // Offerten-Umfeld: 'variant' (Offerten-Variante), 'special_position' und
   // 'installation_template' tragen das Wort "quote" nicht im Namen.
@@ -255,6 +255,7 @@ const ACTION_LABELS: Record<string, string> = {
   admin_update_tenant_scheduling: 'Einsatzplan-Konfiguration geändert',
   admin_update_tenant_travel_cost: 'Wegkosten-Tabelle geändert',
   superadmin_push_send: 'Test-Push versendet',
+  support_ticket_update: 'Support-Meldung bearbeitet',
 
   // ── Roher DSGVO-Audit-Trail aus db/ ──
   INSERT: 'Datensatz angelegt (Audit)',
