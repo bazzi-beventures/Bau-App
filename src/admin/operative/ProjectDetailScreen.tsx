@@ -157,8 +157,8 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
 
   // `useAcceptedQuote` ist die Checkbox der Rechnungs-Maske, kein Belegzustand —
   // deshalb bleibt sie im Screen und geht hier an den Hook.
-  function handleGenerateInvoice(remark: string): Promise<boolean> {
-    return billing.generate(remark, useAcceptedQuote)
+  function handleGenerateInvoice(remark: string, quoteIds?: number[]): Promise<boolean> {
+    return billing.generate(remark, useAcceptedQuote, quoteIds)
   }
 
   // Abfrage offen, weil „Zurück"/„Abbrechen" bei ungespeicherten Änderungen gedrückt wurde.

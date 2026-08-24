@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import {
-  archiveInvoice, generateInvoice, markInvoicePaid, markInvoiceSentByPost,
-  sendInvoice, unmarkInvoicePaid,
+  archiveInvoice, generateInvoice, getInvoiceQuoteCoverage, markInvoicePaid,
+  markInvoiceSentByPost, sendInvoice, unmarkInvoicePaid,
+  type InvoiceQuoteCoverage,
 } from '../../../api/admin/invoices'
 import {
   listProjectInvoices, listProjectQuotes, listProjectReports,
@@ -50,7 +51,9 @@ export interface UseProjectBilling {
   addVariant: (quoteId: number, kind: 'variante' | 'mehrfach') => Promise<void>
   updateQuoteStatus: (quoteId: number, status: string) => Promise<void>
   sendRejection: (quoteId: number) => Promise<void>
-  generate: (remark: string, useAcceptedQuote: boolean) => Promise<boolean>
+  generate: (remark: string, useAcceptedQuote: boolean, quoteIds?: number[]) => Promise<boolean>
+  /** Offerten-Auswahl für den Erstellen-Dialog; null, wenn das Laden scheitert (Dialog ohne Auswahl). */
+  loadQuoteCoverage: () => Promise<InvoiceQuoteCoverage | null>
   markPaid: (invoiceId: number, paidDate: string) => Promise<boolean>
   unmarkPaid: (invoiceId: number) => Promise<void>
   archive: (invoiceId: number) => Promise<void>
@@ -238,7 +241,7 @@ export function useProjectBilling(
     }
   }
 
-  async function generate(remark: string, useAcceptedQuote: boolean): Promise<boolean> {
+  async function generate(remark: string, useAcceptedQuote: boolean, quoteIds?: number[]): Promise<boolean> {
     if (!project) return false
     // Fehlt ein verrechenbarer Rapport (unterschrieben ODER manuell erfasst,
     // siehe hasBillableReport), wird zwingend aus der Offerte gerechnet — das
@@ -250,6 +253,9 @@ export function useProjectBilling(
         project_name: project.name,
         project_id: project.id,
         use_quote: useQuote,
+        // Explizite Offerten-Auswahl aus dem Dialog; undefined = Automatik (der
+        // Normalfall, siehe utils/quoteSelection.selectionPayload).
+        quote_ids: quoteIds,
         // work_description bewusst NICHT mitschicken: das Backend unterscheidet
         // `undefined` (= aus den Rapporten ableiten) von `''` (= bewusst geleert, kein
         // Block auf dem PDF). Hier stand ein hartes '' — dieser Dialog hat kein
@@ -271,6 +277,18 @@ export function useProjectBilling(
       return false
     } finally {
       setGeneratingInvoice(false)
+    }
+  }
+
+  // Offerten-Auswahl für den Erstellen-Dialog. Nicht blockierend: schlägt der
+  // Aufruf fehl, zeigt der Dialog keine Auswahl und die Rechnung entsteht wie
+  // bisher über die automatische Auflösung.
+  async function loadQuoteCoverage(): Promise<InvoiceQuoteCoverage | null> {
+    if (!project) return null
+    try {
+      return await getInvoiceQuoteCoverage(project.id)
+    } catch {
+      return null
     }
   }
 
@@ -343,7 +361,7 @@ export function useProjectBilling(
     reloadQuotes, reloadInvoices, reloadReports, loadQuoteDetail, deleteReport,
     regenerateReportPdf: regenerateReportPdfFor,
     aggregateReports, dissolveAggregate, acceptAggregate,
-    regenerate, addVariant, updateQuoteStatus, sendRejection, generate,
+    regenerate, addVariant, updateQuoteStatus, sendRejection, generate, loadQuoteCoverage,
     markPaid, unmarkPaid, archive, send, markSentByPost,
   }
 }

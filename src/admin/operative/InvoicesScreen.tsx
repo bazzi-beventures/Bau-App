@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { apiUrl } from '../../api/client'
 import {
-  archiveInvoice, generateInvoice, getInvoiceWorkDescription, listInvoices,
-  markInvoicePaid, markInvoiceSentByPost, sendInvoice as sendInvoiceByMail,
+  archiveInvoice, generateInvoice, getInvoiceQuoteCoverage, getInvoiceWorkDescription,
+  listInvoices, markInvoicePaid, markInvoiceSentByPost, sendInvoice as sendInvoiceByMail,
   unmarkInvoicePaid,
 } from '../../api/admin/invoices'
-import type { Invoice } from '../../api/admin/invoices'
+import type { Invoice, InvoiceQuoteCoverage } from '../../api/admin/invoices'
 import { getAdminProjects, setProjectStatus } from '../../api/admin/projects'
 import type { Project } from '../../api/admin/projects'
 import { hasAcceptedQuote as fetchHasAcceptedQuote } from '../../api/admin/quotes'
@@ -18,6 +18,8 @@ import { ProjektleiterFilter } from '../components/ProjektleiterFilter'
 import { AdminCardList } from '../components/AdminCardList'
 import { AutoGrowTextarea } from '../components/AutoGrowTextarea'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { QuoteCoverageSelect } from '../components/QuoteCoverageSelect'
+import { defaultCheckedIds, selectionPayload, showQuoteSelection } from '../utils/quoteSelection'
 import { useIsMobile } from '../useIsMobile'
 import { isInvoiceOpen, openInvoicesHint } from '../utils/openInvoices'
 import type { AdminScreen } from '../useAdminNav'
@@ -76,6 +78,10 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
   // Bemerkung auf der Rechnung (z.B. Referenz/Projekt-Nr. des Kunden) — reiner
   // Freitext, leer = kein Block auf dem PDF.
   const [genRemark, setGenRemark] = useState('')
+  // Offerten-Auswahl: null solange nicht geladen oder Laden gescheitert —
+  // dann verhält sich der Dialog exakt wie bisher (Automatik).
+  const [genCoverage, setGenCoverage] = useState<InvoiceQuoteCoverage | null>(null)
+  const [genCheckedQuotes, setGenCheckedQuotes] = useState<number[]>([])
   // Send invoice
   const [sendInvoice, setSendInvoice] = useState<Invoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
@@ -124,7 +130,13 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
     const projectName = projects.find(p => p.id === projectId)?.name ?? ''
     setGenProject(projectId)
     setGenProjectName(projectName)
+    setGenCoverage(null)
     if (!projectId) { setHasAcceptedQuote(false); setGenWorkDesc(''); return }
+    // Offerten-Auswahl nachladen, nicht blockierend: scheitert der Aufruf, bleibt
+    // der Dialog ohne Auswahl und die Rechnung entsteht über die Automatik.
+    void getInvoiceQuoteCoverage(projectId)
+      .then(c => { setGenCoverage(c); setGenCheckedQuotes(defaultCheckedIds(c)) })
+      .catch(() => setGenCoverage(null))
     try {
       setHasAcceptedQuote(await fetchHasAcceptedQuote(projectId, projectName))
     } catch {
@@ -152,6 +164,11 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
         use_quote: genUseQuote,
         work_description: genWorkDesc,
         remark: genRemark,
+        // Nur eine echte Abweichung vom Standard geht als quote_ids mit —
+        // sonst läuft die bewährte automatische Auflösung (selectionPayload).
+        quote_ids: genCoverage && showQuoteSelection(genCoverage)
+          ? selectionPayload(genCoverage, genCheckedQuotes)
+          : undefined,
       })
       showToast(
         `Rechnung ${res.invoice_number} erstellt (${fmtCHF(res.total_amount)})`
@@ -658,7 +675,8 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
           confirmLabel="Rechnung erstellen"
           busyLabel="Wird erstellt…"
           busy={generating}
-          confirmDisabled={!genProject}
+          confirmDisabled={!genProject
+            || (showQuoteSelection(genCoverage) && genCheckedQuotes.length === 0)}
           maxWidth={440}
           // Arbeitsbeschrieb und Bemerkung wachsen mit dem Text — ohne Scrollen
           // schöben sie auf kleinen Bildschirmen die Knöpfe aus dem Bild.
@@ -687,6 +705,14 @@ export default function InvoicesScreen({ onBadgeChange, onNav }: {
                   Aktivieren, wenn noch kein unterschriebener Arbeitsrapport vorliegt — die Rechnung wird dann aus der Offerte erstellt.
                 </div>
               </div>
+            )}
+            {genProject && genCoverage && showQuoteSelection(genCoverage) && (
+              <QuoteCoverageSelect
+                coverage={genCoverage}
+                checked={genCheckedQuotes}
+                onChange={setGenCheckedQuotes}
+                disabled={generating}
+              />
             )}
             {genProject && (
               <div style={{ marginBottom: 12 }}>

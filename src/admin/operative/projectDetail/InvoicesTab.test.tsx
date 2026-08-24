@@ -35,6 +35,7 @@ function renderTab(
       hasSignedReport={true}
       onUseAcceptedQuoteChange={vi.fn()}
       onGenerateInvoice={vi.fn().mockResolvedValue(true)}
+      loadQuoteCoverage={vi.fn().mockResolvedValue(null)}
       onMarkPaid={onMarkPaid}
       onUnmarkPaid={vi.fn().mockResolvedValue(undefined)}
       onArchive={vi.fn().mockResolvedValue(undefined)}

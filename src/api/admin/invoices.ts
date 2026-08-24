@@ -39,6 +39,11 @@ export interface GenerateInvoiceInput {
   // den Block, statt ihn abzuleiten.
   work_description?: string
   remark: string
+  // Explizite Offerten-Auswahl aus dem Erstellen-Dialog (getInvoiceQuoteCoverage) —
+  // auch gruppen-übergreifend oder als Teilmenge einer mehrfach-Gruppe (Etappe).
+  // Weglassen = automatische Auflösung wie bisher; das Backend validiert die
+  // Auswahl hart (409 statt stiller Korrektur).
+  quote_ids?: number[]
 }
 
 export interface GenerateInvoiceResult {
@@ -73,6 +78,35 @@ export async function getInvoiceWorkDescription(projectName: string, projectId: 
     + `&project_id=${encodeURIComponent(projectId)}`,
   )
   return res.work_description || ''
+}
+
+// Eine Zeile der Offerten-Auswahl im Erstellen-Dialog.
+export interface CoverageQuote {
+  id: number
+  quote_number: string | null
+  total: number
+  accepted: boolean
+}
+
+export interface InvoiceQuoteCoverage {
+  // Was die automatische Auflösung abdecken würde (Standard: angehakt).
+  covered: CoverageQuote[]
+  // Weitere angenommene, unverrechnete Offerten des Projekts (Standard: nicht angehakt).
+  additional: CoverageQuote[]
+  // Sperre der Automatik (z.B. 'all_billed') — covered ist dann leer, additional
+  // kann trotzdem wählbar sein.
+  blocker: string | null
+}
+
+/**
+ * Offerten-Auswahl für den Rechnung-Erstellen-Dialog. Nicht blockierend gedacht:
+ * schlägt der Aufruf fehl, zeigt der Dialog keine Auswahl und die Rechnung entsteht
+ * wie bisher über die automatische Auflösung.
+ */
+export async function getInvoiceQuoteCoverage(projectId: string): Promise<InvoiceQuoteCoverage> {
+  return apiFetch<InvoiceQuoteCoverage>(
+    `/pwa/admin/invoices/quote-coverage?project_id=${encodeURIComponent(projectId)}`,
+  )
 }
 
 export async function sendInvoice(invoiceId: number, recipientEmail: string): Promise<void> {

@@ -5,6 +5,9 @@ import { INVOICE_STATUS_LABELS, INVOICE_STATUS_BADGE } from '../../constants/sta
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ActionRow } from '../../components/ActionRow'
 import { AutoGrowTextarea } from '../../components/AutoGrowTextarea'
+import { QuoteCoverageSelect } from '../../components/QuoteCoverageSelect'
+import { defaultCheckedIds, selectionPayload, showQuoteSelection } from '../../utils/quoteSelection'
+import type { InvoiceQuoteCoverage } from '../../../api/admin/invoices'
 import { groupByParent } from './types'
 import type { ProjectInvoice } from './types'
 
@@ -15,9 +18,13 @@ interface InvoicesTabProps {
   defaultEmail: string
   hasSignedReport: boolean
   onUseAcceptedQuoteChange: (v: boolean) => void
-  // Erzeugt die Rechnung; `remark` ist die Bemerkung fuers PDF (leer = kein Block).
+  // Erzeugt die Rechnung; `remark` ist die Bemerkung fuers PDF (leer = kein Block),
+  // `quoteIds` die explizite Offerten-Auswahl (undefined = Automatik wie bisher).
   // Liefert true bei Erfolg — der Dialog schliesst nur dann.
-  onGenerateInvoice: (remark: string) => Promise<boolean>
+  onGenerateInvoice: (remark: string, quoteIds?: number[]) => Promise<boolean>
+  // Offerten-Auswahl fuer den Erstellen-Dialog; null = keine Auswahl anzeigen
+  // (Laden gescheitert oder nur eine Offerte) — der Dialog bleibt wie bisher.
+  loadQuoteCoverage: () => Promise<InvoiceQuoteCoverage | null>
   // Bezahlt-Markierung; `paidDate` ist der Tag des Zahlungseingangs (ISO),
   // nachtragbar statt automatisch «heute». Liefert true bei Erfolg — der Dialog
   // schliesst nur dann.
@@ -30,7 +37,7 @@ interface InvoicesTabProps {
   onMarkSentByPost: (invoiceId: number, sentDate: string) => Promise<boolean>
 }
 
-export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, onMarkPaid, onUnmarkPaid, onArchive, onSendInvoice, onMarkSentByPost }: InvoicesTabProps) {
+export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, defaultEmail, hasSignedReport, onUseAcceptedQuoteChange, onGenerateInvoice, loadQuoteCoverage, onMarkPaid, onUnmarkPaid, onArchive, onSendInvoice, onMarkSentByPost }: InvoicesTabProps) {
   const [sendInvoice, setSendInvoice] = useState<ProjectInvoice | null>(null)
   const [sendEmail, setSendEmail] = useState('')
   const [sending, setSending] = useState(false)
@@ -42,6 +49,10 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
   // Rapport) den frueheren Bestaetigungs-Hinweis — ein Dialog statt zwei.
   const [showGenerate, setShowGenerate] = useState(false)
   const [genRemark, setGenRemark] = useState('')
+  // Offerten-Auswahl im Generieren-Dialog: null solange nicht geladen (oder das
+  // Laden scheiterte) — dann verhaelt sich der Dialog exakt wie bisher.
+  const [genCoverage, setGenCoverage] = useState<InvoiceQuoteCoverage | null>(null)
+  const [genCheckedQuotes, setGenCheckedQuotes] = useState<number[]>([])
   const [confirmArchive, setConfirmArchive] = useState<ProjectInvoice | null>(null)
   const [confirmUnpay, setConfirmUnpay] = useState<ProjectInvoice | null>(null)
   const [acting, setActing] = useState(false)
@@ -102,11 +113,26 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
 
   function handleGenerateClick() {
     setGenRemark('')
+    setGenCoverage(null)
     setShowGenerate(true)
+    // Auswahl nachladen, nicht blockierend: der Dialog steht sofort, die
+    // Checkboxen erscheinen, sobald die Vorschau da ist. Scheitert das Laden
+    // (null), bleibt der Dialog ohne Auswahl — Automatik wie bisher.
+    void loadQuoteCoverage().then(c => {
+      setGenCoverage(c)
+      if (c) setGenCheckedQuotes(defaultCheckedIds(c))
+    })
   }
 
+  const genSelectionVisible = showQuoteSelection(genCoverage)
+
   async function handleGenerateConfirm() {
-    const ok = await onGenerateInvoice(genRemark)
+    // Nur eine echte Abweichung vom Standard geht als quote_ids mit —
+    // sonst laeuft die bewaehrte automatische Aufloesung (selectionPayload).
+    const quoteIds = genCoverage && genSelectionVisible
+      ? selectionPayload(genCoverage, genCheckedQuotes)
+      : undefined
+    const ok = await onGenerateInvoice(genRemark, quoteIds)
     if (ok) setShowGenerate(false)
   }
 
@@ -260,6 +286,7 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
           confirmLabel={hasSignedReport ? 'Rechnung generieren' : 'Ohne Rapport erstellen'}
           busyLabel="Wird erstellt…"
           busy={generatingInvoice}
+          confirmDisabled={genSelectionVisible && genCheckedQuotes.length === 0}
           maxWidth={440}
           // Die Bemerkung wächst mit dem Text bis ~10 Zeilen — ohne Scrollen
           // schöbe sie auf kleinen Bildschirmen die Knöpfe aus dem Bild.
@@ -267,6 +294,14 @@ export function InvoicesTab({ invoices, useAcceptedQuote, generatingInvoice, def
           onCancel={() => { if (!generatingInvoice) setShowGenerate(false) }}
           onConfirm={() => void handleGenerateConfirm()}
         >
+          {genSelectionVisible && genCoverage && (
+            <QuoteCoverageSelect
+              coverage={genCoverage}
+              checked={genCheckedQuotes}
+              onChange={setGenCheckedQuotes}
+              disabled={generatingInvoice}
+            />
+          )}
           <div style={{ marginBottom: 12 }}>
             <label className="admin-form-label" htmlFor="proj-gen-remark">
               Bemerkung
