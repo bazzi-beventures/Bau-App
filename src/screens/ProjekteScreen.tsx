@@ -9,6 +9,7 @@ import {
 } from '../api/chat'
 import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import SignaturePad from '../chat/SignaturePad'
+import { useBackButton } from '../shared/backButton'
 import { SK } from '../api/storageKeys'
 import { ProjectTimeline } from './projekte/ProjectTimeline'
 import {
@@ -108,7 +109,10 @@ interface Props {
   user: UserInfo | null
   onNavHome: () => void
   onNavRapport: () => void
-  onStartRapport: (projectName: string) => void
+  // Projekt für «Rapport erstellen» — mit der id, nicht nur dem Namen: zwei
+  // Liegenschaften desselben Kunden dürfen gleich heissen, und der Monteur hat hier
+  // eine konkrete davon vor sich. Nur der Name liesse die Zuordnung wieder offen.
+  onStartRapport: (project: { id: string; name: string }) => void
   onNavArbeitszeit: () => void
   onNavProfile: () => void
   onLoggedOut: () => void
@@ -207,6 +211,10 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
+  // Zurück aus dem Projekt-Detail führt in die Liste, nicht aus dem Screen heraus.
+  // Einmaliger Handler genügt: `setSelected(null)` schliesst das Detail immer, und
+  // beim nächsten Öffnen registriert der Hook neu.
+  useBackButton(selected !== null, () => setSelected(null))
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
   // Detail: Dateien, Kommentare & Aufgaben
@@ -683,7 +691,7 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
               Projekt ebenfalls ab, auch wenn es frei im Gespräch gewählt wird. */}
           <button
             type="button"
-            onClick={() => onStartRapport(selected.name)}
+            onClick={() => onStartRapport({ id: String(selected.id), name: selected.name })}
             disabled={!!selected.rapport_blocked}
             title={selected.rapport_blocked ? 'Offerte noch nicht angenommen' : undefined}
             style={{

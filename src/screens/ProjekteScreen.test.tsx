@@ -122,7 +122,9 @@ describe('ProjekteScreen — Rapport-Sperre', () => {
     expect(screen.queryByText(/noch nicht angenommen/)).not.toBeInTheDocument()
 
     await user.click(button)
-    expect(onStartRapport).toHaveBeenCalledWith('MFH Sonnhalde')
+    // Mit der id, nicht nur dem Namen: zwei Liegenschaften desselben Kunden dürfen
+    // gleich heissen — der Name allein liesse die Zuordnung wieder offen.
+    expect(onStartRapport).toHaveBeenCalledWith({ id: 'p1', name: 'MFH Sonnhalde' })
   })
 
   it('behandelt ein fehlendes Feld als "nicht gesperrt" (ältere API)', async () => {

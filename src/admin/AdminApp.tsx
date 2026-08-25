@@ -5,6 +5,7 @@ import AdminSidebar from './AdminSidebar'
 import MobileNav from './MobileNav'
 import RequireModule from './RequireModule'
 import { useAdminNav, AdminScreen } from './useAdminNav'
+import { useScreenBack } from '../shared/backButton'
 import { useIsMobile } from './useIsMobile'
 import { dirtyGuard } from './unsavedChanges'
 import { UnsavedChangesDialog } from './components/UnsavedChangesDialog'
@@ -100,7 +101,7 @@ const SCREEN_TITLES: Record<AdminScreen, string> = {
 }
 
 export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOut, onSwitchToUser }: Props) {
-  const { screen, detailId, resetTick, nav, clearDetail } = useAdminNav()
+  const { screen, detailId, resetTick, nav, clearDetail, previous } = useAdminNav()
   const isMobile = useIsMobile()
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null)
   const [logoError, setLogoError] = useState(false)
@@ -124,6 +125,22 @@ export default function AdminApp({ user, logoUrl, tenantName, canton, onLoggedOu
     }
     nav(nextScreen, nextDetailId)
   }
+
+  // Hardware-/Browser-Zurück im Admin-Bereich. Der Bereich navigiert über
+  // `useAdminNav` und hat damit einen eigenen Verlauf — App.tsx kann ihn nicht
+  // abtragen, also meldet sich AdminApp hier selbst an.
+  //
+  // Der Weg führt bewusst über `guardedNav` und nicht über `nav`: sonst wäre der
+  // Zurück-Knopf der eine Ausgang, der die «ungespeicherte Änderungen»-Abfrage
+  // umgeht — ausgerechnet der, den man am leichtesten versehentlich trifft.
+  //
+  // `false` an der Wurzel (Dashboard, ohne Verlauf): dann übernimmt App.tsx und
+  // führt zurück in die Mitarbeiter-App bzw. verschluckt den Druck.
+  useScreenBack(true, () => {
+    if (!previous) return false
+    guardedNav(previous.screen, previous.detailId ?? undefined)
+    return true
+  })
 
   function commitPendingNav() {
     const target = pendingNav

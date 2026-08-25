@@ -36,9 +36,82 @@ export function backHandlerCount(): number {
   return stack.length
 }
 
-// Nur für Tests: Stack zurücksetzen.
+// ---------------------------------------------------------------------------
+// Screen-Zurück: dauerhafte Handler für eigenständige Navigations-Bereiche.
+//
+// Der Stack oben ist einmalig — `consumeBack()` poppt. Genau richtig für
+// Overlays (das Modal ist danach zu, es gibt nichts mehr zu schliessen), aber
+// untauglich für einen Bereich, der einen ganzen Verlauf abzuarbeiten hat: der
+// Admin-Bereich führt seine eigene Navigation (`useAdminNav`), und dort muss
+// Zurück beliebig oft eine Ebene hochgehen können.
+//
+// Darum ein zweiter, getrennter Stack, aus dem nur der oberste Handler
+// ABGEFRAGT (nicht entfernt) wird. Er meldet per Rückgabewert, ob er den
+// Zurück-Druck verbraucht hat — `false` heisst «bei mir ist die Wurzel
+// erreicht», dann entscheidet App.tsx weiter.
+//
+// Reihenfolge im popstate-Handler: erst `consumeBack()` (Overlays liegen optisch
+// oben), dann `consumeScreenBack()`, dann der eigene Verlauf von App.tsx.
+
+// Die Auswahl geht über `depth` und NICHT über die Registrierungsreihenfolge:
+// React führt Effekte von innen nach aussen aus. Montieren Bereich und
+// Detailmaske im selben Commit, stünde der äussere Handler zuletzt auf dem
+// Stapel — der Zurück-Druck liefe an der Maske vorbei und würfe sie weg. Mit
+// `depth` gewinnt immer der innerste Handler, egal wann er sich anmeldet.
+export const SCREEN_BACK_DEPTH = {
+  /** Ein Bereich mit eigenem Verlauf (AdminApp). */
+  area: 0,
+  /** Eine Detailmaske innerhalb eines Bereichs (ProjectDetailScreen). */
+  detail: 1,
+} as const
+
+interface ScreenBackEntry {
+  depth: number
+  handler: () => boolean
+}
+
+const screenStack: ScreenBackEntry[] = []
+
+function innermost(): ScreenBackEntry | undefined {
+  let best: ScreenBackEntry | undefined
+  // `>=` statt `>`: bei gleicher Tiefe gewinnt der zuletzt Angemeldete.
+  for (const entry of screenStack) if (!best || entry.depth >= best.depth) best = entry
+  return best
+}
+
+export function consumeScreenBack(): boolean {
+  const entry = innermost()
+  return entry ? entry.handler() : false
+}
+
+export function screenBackHandlerCount(): number {
+  return screenStack.length
+}
+
+// Registriert `onBack` als dauerhaften Zurück-Handler, solange `active` gilt.
+// `onBack` gibt zurück, ob der Zurück-Druck verbraucht wurde.
+export function useScreenBack(
+  active: boolean,
+  onBack: () => boolean,
+  depth: number = SCREEN_BACK_DEPTH.area,
+): void {
+  const ref = useRef(onBack)
+  useEffect(() => { ref.current = onBack })
+  useEffect(() => {
+    if (!active) return
+    const entry: ScreenBackEntry = { depth, handler: () => ref.current() }
+    screenStack.push(entry)
+    return () => {
+      const i = screenStack.lastIndexOf(entry)
+      if (i >= 0) screenStack.splice(i, 1)
+    }
+  }, [active, depth])
+}
+
+// Nur für Tests: beide Stacks zurücksetzen.
 export function _resetBackHandlers(): void {
   stack.length = 0
+  screenStack.length = 0
 }
 
 // Registriert `onBack` als Zurück-Handler, solange `active` true ist (z.B. Modal

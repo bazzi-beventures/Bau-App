@@ -7,6 +7,21 @@ export interface DisambiguationOption {
   category?: string
 }
 
+/**
+ * Ein gleichnamiges Projekt zur Auswahl. Zwei Liegenschaften desselben Kunden
+ * dürfen gleich heissen — dann muss der Monteur sagen, welche er meint. Die
+ * Antwort ist die `project_id`, kein Satz: die Auswahl darf nirgends durch das
+ * Sprachmodell laufen (es reimte sich sonst aus der genannten Adresse die
+ * falsche Projektnummer zusammen und rapportierte auf die andere Liegenschaft).
+ */
+export interface ProjectChoiceOption {
+  project_id: string
+  name: string
+  project_number: string
+  object_name?: string
+  object_address?: string
+}
+
 // Ein Hauptmaterial aus der Rapport-Zusammenfassung (vom LLM erkannt/aufgelöst).
 export interface SummaryItem {
   name: string
@@ -36,6 +51,7 @@ export interface ChatResponse {
   is_partial?: boolean
   correction_id?: string
   disambiguation?: DisambiguationOption[]
+  project_choice?: ProjectChoiceOption[]
   pending_summary?: {
     project: string
     date: string
@@ -64,13 +80,21 @@ export type ChatStreamEvent =
  *
  * Caller bekommt am Ende garantiert genau ein "result"-Event.
  *
- * `project` wird NUR mit der Startnachricht aus dem Projekt-Detail mitgeschickt und
- * bindet den Rapport server-seitig an genau dieses Projekt. Ohne die Angabe müsste
- * der Server das Projekt bei jedem Turn aus dem Gesprächsverlauf raten — und lag
- * daneben, sobald der Monteur nur noch Stunden nachreichte.
+ * `project`/`projectId` werden NUR mit der Startnachricht aus dem Projekt-Detail
+ * mitgeschickt und binden den Rapport server-seitig an genau dieses Projekt. Ohne
+ * die Angabe müsste der Server das Projekt bei jedem Turn aus dem Gesprächsverlauf
+ * raten — und lag daneben, sobald der Monteur nur noch Stunden nachreichte.
+ *
+ * Massgeblich ist die **id**. Der Name allein reicht nicht: zwei Liegenschaften
+ * desselben Kunden dürfen gleich heissen, und ein mehrdeutiger Name band gar nicht
+ * — der Rapport startete ungebunden, und die Rückfrage nach der Projektnummer
+ * beantwortete am Ende das Modell statt der Monteur. Der Name bleibt mitgeschickt,
+ * damit ein alter Server ihn weiterhin auswertet.
  */
-export async function* sendMessageStream(text: string, project?: string | null): AsyncGenerator<ChatStreamEvent, void, void> {
-  const body = project ? { text, project } : { text }
+export async function* sendMessageStream(text: string, project?: string | null, projectId?: string | null): AsyncGenerator<ChatStreamEvent, void, void> {
+  const body: Record<string, string> = { text }
+  if (project) body.project = project
+  if (projectId) body.project_id = projectId
   for await (const raw of apiStreamFetch('/pwa/chat/message', body)) {
     const t = raw.type
     if (t === 'delta' && typeof raw.text === 'string') {
@@ -310,6 +334,14 @@ export async function disambiguateMaterial(art_nr: string): Promise<ChatResponse
   return apiFetch<ChatResponse>('/pwa/chat/disambiguate', {
     method: 'POST',
     body: JSON.stringify({ art_nr }),
+  })
+}
+
+/** Beantwortet die Projekt-Rückfrage bei gleichnamigen Projekten — über die id. */
+export async function chooseProject(project_id: string): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>('/pwa/chat/project-choice', {
+    method: 'POST',
+    body: JSON.stringify({ project_id }),
   })
 }
 

@@ -17,7 +17,25 @@ const BUILD_ID = new Date().toISOString()
 // (kein /Bau-App/-Prefix-Problem) und mit SHA-256-Hash in CSP whitelisted.
 // Bewusst KEINE Referenz auf das __BUILD_ID__-Token, damit /g-Substitution den
 // Skript-Body nicht verändert und der CSP-Hash stabil bleibt.
-const BOOT_SCRIPT_BODY = `(function(){try{var m=document.querySelector('meta[name="app-build-id"]');var c=m&&m.getAttribute('content');if(!c||c.indexOf('_'+'_')===0)return;var K='app_build_id';var l=localStorage.getItem(K);if(l===c)return;localStorage.setItem(K,c);if(l!==null&&'caches'in window){caches.keys().then(function(n){n.forEach(function(x){caches.delete(x);});});}}catch(e){}})();`
+const BOOT_KILL_SWITCH = `(function(){try{var m=document.querySelector('meta[name="app-build-id"]');var c=m&&m.getAttribute('content');if(!c||c.indexOf('_'+'_')===0)return;var K='app_build_id';var l=localStorage.getItem(K);if(l===c)return;localStorage.setItem(K,c);if(l!==null&&'caches'in window){caches.keys().then(function(n){n.forEach(function(x){caches.delete(x);});});}}catch(e){}})();`
+
+// Zurück-Wächter. Muss INLINE laufen und nicht im Bundle: App.tsx setzt seinen
+// Wächter-Eintrag erst in einem Effekt, also erst wenn ~2 MB JS geladen, geparst
+// und gemountet sind. Auf dem Handy sind das Sekunden — und genau während des
+// «Laden…»-Screens drückt ein ungeduldiger Monteur Zurück. Ohne Eintrag im
+// Verlauf verlässt dieser Druck die App. Nachgemessen mit Playwright: vor dem
+// Mount (history.length 3) rausgeflogen, nach dem Mount (5) gehalten.
+//
+// `location.href` inklusive Hash, nicht pathname+search: eine per
+// Benachrichtigung geöffnete App liest ihre Nachricht aus `#notif=…`. Ein
+// hash-loser Eintrag würde sie verschlucken.
+//
+// `werkoraBackGuard(false)` schaltet den Listener ab, sobald App.tsx seinen
+// eigenen registriert hat — sonst pusht jeder Zurück-Druck zwei Einträge.
+// Eigene IIFE, weil der Kill-Switch oben mehrere frühe `return`s hat.
+const BOOT_BACK_GUARD = `(function(){try{history.pushState(null,'',location.href);var a=1;window.addEventListener('popstate',function(){if(a)history.pushState(null,'',location.href);});window.werkoraBackGuard=function(v){a=v?1:0;};}catch(e){}})();`
+
+const BOOT_SCRIPT_BODY = BOOT_KILL_SWITCH + BOOT_BACK_GUARD
 const BOOT_SCRIPT_HTML = `<script>${BOOT_SCRIPT_BODY}</script>`
 const BOOT_SCRIPT_HASH = createHash('sha256').update(BOOT_SCRIPT_BODY).digest('base64')
 

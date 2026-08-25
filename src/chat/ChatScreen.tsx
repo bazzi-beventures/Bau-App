@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, uploadPhoto, downloadRapportPdf, deleteOwnRapport, ChatResponse, DisambiguationOption, SummaryItem } from '../api/chat'
+import { sendMessageStream, sendVoice, confirmReport, cancelReport, disambiguateMaterial, chooseProject, uploadPhoto, downloadRapportPdf, deleteOwnRapport, ChatResponse, DisambiguationOption, ProjectChoiceOption, SummaryItem } from '../api/chat'
 import { ApiError, isOfflineError } from '../api/client'
 import { UserInfo } from '../api/auth'
 import { getFeature, isFeatureEnabled, KleinmaterialPromptConfig } from '../api/modules'
@@ -20,6 +20,9 @@ interface Message {
   timestamp: string
   action_taken?: string | null
   disambiguation?: DisambiguationOption[]
+  // Gleichnamige Projekte zur Auswahl (siehe ProjectChoiceOption): der Monteur
+  // tippt das gemeinte Projekt an, statt es dem Bot zu beschreiben.
+  project_choice?: ProjectChoiceOption[]
 }
 
 interface Props {
@@ -33,6 +36,9 @@ interface Props {
   // serverseitig. Frei im Chat begonnene Rapporte haben das nicht; deren Projekt
   // steht erst mit der ersten Zusammenfassung fest.
   initialProject?: string | null
+  // Dasselbe Projekt als id — die verbindliche Angabe an den Server. Der Name
+  // allein liesse die Zuordnung offen, sobald zwei Liegenschaften gleich heissen.
+  initialProjectId?: string | null
   onInitialMessageConsumed?: () => void
   onNavHome: () => void
   onNavArbeitszeit: () => void
@@ -48,7 +54,21 @@ function now() {
   return new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, initialProject, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
+/**
+ * Beschriftung eines Projekt-Auswahlknopfs.
+ *
+ * Die ADRESSE steht mit drauf, nicht nur die Projektnummer: Der Monteur
+ * unterscheidet zwei gleichnamige Liegenschaften über sie — auf die reine
+ * Nummernfrage antwortete er deshalb mit der Adresse, und das war die Antwort,
+ * an der die Zuordnung vorher zerbrach.
+ */
+export function projectChoiceLabel(opt: ProjectChoiceOption): string {
+  const detail = [opt.object_name, opt.object_address].filter(Boolean).join(', ')
+  const number = opt.project_number || 'ohne Nummer'
+  return detail ? `${number} — ${detail}` : number
+}
+
+export default function ChatScreen({ displayName, user, logoUrl, activeNav, initialMessage, initialProject, initialProjectId, onInitialMessageConsumed, onNavHome, onNavArbeitszeit, onNavProjekte, onNavProfile, onLoggedOut }: Props) {
   const kleinmaterialCfg = getFeature<KleinmaterialPromptConfig>(user, 'kleinmaterial_prompt')
   const kleinmaterialEnabled = !!kleinmaterialCfg?.enabled
   const ersatzteilEnabled = isFeatureEnabled(user, 'ersatzteil_prompt')
@@ -114,6 +134,13 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
   // Projekt des laufenden Rapports — damit «Rapport erstellen» im selben Projekt in
   // den laufenden Rapport zurückspringt, statt ihn stillschweigend zu verwerfen.
   const [pendingProject, setPendingProject] = useState<string | null>(() => draft?.pendingProject ?? null)
+  // Offene PROJEKT-Rückfrage: zwei Liegenschaften heissen gleich. Solange sie
+  // ansteht, ist die Eingabe gesperrt — genau wie bei der Material-Rückfrage. Der
+  // Monteur soll das Projekt antippen, nicht beschreiben: eine beschriebene Adresse
+  // legte der Bot vorher frei aus und rapportierte auf die falsche Liegenschaft.
+  // Bewusst NICHT im Draft: die Auswahl hängt an einem serverseitigen Zwischenstand,
+  // der eine Navigation nicht überdauert — ein wiederhergestellter Knopf zeigte ins Leere.
+  const [pendingProjectChoice, setPendingProjectChoice] = useState(false)
   const [downloadReportId, setDownloadReportId] = useState<number | null>(() => draft?.downloadReportId ?? null)
   const [pdfDownloading, setPdfDownloading] = useState(false)
   // Unterschrieben (statt übersprungen)? Danach ist der Rapport abgenommen und
@@ -250,10 +277,17 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingDisambiguation(true)
       setPendingConfirm(false)
       setPendingQuoteQuestion(false)
+      setPendingProjectChoice(false)
+    } else if (res.action_taken === 'project_choice') {
+      setPendingProjectChoice(true)
+      setPendingConfirm(false)
+      setPendingDisambiguation(false)
+      setPendingQuoteQuestion(false)
     } else if (res.action_taken === 'quote_question') {
       setPendingQuoteQuestion(true)
       setPendingConfirm(false)
       setPendingDisambiguation(false)
+      setPendingProjectChoice(false)
     } else if (res.action_taken === 'save_failed') {
       // Der Server hat den erfassten Rapport BEHALTEN (Speichern schlug vorüber-
       // gehend fehl, z.B. DB-Timeout). Also zurück in den Bestätigungsschritt,
@@ -263,6 +297,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingConfirm(true)
       setPendingDisambiguation(false)
       setPendingQuoteQuestion(false)
+      setPendingProjectChoice(false)
     } else if (res.action_taken === 'no_pending_report') {
       // Gegenstück: der Server kennt den Rapport nicht mehr (abgelaufen oder vor
       // dem Neustart erfasst und nie gespeichert). Dann ist auch der Entwurf hier
@@ -301,6 +336,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       setPendingConfirm(false)
       setPendingDisambiguation(false)
       setPendingQuoteQuestion(false)
+      setPendingProjectChoice(false)
     }
   }
 
@@ -316,6 +352,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
         timestamp: now(),
         action_taken: res.action_taken,
         disambiguation: res.disambiguation,
+        project_choice: res.project_choice,
       })
       handleActionState(res)
     } catch (err) {
@@ -335,7 +372,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
    * leer — der Spinner zeigt sich währenddessen — und wird am Ende mit dem
    * vollen Reply ersetzt.
    */
-  async function handleResponseStream(userText: string, startProject?: string | null) {
+  async function handleResponseStream(userText: string, startProject?: string | null, startProjectId?: string | null) {
     addMessage({ role: 'user', text: userText, timestamp: now() })
     const botId = nextId()
     setMessages(prev => [...prev, { id: botId, role: 'bot', text: '', timestamp: now() }])
@@ -343,7 +380,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     let sawDelta = false
     try {
       let finalRes: ChatResponse | null = null
-      for await (const ev of sendMessageStream(userText, startProject)) {
+      for await (const ev of sendMessageStream(userText, startProject, startProjectId)) {
         if (ev.type === 'delta') {
           sawDelta = true
           // Spinner ausblenden, sobald der erste Token kommt
@@ -372,6 +409,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
               text: finalRes!.reply,
               action_taken: finalRes!.action_taken,
               disambiguation: finalRes!.disambiguation,
+              project_choice: finalRes!.project_choice,
             }
           : m)
       )
@@ -405,7 +443,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     // Bindung SOFORT setzen, nicht erst wenn die Antwort da ist: verlässt der
     // Monteur den Chat währenddessen, muss der Draft das Projekt schon tragen.
     if (initialProject) setPendingProject(initialProject)
-    handleResponseStream(initialMessage, initialProject)
+    handleResponseStream(initialMessage, initialProject, initialProjectId)
     onInitialMessageConsumed?.()
   }, [initialMessage])
 
@@ -485,24 +523,66 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
     }
   }
 
+  /**
+   * Beantwortet die Projekt-Rückfrage bei gleichnamigen Projekten.
+   *
+   * Der Server bekommt die Projekt-id, nicht den angetippten Text: zwischen Frage
+   * und Antwort steht damit kein Sprachmodell mehr. Vorher fragte der Bot per
+   * Freitext nach der Projektnummer, der Monteur antwortete mit der Adresse — und
+   * das Modell reimte sich daraus die falsche Nummer zusammen und legte den
+   * Rapport auf der anderen Liegenschaft desselben Kunden an.
+   */
+  async function handleProjectChoice(opt: ProjectChoiceOption) {
+    setPendingProjectChoice(false)
+    addMessage({ role: 'user', text: projectChoiceLabel(opt), timestamp: now() })
+    setLoading(true)
+    try {
+      const res = await chooseProject(opt.project_id)
+      addMessage({
+        role: 'bot',
+        text: res.reply,
+        timestamp: now(),
+        action_taken: res.action_taken,
+        disambiguation: res.disambiguation,
+        project_choice: res.project_choice,
+      })
+      // Ab hier gehört der Rapport diesem Projekt — auch für «Rapport erstellen»,
+      // das sonst gleich wieder vor einem angeblich fremden Rapport warnen würde.
+      setPendingProject(opt.name)
+      handleActionState(res)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) { onLoggedOut(); return }
+      // Die Auswahl steht serverseitig weiterhin offen — also auch hier wieder
+      // anbieten, statt den Monteur ohne Knöpfe zurückzulassen.
+      setPendingProjectChoice(true)
+      addMessage({ role: 'bot', text: isOfflineError(err) ? 'Keine Internetverbindung' : 'Fehler bei der Auswahl. Bitte erneut versuchen.', timestamp: now() })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function onSendText(text: string) {
-    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion || pendingProjectChoice) return
     handleResponseStream(text)
   }
 
   function onSendVoice(blob: Blob) {
-    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion || pendingProjectChoice) return
     handleResponse('🎤 Sprachnachricht', sendVoice(blob))
   }
 
   function onSendPhoto(file: File) {
-    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion) return
+    if (pendingConfirm || pendingDisambiguation || pendingQuoteQuestion || pendingProjectChoice) return
     handleResponse('📸 Foto', uploadPhoto(file))
   }
 
   // Find the last message with disambiguation options (for rendering buttons)
   const lastDisambigMsg = pendingDisambiguation
     ? [...messages].reverse().find(m => m.disambiguation && m.disambiguation.length > 0)
+    : null
+  // Dasselbe für die Projekt-Rückfrage.
+  const lastProjectChoiceMsg = pendingProjectChoice
+    ? [...messages].reverse().find(m => m.project_choice && m.project_choice.length > 0)
     : null
 
   // Vor dem Speichern: erst Klein-, dann Ersatzteil-Schritt, dann Speichern-Button.
@@ -567,6 +647,21 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
                 {opt.manufacturer || opt.category
                   ? ` (${opt.manufacturer || opt.category})`
                   : ''}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Projekt-Auswahl bei gleichnamigen Projekten */}
+        {lastProjectChoiceMsg && !loading && (
+          <div className="disambig-buttons">
+            {lastProjectChoiceMsg.project_choice!.map(opt => (
+              <button
+                key={opt.project_id}
+                className="disambig-btn"
+                onClick={() => void handleProjectChoice(opt)}
+              >
+                {projectChoiceLabel(opt)}
               </button>
             ))}
           </div>
@@ -806,7 +901,7 @@ export default function ChatScreen({ displayName, user, logoUrl, activeNav, init
       </div>
 
       {/* Input — disabled while awaiting confirmation or disambiguation */}
-      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} onSendPhoto={onSendPhoto} disabled={loading || pendingConfirm || pendingDisambiguation || pendingQuoteQuestion || pendingSignReportId !== null} />
+      <ChatInput onSendText={onSendText} onSendVoice={onSendVoice} onSendPhoto={onSendPhoto} disabled={loading || pendingConfirm || pendingDisambiguation || pendingProjectChoice || pendingQuoteQuestion || pendingSignReportId !== null} />
 
       {/* Nav bar */}
       <div className="nav-bar">

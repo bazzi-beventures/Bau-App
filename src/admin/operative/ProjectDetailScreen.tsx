@@ -30,6 +30,7 @@ import { ProjectMaskDialogs } from './projectDetail/ProjectMaskDialogs'
 import { ProjectTabContent } from './projectDetail/ProjectTabContent'
 import { UnsavedChangesDialog } from '../components/UnsavedChangesDialog'
 import { useUnsavedChangesGuard } from '../unsavedChanges'
+import { SCREEN_BACK_DEPTH, useScreenBack } from '../../shared/backButton'
 import {
   DocumentsTab, SupplierDocumentsTab, QuotesTab, ReportsTab, InvoicesTab, ApprovalsTab, TasksTab,
   ProjectQuote,
@@ -224,6 +225,16 @@ export default function ProjectDetailScreen({ project, onClose, onSaved }: Props
     if (form.isDirty) setPendingLeave(true)
     else onClose()
   }
+
+  // Hardware-/Browser-Zurück führt aus der Detailmaske in die Projektübersicht —
+  // dieselbe Wirkung wie der Zurück-Pfeil oben links, samt Nachfrage.
+  //
+  // `useScreenBack` (dauerhaft) statt `useBackButton` (einmalig): bei
+  // ungespeicherten Änderungen öffnet `requestClose` nur die Abfrage. Wer dort
+  // «Abbrechen» wählt, ist noch in der Maske — mit einem einmaligen Handler wäre
+  // der zweite Zurück-Druck an ihr vorbeigelaufen und hätte genau das
+  // weggeworfen, was die Abfrage schützen sollte.
+  useScreenBack(true, () => { requestClose(); return true }, SCREEN_BACK_DEPTH.detail)
 
   async function saveAndLeave() {
     const saved = await form.persist()

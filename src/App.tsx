@@ -16,13 +16,23 @@ import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
 import HelpBubble from './shared/HelpBubble'
-import { consumeBack } from './shared/backButton'
+import { consumeBack, consumeScreenBack } from './shared/backButton'
+import { advance, retreat } from './shared/navHistory'
 import { trackNav } from './shared/breadcrumbs'
 import { hasModule, isFeatureEnabled } from './api/modules'
 import { applyTheme, loadTheme, useTheme } from './theme'
 import { clearDraft, loadDraft } from './chat/rapportDraft'
 import { confirmLeaveRapport, discardPrompt, planRapportStart } from './chat/rapportStart'
 import { cancelReport } from './api/chat'
+
+// Vom Inline-Boot-Skript in index.html gesetzt (siehe vite.config.ts,
+// BOOT_BACK_GUARD). Optional, weil es im Vitest-DOM und in Dev-Sonderfällen
+// fehlen kann — der Aufruf unten ist deshalb überall abgesichert.
+declare global {
+  interface Window {
+    werkoraBackGuard?: (aktiv: boolean) => void
+  }
+}
 
 type Screen = 'loading' | 'login' | 'pin' | 'consent' | 'home' | 'rapport' | 'arbeitszeit' | 'profile' | 'bericht' | 'projekte' | 'offerten' | 'projektEntwurf' | 'admin' | 'absenzen'
 
@@ -90,11 +100,18 @@ export default function App() {
   const [berichtType, setBerichtType] = useState<BerichtType>('monthly')
   const [rapportInitialMessage, setRapportInitialMessage] = useState<string | null>(null)
   const [rapportInitialProject, setRapportInitialProject] = useState<string | null>(null)
+  // Die id desselben Projekts. Sie ist die massgebliche Angabe an den Server: der
+  // Name ist nicht eindeutig (zwei Liegenschaften desselben Kunden dürfen gleich
+  // heissen), und mit ihm allein band der Rapport gar nicht.
+  const [rapportInitialProjectId, setRapportInitialProjectId] = useState<string | null>(null)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [swUpdateReady, setSwUpdateReady] = useState(false)
   const [pushMsg, setPushMsg] = useState<{ title: string; body: string } | null>(null)
   const [authExpiredAt, setAuthExpiredAt] = useState<number | null>(null)
+  // Besuchte Screens ohne den aktuellen — der Zurück-Knopf läuft ihn ab.
+  const [navHistory, setNavHistory] = useState<Screen[]>([])
   const screenRef = useRef(screen)
+  const navHistoryRef = useRef(navHistory)
   const theme = useTheme()
   // Im Dark-Theme die weiße Logo-Variante nutzen, falls vorhanden — sonst das
   // helle Standard-Logo. Reagiert über useTheme() automatisch auf Toggles.
@@ -152,6 +169,7 @@ export default function App() {
         localStorage.getItem(SK.AUTHORIZED_USER_ID) && localStorage.getItem(SK.TENANT_SLUG)
       )
       setUser(null)
+      setNavHistory([])
       setScreen(storedIdentity ? 'login' : 'pin')
       setAuthExpiredAt(Date.now())
     }
@@ -165,8 +183,39 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [authExpiredAt])
 
-  // Keep ref in sync so the popstate handler always sees the latest screen
+  // Keep refs in sync so the popstate handler always sees the latest state
   useEffect(() => { screenRef.current = screen }, [screen])
+  useEffect(() => { navHistoryRef.current = navHistory }, [navHistory])
+
+  // Navigieren MIT Verlauf: der verlassene Screen wird gemerkt, damit der
+  // Zurück-Knopf dorthin zurückführt. Jeder Nav-Callback unten geht hierüber.
+  //
+  // `screenRef` statt `screen` im Updater: `go` soll eine stabile Referenz
+  // bleiben (sonst hängt an jedem Screenwechsel die halbe JSX an neuen
+  // Callbacks). Der Ref trägt beim Aufruf noch den alten Screen — genau den,
+  // der in den Verlauf gehört.
+  const go = useCallback((next: Screen) => {
+    setNavHistory(h => advance(h, screenRef.current, next))
+    setScreen(next)
+  }, [])
+
+  // Navigieren OHNE Verlauf — für Wechsel, hinter die es kein Zurück gibt:
+  // An-/Abmelden, abgelaufene Sitzung, und die Modul-Wächter im Render (ein
+  // Screen, der einen sofort wieder hinauswirft, darf nicht im Verlauf landen —
+  // sonst führt Zurück in eine Schleife).
+  const resetTo = useCallback((next: Screen) => {
+    setNavHistory([])
+    setScreen(next)
+  }, [])
+
+  // Abmelden landet je nach hinterlegter Identität auf Login oder PIN.
+  const goToAuth = useCallback(() => {
+    const storedIdentity = Boolean(
+      localStorage.getItem(SK.AUTHORIZED_USER_ID) && localStorage.getItem(SK.TENANT_SLUG)
+    )
+    setUser(null)
+    resetTo(storedIdentity ? 'login' : 'pin')
+  }, [resetTo])
 
   // Diagnose-Breadcrumb je Screenwechsel (Spec docs/specs/support-ticket.md §5.3).
   // Im Effekt, nicht im Render: `trackNav` schreibt in einen Modul-Puffer, und
@@ -208,22 +257,46 @@ export default function App() {
   const leaveRapportRef = useRef(leaveRapport)
   useEffect(() => { leaveRapportRef.current = leaveRapport }, [leaveRapport])
 
-  // Hardware/browser back button → navigate to home instead of closing the app
+  // Hardware-/Browser-Zurück → eine Ebene zurück, nicht pauschal auf die Hauptmaske.
+  //
+  // Die Reihenfolge ist die Sichtbarkeits-Reihenfolge von oben nach unten:
+  // 1. Offene Overlays (Material-Popup, Bild-Lightbox, Filter-Sheet) — sie liegen
+  //    optisch über allem, also schliessen sie zuerst.
+  // 2. Bereiche mit eigenem Verlauf (der Admin-Bereich navigiert über
+  //    `useAdminNav`). `false` heisst «dort ist die Wurzel erreicht».
+  // 3. Der eigene Verlauf der Mitarbeiter-App.
+  // 4. Nichts mehr übrig: Der Druck wird verschluckt, die App bleibt offen.
+  //    Bewusst so — Zurück auf der Hauptmaske schliesst die PWA nicht.
+  //
+  // Bis hierher hat der Wächter aus dem Inline-Boot-Skript ausgeholfen: der
+  // läuft schon während des «Laden…»-Screens, wo dieser Effekt es naturgemäss
+  // noch nicht tut. Jetzt tritt er ab, sonst pusht jeder Zurück-Druck zwei
+  // Einträge.
   useEffect(() => {
+    window.werkoraBackGuard?.(false)
     const onPopState = () => {
       history.pushState(null, '', window.location.href) // re-add entry so next back press still works
-      // Erst offene Overlays (Material-Popup, Bild-Lightbox …) einen Schritt
-      // zurücknehmen; nur wenn keines offen ist, den Screen wechseln.
       if (consumeBack()) return
-      const s = screenRef.current
-      if (s !== 'home' && s !== 'admin' && s !== 'pin' && s !== 'login' && s !== 'loading') {
-        // Im Rapport-Chat erst die Rückfrage — der Hardware-Zurück ist dort der
-        // Ausgang, der am leichtesten aus Versehen getroffen wird.
-        leaveRapportRef.current(() => setScreen('home'))
-      }
+      if (consumeScreenBack()) return
+
+      const step = retreat(navHistoryRef.current)
+      const previous = step.previous
+      if (previous === undefined) return
+
+      // Im Rapport-Chat erst die Rückfrage — der Hardware-Zurück ist dort der
+      // Ausgang, der am leichtesten aus Versehen getroffen wird. Erst wenn sie
+      // bestätigt ist, wird der Verlauf tatsächlich abgetragen; sonst stünde man
+      // nach «Abbrechen» mit einem verkürzten Verlauf da.
+      leaveRapportRef.current(() => {
+        setNavHistory(step.history)
+        setScreen(previous)
+      })
     }
     window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.werkoraBackGuard?.(true)
+    }
   }, [])
 
   const hasStoredIdentity = Boolean(
@@ -235,15 +308,16 @@ export default function App() {
   // (Client-State überschrieben, Server-Puffer beim nächsten log_report ersetzt).
   // Das trifft, wer zwischendurch aufs Projekt schaut: der Projekt-Detail hat keinen
   // eigenen Weg zurück in den laufenden Rapport, dieser Knopf sieht danach aus.
-  async function startRapport(projectName: string) {
+  async function startRapport(project: { id: string; name: string }) {
+    const projectName = project.name
     const userId = user?.authorized_user_id ?? localStorage.getItem(SK.AUTHORIZED_USER_ID) ?? ''
     const plan = planRapportStart(userId ? loadDraft(userId, Date.now()) : null, projectName)
 
-    if (plan.kind === 'resume') { setScreen('rapport'); return }
+    if (plan.kind === 'resume') { go('rapport'); return }
 
     if (plan.kind === 'confirm-discard') {
       if (!window.confirm(discardPrompt(plan.pendingProject, projectName))) {
-        setScreen('rapport')   // Abbrechen → zurück in den laufenden Rapport
+        go('rapport')   // Abbrechen → zurück in den laufenden Rapport
         return
       }
       // Verwerfen heisst auch server-seitig aufräumen: sonst hängt der alte
@@ -252,12 +326,15 @@ export default function App() {
       if (userId) clearDraft(userId)
     }
 
-    // Projektname zusätzlich als eigenes Feld, nicht nur im Text: der Server bindet
+    // Projekt zusätzlich als eigene Felder, nicht nur im Text: der Server bindet
     // den Rapport daran (Stammdaten-Abgleich statt Wort-Erkennung), damit spätere
     // Nachrichten — "8 Stunden für Peter" — den Auftrag nicht mehr wechseln können.
+    // Die id ist dabei die verbindliche Angabe; der Name geht nur mit, damit ein
+    // alter Server ihn weiterhin auswertet.
     setRapportInitialProject(projectName)
+    setRapportInitialProjectId(project.id)
     setRapportInitialMessage(`Neuer Rapport für Projekt "${projectName}"`)
-    setScreen('rapport')
+    go('rapport')
   }
 
   const loadBranding = useCallback(async () => {
@@ -413,7 +490,7 @@ export default function App() {
         onLoggedIn={() => {
           resetSessionExpiredFlag()
           setAuthExpiredAt(null)
-          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); resetTo(nextScreenAfterLogin(u)) }).catch(() => resetTo('pin'))
         }}
       />
     )
@@ -424,7 +501,7 @@ export default function App() {
         onLoggedIn={() => {
           resetSessionExpiredFlag()
           setAuthExpiredAt(null)
-          getMe().then(u => { setUser(u); loadBranding(); setScreen(nextScreenAfterLogin(u)) }).catch(() => setScreen('pin'))
+          getMe().then(u => { setUser(u); loadBranding(); resetTo(nextScreenAfterLogin(u)) }).catch(() => resetTo('pin'))
         }}
       />
     )
@@ -435,7 +512,7 @@ export default function App() {
         displayName={user.display_name}
         user={user}
         onAccepted={() => {
-          getMe().then(u => { setUser(u); setScreen('home') }).catch(() => setScreen('home'))
+          getMe().then(u => { setUser(u); resetTo('home') }).catch(() => resetTo('home'))
         }}
       />
     )
@@ -446,14 +523,14 @@ export default function App() {
         logoUrl={effectiveLogo}
         role={user.role}
         enabledModules={user.enabled_modules ?? []}
-        onNavRapport={() => setScreen('rapport')}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
-        onNavProjekte={() => setScreen('projekte')}
-        onNavOfferten={() => setScreen('offerten')}
-        onNavProjektEntwurf={() => setScreen('projektEntwurf')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
-        onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => setScreen('admin') : undefined}
+        onNavRapport={() => go('rapport')}
+        onNavArbeitszeit={() => go('arbeitszeit')}
+        onNavProjekte={() => go('projekte')}
+        onNavOfferten={() => go('offerten')}
+        onNavProjektEntwurf={() => go('projektEntwurf')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
+        onSwitchToAdmin={(user.role === 'admin' || user.role === 'management' || user.role === 'superadmin') ? () => go('admin') : undefined}
       />
     )
   } else if (screen === 'profile' && user) {
@@ -464,13 +541,13 @@ export default function App() {
         role={user.role}
         tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
         logoUrl={effectiveLogo}
-        onBack={() => setScreen('home')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onBack={() => go('home')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'rapport' && user) {
-    if (user.role === 'user_light') { setScreen('home'); return null }
-    if (!user.enabled_modules?.includes('ai')) { setScreen('home'); return null }
+    if (user.role === 'user_light') { resetTo('home'); return null }
+    if (!user.enabled_modules?.includes('ai')) { resetTo('home'); return null }
     inner = (
       <ChatScreen
         displayName={user.display_name}
@@ -479,94 +556,99 @@ export default function App() {
         activeNav="rapport"
         initialMessage={rapportInitialMessage}
         initialProject={rapportInitialProject}
-        onInitialMessageConsumed={() => { setRapportInitialMessage(null); setRapportInitialProject(null) }}
+        initialProjectId={rapportInitialProjectId}
+        onInitialMessageConsumed={() => {
+          setRapportInitialMessage(null)
+          setRapportInitialProject(null)
+          setRapportInitialProjectId(null)
+        }}
         // Jeder Ausgang läuft durch die Rückfrage (leaveRapport). onLoggedOut NICHT:
         // das ist kein Weggehen, sondern die abgelaufene Sitzung (401) — dort gibt es
         // nichts mehr zu entscheiden, und der Entwurf überlebt den Login ohnehin.
-        onNavHome={() => leaveRapport(() => setScreen('home'))}
-        onNavArbeitszeit={() => leaveRapport(() => setScreen('arbeitszeit'))}
-        onNavProjekte={() => leaveRapport(() => setScreen('projekte'))}
-        onNavProfile={() => leaveRapport(() => setScreen('profile'))}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onNavHome={() => leaveRapport(() => go('home'))}
+        onNavArbeitszeit={() => leaveRapport(() => go('arbeitszeit'))}
+        onNavProjekte={() => leaveRapport(() => go('projekte'))}
+        onNavProfile={() => leaveRapport(() => go('profile'))}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'arbeitszeit' && user) {
-    if (!user.enabled_modules?.includes('timekeeping')) { setScreen('home'); return null }
+    if (!user.enabled_modules?.includes('timekeeping')) { resetTo('home'); return null }
     inner = (
       <ArbeitsZeitScreen
         displayName={user.display_name}
         logoUrl={effectiveLogo}
         role={user.role}
         user={user}
-        onNavHome={() => setScreen('home')}
-        onNavRapport={() => setScreen('rapport')}
-        onNavProjekte={() => setScreen('projekte')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
-        onOpenBericht={(type) => { setBerichtType(type); setScreen('bericht') }}
-        onNavAbsenzen={() => setScreen('absenzen')}
+        onNavHome={() => go('home')}
+        onNavRapport={() => go('rapport')}
+        onNavProjekte={() => go('projekte')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
+        onOpenBericht={(type) => { setBerichtType(type); go('bericht') }}
+        onNavAbsenzen={() => go('absenzen')}
       />
     )
   } else if (screen === 'absenzen' && user) {
-    if (!user.enabled_modules?.includes('hr')) { setScreen('home'); return null }
+    if (!user.enabled_modules?.includes('hr')) { resetTo('home'); return null }
     inner = (
       <AbsenzenScreen
         logoUrl={effectiveLogo}
         canton={canton}
-        onBack={() => setScreen('arbeitszeit')}
-        onNavHome={() => setScreen('home')}
-        onNavRapport={() => setScreen('rapport')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onBack={() => go('arbeitszeit')}
+        onNavHome={() => go('home')}
+        onNavRapport={() => go('rapport')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'projekte' && user) {
-    if (user.role === 'user_light') { setScreen('home'); return null }
+    if (user.role === 'user_light') { resetTo('home'); return null }
     inner = (
       <ProjekteScreen
         logoUrl={effectiveLogo}
         user={user}
-        onNavHome={() => setScreen('home')}
-        onNavRapport={() => setScreen('rapport')}
-        onStartRapport={(projectName) => void startRapport(projectName)}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onNavHome={() => go('home')}
+        onNavRapport={() => go('rapport')}
+        onStartRapport={(project) => void startRapport(project)}
+        onNavArbeitszeit={() => go('arbeitszeit')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'offerten' && user) {
-    if (user.role === 'user_light' || !user.enabled_modules?.includes('quotes')) { setScreen('home'); return null }
+    if (user.role === 'user_light' || !user.enabled_modules?.includes('quotes')) { resetTo('home'); return null }
     inner = (
       <OffertenScreen
         logoUrl={effectiveLogo}
-        onNavHome={() => setScreen('home')}
-        onNavArbeitszeit={() => setScreen('arbeitszeit')}
-        onNavProjekte={() => setScreen('projekte')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onNavHome={() => go('home')}
+        onNavArbeitszeit={() => go('arbeitszeit')}
+        onNavProjekte={() => go('projekte')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'projektEntwurf' && user) {
-    if (user.role === 'user_light') { setScreen('home'); return null }
+    if (user.role === 'user_light') { resetTo('home'); return null }
     inner = (
       <ProjektEntwurfScreen
         logoUrl={effectiveLogo}
-        onNavHome={() => setScreen('home')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onNavHome={() => go('home')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'bericht' && user) {
-    if (!user.enabled_modules?.includes('hr')) { setScreen('home'); return null }
+    if (!user.enabled_modules?.includes('hr')) { resetTo('home'); return null }
     inner = (
       <BerichtScreen
         berichtType={berichtType}
         logoUrl={effectiveLogo}
         user={user}
-        onBack={() => setScreen('arbeitszeit')}
-        onNavHome={() => setScreen('home')}
-        onNavRapport={() => setScreen('rapport')}
-        onNavProfile={() => setScreen('profile')}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
+        onBack={() => go('arbeitszeit')}
+        onNavHome={() => go('home')}
+        onNavRapport={() => go('rapport')}
+        onNavProfile={() => go('profile')}
+        onLoggedOut={goToAuth}
       />
     )
   } else if (screen === 'admin' && user) {
@@ -576,8 +658,8 @@ export default function App() {
         logoUrl={effectiveLogo}
         tenantName={tenantName || localStorage.getItem(SK.TENANT_SLUG) || ''}
         canton={canton}
-        onLoggedOut={() => { setUser(null); setScreen(hasStoredIdentity ? 'login' : 'pin') }}
-        onSwitchToUser={() => setScreen('home')}
+        onLoggedOut={goToAuth}
+        onSwitchToUser={() => go('home')}
       />
     )
   }
