@@ -1,12 +1,12 @@
 {
   "name": "Werkora",
   "short_name": "Werkora",
-  "description": "Zeiterfassung & Rapporte für Bauarbeiter",
+  "description": "Zeiterfassung, Rapporte und Einsatzplanung für Bauunternehmen",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1a73e8",
+  "background_color": "#FFFFFF",
+  "theme_color": "#12161D",
   "lang": "de",
   "icons": [
     {
@@ -19,7 +19,13 @@
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
