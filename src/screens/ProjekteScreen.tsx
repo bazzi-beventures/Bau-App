@@ -11,17 +11,18 @@ import { ProjectTask, toggleProjectTaskDone } from '../api/projectTasks'
 import SignaturePad from '../chat/SignaturePad'
 import { useBackButton } from '../shared/backButton'
 import { SK } from '../api/storageKeys'
-import { ProjectTimeline } from './projekte/ProjectTimeline'
+import { Wochenplan } from './projekte/Wochenplan'
 import {
   QueuedTaskToggle, enqueueTaskToggle, loadTaskQueue, reconcileTaskQueue, saveTaskQueue, taskKey,
 } from './projekte/taskQueue'
 import { sortProjectsNewestFirst } from './projekte/sortProjects'
 import { PROJECT_FILE_ACCEPT, projectFileIcon } from '../shared/projectFileTypes'
 import { mapsUrl } from '../shared/mapsLink'
-import { isFeatureEnabled } from '../api/modules'
+import { hasModule, isFeatureEnabled } from '../api/modules'
 import type { UserInfo } from '../api/auth'
 import { DownloadIcon } from '../shared/DownloadIcon'
 import { formatDateTime } from '../shared/datetime'
+import { KIND_COLORS } from './kindColors'
 import { CATEGORY_LABELS, PROJECT_KIND_LABELS } from '../shared/projectDetail/types'
 import type {
   EmbeddedCustomer, Kontakt, ProjectComment, ProjectFile, ProjectFileCategory, ProjectKind,
@@ -32,20 +33,6 @@ import type {
 // und die Kategorie-Beschriftungen stehen in shared/projectDetail/types, die
 // Datei-Aufrufe in api/projectFiles — dort mit `/pwa` statt `/pwa/admin` davor.
 const SCOPE = '/pwa' as const
-
-// Farben der Einsatz-Arten: eigene Palette der Monteur-PWA. Die Beschriftungen
-// (PROJECT_KIND_LABELS) sind geteilt, die Farben nicht — die Verwaltung zeichnet
-// ihre Pillen aus den --kind-*-Variablen der Tenant-Config.
-const KIND_COLORS: Record<ProjectKind, string> = {
-  project: 'var(--accent-amber)',
-  teamsitzung: '#7c3aed',
-  lagerarbeit: '#d97706',
-  werkstatt: '#0d9488',
-  weiterbildung: '#db2777',
-  reservation: '#65a30d',
-  blocker: '#94a3b8',
-  sonstiges: '#475569',
-}
 
 // Offline-Queue für abgehakte Aufgaben (Monteur ohne Netz auf der Baustelle):
 // Persistenz, Versuchs-Deckel und Reconcile stehen in projekte/taskQueue.ts —
@@ -200,7 +187,12 @@ export function reportStatusLabel(
   }
 }
 
-type ViewMode = 'grid' | 'timeline'
+// Zwei Sichten auf dieselben Einsätze: die Kacheln beantworten «welche Aufträge
+// habe ich», der Wochenplan «was steht wann an». Der Wochenplan hat den früheren
+// Zeitstrahl abgelöst — der zeigte dieselben Projekte als Balken über die Tage,
+// ohne Uhrzeit, Termin-Art, Adresse oder Team, und beantwortete damit die Frage
+// des Monteurs auf der Baustelle gerade nicht.
+type ViewMode = 'grid' | 'wochenplan'
 
 export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport, onStartRapport, onNavArbeitszeit, onNavProfile, onLoggedOut }: Props) {
   // Teilrapport (docs/specs/teilrapport.md §6.2): das Flag schaltet den
@@ -216,6 +208,9 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
   // beim nächsten Öffnen registriert der Hook neu.
   useBackButton(selected !== null, () => setSelected(null))
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  // Ohne Einsatzplanung gibt es keine Termine — dann bleibt es bei den Kacheln,
+  // und der Umschalter entfällt ganz (die Route /pwa/schedule/week ist ebenso gated).
+  const showWochenplan = hasModule(user, 'scheduling')
 
   // Detail: Dateien, Kommentare & Aufgaben
   const [files, setFiles] = useState<ProjectFile[]>([])
@@ -1249,7 +1244,7 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
         {logoUrl && <img src={logoUrl} alt="Logo" className="header-logo" />}
       </div>
 
-      {!loading && projects.length > 0 && (
+      {!loading && projects.length > 0 && showWochenplan && (
         <div className="projekte-view-toggle">
           <button
             type="button"
@@ -1266,17 +1261,23 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
           </button>
           <button
             type="button"
-            className={`projekte-view-toggle-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-            onClick={() => setViewMode('timeline')}
+            className={`projekte-view-toggle-btn ${viewMode === 'wochenplan' ? 'active' : ''}`}
+            onClick={() => setViewMode('wochenplan')}
           >
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M2 4h12M2 8h9M2 12h6"/>
+              <rect x="2" y="3" width="12" height="11" rx="1.5"/>
+              <path d="M2 6.5h12M5.5 1.5V4M10.5 1.5V4"/>
             </svg>
-            Zeitstrahl
+            Wochenplan
           </button>
         </div>
       )}
 
+      {viewMode === 'wochenplan' && (
+        <Wochenplan projects={projects} onSelect={setSelected} onLoggedOut={onLoggedOut} />
+      )}
+
+      {viewMode === 'grid' && (
       <div className="projekte-grid-scroll">
         {loading && (
           <div className="bericht-loading">Projekte werden geladen…</div>
@@ -1286,7 +1287,7 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
           <div className="projekte-empty">Du bist keinem Projekt zugewiesen.</div>
         )}
 
-        {!loading && projects.length > 0 && viewMode === 'grid' && (() => {
+        {!loading && projects.length > 0 && (() => {
           const groupMap = new Map<string, Project[]>()
           const noDateKey = '__none__'
           projects.forEach(p => {
@@ -1370,10 +1371,8 @@ export default function ProjekteScreen({ logoUrl, user, onNavHome, onNavRapport,
           )
         })()}
 
-        {!loading && projects.length > 0 && viewMode === 'timeline' && (
-          <ProjectTimeline projects={projects} onSelect={setSelected} />
-        )}
       </div>
+      )}
 
       <div className="nav-bar">
         <div className="nav-item" onClick={onNavHome}>

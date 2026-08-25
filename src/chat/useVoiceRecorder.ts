@@ -3,7 +3,26 @@ import { useRef, useState, useEffect } from 'react'
 const MAX_DURATION_MS = 120_000
 const MIN_DURATION_MS = 500
 
-export function useVoiceRecorder(onAudioReady: (blob: Blob) => void) {
+/** Warum eine Aufnahme gar nicht erst begann. */
+export type VoiceRecorderError = 'unsupported' | 'denied'
+
+/**
+ * Läuft die Aufnahme in diesem Browser überhaupt?
+ *
+ * `getUserMedia` fehlt in unsicherem Kontext (http://…) komplett, `MediaRecorder`
+ * auf älteren iOS-Fassungen. Ein Mikrofon-Knopf, der beim Tippen nichts tut, ist
+ * schlimmer als keiner — Aufrufer blenden ihn damit aus.
+ */
+export function isVoiceRecordingSupported(): boolean {
+  return typeof navigator !== 'undefined'
+    && !!navigator.mediaDevices?.getUserMedia
+    && typeof MediaRecorder !== 'undefined'
+}
+
+export function useVoiceRecorder(
+  onAudioReady: (blob: Blob) => void,
+  onError?: (reason: VoiceRecorderError) => void,
+) {
   const [isRecording, setIsRecording] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
   const [seconds, setSeconds] = useState(0)
@@ -66,7 +85,10 @@ export function useVoiceRecorder(onAudioReady: (blob: Blob) => void) {
 
       autoStopRef.current = setTimeout(sendRecording, MAX_DURATION_MS)
     } catch {
-      // Mikrofon-Zugriff verweigert
+      // Kein Mikrofon, verweigerte Freigabe oder unsicherer Kontext. Der Chat
+      // lässt das stumm (der Knopf federt zurück); wer `onError` mitgibt, kann
+      // es dem Nutzer sagen, statt ihn zweimal vergeblich drücken zu lassen.
+      onError?.(isVoiceRecordingSupported() ? 'denied' : 'unsupported')
     }
   }
 

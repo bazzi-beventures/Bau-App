@@ -29,10 +29,12 @@ function Spinner() {
 
 interface Props {
   logoUrl: string
+  /** Name des Mandanten, sobald bekannt. Leer auf einem frischen Gerät. */
+  tenantName?: string
   onLoggedIn: () => void
 }
 
-export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
+export default function PinScreen({ logoUrl, tenantName, onLoggedIn }: Props) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -88,7 +90,17 @@ export default function PinScreen({ logoUrl, onLoggedIn }: Props) {
   return (
     <div className="auth-screen">
       <TenantLogo logoUrl={logoUrl} />
-      <div className="auth-title">Willkommen beim<br />KI Assistent</div>
+      {/* Der Titel muss dem Logo folgen. Nach dem Abmelden bleibt der
+          Mandanten-Slug im localStorage, das Firmenlogo steht also weiter oben
+          — «Willkommen bei Werkora» daruntergeschrieben ergab die Kombination
+          «Gehlhaar-Logo + fremder Markenname». Neutral ist der Einstieg nur
+          dort, wo der Mandant wirklich unbekannt ist: auf einem frischen Gerät
+          und auf der neuen Origin, deren localStorage leer ist. */}
+      <div className="auth-title">
+        {tenantName
+          ? 'Willkommen zurück'
+          : <>Willkommen bei<br />Werkora</>}
+      </div>
       <div className="auth-sub">Melde dich mit deinen Zugangsdaten an.</div>
 
       <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -105,3 +105,33 @@ describe('PinScreen — Passwort vergessen', () => {
     expect(await screen.findByText(/Falls ein Konto mit dieser E-Mail existiert/)).toBeInTheDocument()
   })
 })
+
+
+describe('PinScreen — Begrüssung folgt dem Logo', () => {
+  // Nach dem Abmelden bleibt der Mandanten-Slug im localStorage, das Firmenlogo
+  // steht also weiter über dem Formular. Stand darunter fest «Willkommen bei
+  // Werkora», las sich der Screen als «Gehlhaar-Logo + fremder Markenname».
+  //
+  // Auf app.werkora.ch ist der localStorage dagegen leer — dort ist genau der
+  // neutrale Werkora-Einstieg gewollt. Beide Faelle gehoeren gepinnt, sonst
+  // repariert der naechste Fix den einen auf Kosten des anderen.
+
+  it('nennt Werkora, solange der Mandant unbekannt ist', () => {
+    render(<PinScreen logoUrl="" onLoggedIn={vi.fn()} />)
+    expect(screen.getByText(/Willkommen bei/)).toBeInTheDocument()
+    expect(screen.getByText(/Werkora/)).toBeInTheDocument()
+  })
+
+  it('grüsst zurück, sobald der Mandant bekannt ist', () => {
+    render(<PinScreen logoUrl="logo.png" tenantName="Gehlhaar AG" onLoggedIn={vi.fn()} />)
+    expect(screen.getByText('Willkommen zurück')).toBeInTheDocument()
+    expect(screen.queryByText(/Werkora/)).not.toBeInTheDocument()
+  })
+
+  it('bleibt bei Werkora, wenn ein Logo ohne Mandantennamen ankommt', () => {
+    // Verteidigt die Bedingung gegen die naheliegende Vereinfachung auf
+    // `logoUrl`: der Name ist das Signal «Mandant bekannt», nicht das Bild.
+    render(<PinScreen logoUrl="logo.png" onLoggedIn={vi.fn()} />)
+    expect(screen.getByText(/Willkommen bei/)).toBeInTheDocument()
+  })
+})

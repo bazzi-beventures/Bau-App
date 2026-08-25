@@ -3,14 +3,22 @@ import { ApiError } from '../api/client'
 import {
   MAX_SUPPORT_FILE_BYTES,
   MAX_SUPPORT_FILES,
+  MAX_SUPPORT_MESSAGE_CHARS,
+  appendTranscript,
   sendSupportTicket,
+  transcribeSupportAudio,
 } from '../api/support'
+import { isVoiceRecordingSupported, useVoiceRecorder } from '../chat/useVoiceRecorder'
 
 /**
  * «Problem melden» — Spec docs/specs/support-ticket.md §5.
  *
  * Screenshots hängt der Nutzer EXPLIZIT an (kein automatischer Bildschirmschuss):
  * er muss sehen, was er mitschickt — ein Admin-Screen kann Löhne zeigen.
+ *
+ * Dasselbe gilt fürs Diktat (§5.5): Mistral Voice liefert den Text ins Feld,
+ * abgeschickt wird er erst mit «Meldung senden». Wer auf der Baustelle mit
+ * Handschuhen am Handy steht, tippt sonst gar nichts — und meldet nichts.
  */
 
 interface Props {
@@ -28,6 +36,19 @@ const ERROR_TEXT: Record<string, string> = {
   rate_limited: 'Du hast gerade mehrere Meldungen geschickt. Bitte in einer Stunde erneut.',
 }
 
+const VOICE_ERROR_TEXT: Record<string, string> = {
+  denied: 'Kein Zugriff aufs Mikrofon. Bitte in den Browser-Einstellungen erlauben.',
+  unsupported: 'Dieser Browser kann nicht aufnehmen. Bitte tippe die Meldung.',
+  transcription_failed: 'Die Aufnahme konnte nicht in Text umgewandelt werden. Bitte erneut oder tippen.',
+  audio_empty: 'Die Aufnahme war leer. Bitte etwas länger sprechen.',
+  audio_too_large: 'Die Aufnahme ist zu lang.',
+  rate_limited_voice: 'Du hast gerade viel diktiert. Bitte kurz warten.',
+}
+
+function formatSeconds(total: number) {
+  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`
+}
+
 export default function SupportForm({ route, appContext }: Props) {
   const [message, setMessage] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -36,7 +57,33 @@ export default function SupportForm({ route, appContext }: Props) {
   const [reference, setReference] = useState('')
   /** Angehängt, aber nicht gespeichert (Storage-Fehler). 0 = alles da. */
   const [lostFiles, setLostFiles] = useState(0)
+  /** Aufnahme liegt bei Mistral, der Text ist noch nicht zurück. */
+  const [transcribing, setTranscribing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // Einmal beim ersten Rendern festhalten: Ein Knopf, der später verschwindet,
+  // weil `navigator.mediaDevices` gerade anders antwortet, verwirrt mehr als er hilft.
+  const [voiceSupported] = useState(isVoiceRecordingSupported)
+
+  async function handleAudio(blob: Blob) {
+    setTranscribing(true)
+    setError('')
+    try {
+      const text = await transcribeSupportAudio(blob)
+      if (!text) { setError(VOICE_ERROR_TEXT.audio_empty); return }
+      // Anhängen statt Ersetzen — die Regel steckt in `appendTranscript`.
+      setMessage(current => appendTranscript(current, text))
+    } catch (e) {
+      const detail = e instanceof ApiError ? e.message : ''
+      const key = detail === 'rate_limited' ? 'rate_limited_voice' : detail
+      setError(VOICE_ERROR_TEXT[key] || VOICE_ERROR_TEXT.transcription_failed)
+    } finally {
+      setTranscribing(false)
+    }
+  }
+
+  const {
+    isRecording, seconds, startRecording, sendRecording, discardRecording,
+  } = useVoiceRecorder(handleAudio, reason => setError(VOICE_ERROR_TEXT[reason]))
 
   function addFiles(selected: ArrayLike<File> | null) {
     if (!selected) return
@@ -156,7 +203,7 @@ export default function SupportForm({ route, appContext }: Props) {
         id="support-message"
         value={message}
         onChange={e => setMessage(e.target.value)}
-        maxLength={2000}
+        maxLength={MAX_SUPPORT_MESSAGE_CHARS}
         rows={5}
         placeholder="Z.B. Rapport lässt sich nicht speichern, Knopf reagiert nicht …"
         style={{
@@ -165,6 +212,64 @@ export default function SupportForm({ route, appContext }: Props) {
           color: 'inherit', font: 'inherit',
         }}
       />
+
+      {voiceSupported && (
+        <div>
+          {isRecording ? (
+            // Zwei Wege aus der Aufnahme, beide sichtbar: «Fertig» schickt sie
+            // zur Umwandlung, «Verwerfen» lässt sie fallen. Ein einzelner
+            // Stopp-Knopf zwänge, eine verunglückte Aufnahme trotzdem zu
+            // transkribieren — und der Text stünde danach im Feld.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Die Laufzeit bewusst AUSSERHALB der Live-Region: sie ändert sich
+                  jede halbe Sekunde und würde einem Screenreader die Aufnahme
+                  im Sekundentakt vorlesen. Angesagt wird nur, dass sie läuft. */}
+              <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                <span aria-live="polite">Aufnahme läuft</span> … {formatSeconds(seconds)}
+              </span>
+              <button
+                type="button"
+                onClick={sendRecording}
+                style={{
+                  padding: '8px 12px', borderRadius: 8, border: 'none',
+                  background: 'var(--brand, #3180ab)', color: '#fff', cursor: 'pointer',
+                  fontSize: '0.9rem', fontWeight: 600,
+                }}
+              >
+                Fertig
+              </button>
+              <button
+                type="button"
+                onClick={discardRecording}
+                style={{
+                  padding: '8px 12px', borderRadius: 8,
+                  border: '1px solid var(--border, #e5e7eb)', background: 'transparent',
+                  color: 'inherit', cursor: 'pointer', fontSize: '0.9rem',
+                }}
+              >
+                Verwerfen
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={transcribing || busy}
+              style={{
+                padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)',
+                background: 'transparent', color: 'inherit', fontSize: '0.9rem',
+                cursor: transcribing || busy ? 'default' : 'pointer',
+                opacity: transcribing || busy ? 0.6 : 1,
+              }}
+            >
+              {transcribing ? 'Wird in Text umgewandelt …' : '🎤 Problem diktieren'}
+            </button>
+          )}
+          <div style={{ marginTop: 4, fontSize: '0.75rem', opacity: 0.7 }}>
+            Der gesprochene Text landet im Feld oben — du kannst ihn vor dem Senden ändern.
+          </div>
+        </div>
+      )}
 
       <div>
         <input
@@ -222,11 +327,12 @@ export default function SupportForm({ route, appContext }: Props) {
       <button
         type="button"
         onClick={submit}
-        disabled={busy || !message.trim()}
+        disabled={busy || isRecording || transcribing || !message.trim()}
         style={{
           padding: '10px 16px', borderRadius: 8, border: 'none',
           background: 'var(--brand, #3180ab)', color: '#fff', cursor: 'pointer',
-          fontWeight: 600, opacity: busy || !message.trim() ? 0.6 : 1,
+          fontWeight: 600,
+          opacity: busy || isRecording || transcribing || !message.trim() ? 0.6 : 1,
         }}
       >
         {busy ? 'Wird gesendet …' : 'Meldung senden'}
@@ -238,6 +344,8 @@ export default function SupportForm({ route, appContext }: Props) {
         Mit deiner Meldung werden die letzten Minuten Aktivität deiner Firma in
         Werkora (wer hat was geändert, aufgetretene Fehler) sowie technische
         Angaben zu deinem Gerät an den Werkora-Support übermittelt.
+        {voiceSupported && ' Diktierst du, geht die Aufnahme zur Umwandlung in Text an '
+          + 'Mistral (Rechenzentrum Frankreich) und wird nicht gespeichert.'}
       </div>
     </div>
   )

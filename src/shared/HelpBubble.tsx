@@ -261,6 +261,9 @@ export default function HelpBubble({
           {/* Reiter nur, wenn es wirklich etwas zu wechseln gibt */}
           {showHelp && showSupport && (
             <div style={{
+              // Zentriert und je zur Hälfte: linksbündig sassen die beiden Reiter
+              // am Rand und lasen sich wie eine angeschnittene Liste — auf dem Handy
+              // stand rechts daneben die halbe Blattbreite leer.
               display: 'flex', gap: 4, padding: '8px 12px 0',
               borderBottom: '1px solid var(--border, #e5e7eb)', flexShrink: 0,
             }}>
@@ -271,6 +274,7 @@ export default function HelpBubble({
                   onClick={() => setTab(id)}
                   aria-pressed={tab === id}
                   style={{
+                    flex: 1, textAlign: 'center',
                     padding: '6px 10px', border: 'none', cursor: 'pointer',
                     background: 'transparent', color: 'inherit', font: 'inherit',
                     borderBottom: tab === id

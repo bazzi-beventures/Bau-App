@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ProjekteScreen from './ProjekteScreen'
@@ -365,5 +365,111 @@ describe('ProjekteScreen — Lieferscheine', () => {
     const [path, form] = vi.mocked(apiFormFetch).mock.calls[0] as [string, FormData]
     expect(path).toBe(FILES_PATH)
     expect(form.get('category')).toBe('lieferschein')
+  })
+})
+
+// ── Wochenplan-Ansicht ─────────────────────────────────────────────────────
+// Der Wochenplan hat den Zeitstrahl als zweite Ansicht abgelöst. Entscheidend
+// ist, dass er sich nicht wie ein fremder Bildschirm verhält: ein Einsatz muss
+// dasselbe Projekt öffnen wie die Kachel daneben.
+
+// Mandant MIT Einsatzplanung. `user` trägt in dieser Maske nur Modul- und
+// Feature-Flags; der Rest von UserInfo spielt hier keine Rolle.
+const USER_MIT_PLANUNG = { enabled_modules: ['scheduling'] } as unknown as typeof NOOP.user
+
+function scheduleWeek(entries: Record<string, unknown>[]) {
+  const days = ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30']
+  return {
+    week_start: '2026-08-24',
+    week_end: '2026-08-30',
+    week_number: 35,
+    week_label: '24.08. – 30.08.2026',
+    has_any: entries.length > 0,
+    days: days.map((iso, i) => ({
+      iso,
+      weekday: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'][i],
+      date: `${iso.slice(8)}.${iso.slice(5, 7)}.2026`,
+      short: `${iso.slice(8)}.${iso.slice(5, 7)}.`,
+      entries: iso === '2026-08-26' ? entries : [],
+    })),
+  }
+}
+
+function scheduleEntry(over: Record<string, unknown> = {}) {
+  return {
+    id: 'p1',
+    appointment_id: 'a1',
+    name: 'MFH Sonnhalde',
+    kind: 'project',
+    is_internal: false,
+    art_der_arbeit: 'Montage',
+    time_label: '07:30–12:00',
+    termin_kind: 'montage',
+    termin_label: null,
+    customer_name: 'Sonnhalde AG',
+    object_address: '',
+    billing_address: '',
+    phone: '',
+    local_contact_name: '',
+    monteur_names: ['Max Muster'],
+    bemerkung: '',
+    is_multi_day: false,
+    ...over,
+  }
+}
+
+describe('ProjekteScreen — Wochenplan als zweite Ansicht', () => {
+  beforeEach(() => {
+    // Mittwoch, 26.08.2026.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 26, 9, 0, 0))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function renderMitPlanung(entries = [scheduleEntry()]) {
+    mockFetch.mockImplementation((path: string) => {
+      if (path === '/pwa/projects') return Promise.resolve([project()])
+      if (path.startsWith('/pwa/schedule/week')) return Promise.resolve(scheduleWeek(entries))
+      return Promise.resolve([])
+    })
+    return {
+      user: userEvent.setup({ advanceTimers: vi.advanceTimersByTime }),
+      ...render(<ProjekteScreen {...NOOP} user={USER_MIT_PLANUNG} onStartRapport={vi.fn()} />),
+    }
+  }
+
+  it('bietet den Umschalter Kacheln/Wochenplan an — den Zeitstrahl nicht mehr', async () => {
+    renderMitPlanung()
+
+    expect(await screen.findByRole('button', { name: /Wochenplan/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Kacheln/ })).toBeInTheDocument()
+    expect(screen.queryByText('Zeitstrahl')).not.toBeInTheDocument()
+  })
+
+  it('bleibt ohne Modul Einsatzplanung bei den Kacheln, ganz ohne Umschalter', async () => {
+    mockFetch.mockImplementation((path: string) => {
+      if (path === '/pwa/projects') return Promise.resolve([project()])
+      return Promise.resolve([])
+    })
+    render(<ProjekteScreen {...NOOP} onStartRapport={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('MFH Sonnhalde')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /Wochenplan/ })).not.toBeInTheDocument()
+    expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/pwa/schedule/week'))
+  })
+
+  it('öffnet beim Tippen auf einen Einsatz dieselbe Projektmaske wie eine Kachel', async () => {
+    const { user } = renderMitPlanung()
+
+    await user.click(await screen.findByRole('button', { name: /Wochenplan/ }))
+    const karte = await screen.findByRole('button', { name: /MFH Sonnhalde/ })
+    await user.click(karte)
+
+    // Die Projektmaske erkennt man am Rapport-Knopf — genau das, was auch das
+    // Tippen auf eine Kachel zeigt.
+    expect(await screen.findByRole('button', { name: /Rapport erstellen/ })).toBeInTheDocument()
   })
 })

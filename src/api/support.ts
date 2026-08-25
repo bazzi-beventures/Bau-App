@@ -7,6 +7,8 @@ import { getBreadcrumbs } from '../shared/breadcrumbs'
 
 export const MAX_SUPPORT_FILES = 3
 export const MAX_SUPPORT_FILE_BYTES = 10 * 1024 * 1024
+/** Deckel des Freitexts — identisch zu `support_service.MAX_MESSAGE_CHARS`. */
+export const MAX_SUPPORT_MESSAGE_CHARS = 2000
 
 export type SupportTicketCreated = {
   ticket_no: number
@@ -40,6 +42,39 @@ export async function sendSupportTicket(
   form.append('client_context', JSON.stringify(clientContext(opts.route)))
   for (const file of files.slice(0, MAX_SUPPORT_FILES)) form.append('files', file)
   return apiFormFetch<SupportTicketCreated>('/pwa/support/tickets', form)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Diktat — Spec docs/specs/support-ticket.md §5.5
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Aufnahme an Mistral Voice (Voxtral) und Text zurück.
+ *
+ * Der Server transkribiert nur — er legt weder Ticket noch Aufnahme an. Was der
+ * Melder abschickt, hat er vorher im Textfeld gelesen.
+ */
+export async function transcribeSupportAudio(blob: Blob): Promise<string> {
+  const form = new FormData()
+  form.append('audio', blob, 'aufnahme.webm')
+  const res = await apiFormFetch<{ text?: string }>('/pwa/support/transcribe', form)
+  return (res?.text || '').trim()
+}
+
+/**
+ * Diktiertes an den vorhandenen Text hängen — reine Funktion, damit die Regel
+ * testbar ist statt im Formular zu verschwinden.
+ *
+ * Angehängt, nie ersetzt: wer erst tippt und dann diktiert (oder zweimal
+ * diktiert), soll das Erste nicht verlieren. Der Deckel greift hier von Hand —
+ * `maxLength` des Textfeldes bremst nur die Tastatur, nicht `setState`.
+ */
+export function appendTranscript(existing: string, addition: string): string {
+  const add = addition.trim()
+  if (!add) return existing
+  const base = existing.trimEnd()
+  const merged = base ? `${base} ${add}` : add
+  return merged.slice(0, MAX_SUPPORT_MESSAGE_CHARS)
 }
 
 // ────────────────────────────────────────────────────────────────────────────

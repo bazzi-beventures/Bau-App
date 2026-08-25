@@ -87,7 +87,10 @@ describe('App — Boot-Übergang aus dem Ladebildschirm', () => {
     mockGetMe.mockResolvedValue(user())
 
     render(<App />)
-    await waitFor(() => expect(screen.getByText('home-stub')).toBeInTheDocument())
-    expect(getBreadcrumbs().map(b => b.detail)).toEqual(['loading', 'home'])
+    // Auf die Spur warten, nicht auf den Bildschirm: `trackNav` läuft in einem
+    // Effekt, und unter Last (voller Testlauf) kann der sichtbare Stub eine
+    // Runde vor dessen Ausführung da sein. Die Zusage bleibt dieselbe.
+    await waitFor(() => expect(getBreadcrumbs().map(b => b.detail)).toEqual(['loading', 'home']))
+    expect(screen.getByText('home-stub')).toBeInTheDocument()
   })
 })

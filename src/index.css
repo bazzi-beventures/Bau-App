@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -9,11 +9,21 @@
   --border: #334155;
   --text: #F8FAFC;
   --muted: #94A3B8;
-  --accent-blue: #3081AB;
-  --accent-blue-dim: rgba(48,129,171,0.18);
-  --accent-blue-20: rgba(48,129,171,0.25);
-  --accent-blue-25: rgba(48,129,171,0.30);
-  --accent-blue-40: rgba(48,129,171,0.50);
+  /* Werkora-Amber als Akzent VOR dem Login. Nach dem Login überschreibt
+     applyTenantBranding() diese fünf Variablen mit der Mandantenfarbe — der
+     Wert hier wirkt also nur auf Lade- und Anmeldescreen. Achtung: der Akzent
+     ist zweimal definiert, hier (Dark) und unten im Light-Block. Light ist der
+     Default, eine Änderung nur hier bliebe unsichtbar. */
+  --accent-blue: #E9A227;
+  --accent-blue-dim: rgba(233,162,39,0.18);
+  --accent-blue-20: rgba(233,162,39,0.25);
+  --accent-blue-25: rgba(233,162,39,0.30);
+  --accent-blue-40: rgba(233,162,39,0.50);
+  --on-accent: #1B2028;
+  /* Werkora-Tinte. Absichtlich NICHT --text: --text färbt die ganze
+     eingeloggte App, die Marke soll nur die Screens davor tragen. Im
+     Dark-Theme die helle Variante der Marke. */
+  --brand-ink: #F1F3F6;
   --accent-green: #22c55e;
   --accent-green-dim: rgba(34,197,94,0.12);
   --accent-amber: #f59e0b;
@@ -29,18 +39,40 @@
   --app-bg: #0F172A;
 }
 
+/* Die Neutralen sind die der Marke, nicht mehr Tailwind-Slate. Der Unterschied
+   ist genau das, was den Anmeldescreen neben werkora.ch fremd aussehen liess:
+   Slate hat einen Blaustich, die Werkora-Neutralen sind unbunt. Werte aus dem
+   Live-CSS der Website (#FFFFFF / #F6F7F9 / #F1F3F6 / #E4E7EB / #5A6270).
+
+   --text bleibt bewusst das blaustichige #1E4E6B: es färbt jede Schrift der
+   eingeloggten App, und das ist O3 (eigene Spec). Die Werkora-Tinte steht
+   deshalb über --brand-ink nur auf den Screens vor dem Login. */
 :root[data-theme="light"] {
-  --bg:               #F1F5F9;
+  --bg:               #F6F7F9;
   --surface:          #FFFFFF;
-  --surface2:         #F1F5F9;
-  --border:           #E2E8F0;
+  --surface2:         #F1F3F6;
+  --border:           #E4E7EB;
   --text:             #1E4E6B;
-  --muted:            #64748B;
-  --accent-blue:      #3081AB;
-  --accent-blue-dim:  #E0F2FE;
-  --accent-blue-20:   rgba(48,129,171,0.18);
-  --accent-blue-25:   rgba(48,129,171,0.22);
-  --accent-blue-40:   rgba(48,129,171,0.40);
+  --muted:            #5A6270;   /* auf --bg 5,74:1 statt 4,34:1 mit dem alten Slate */
+  /* Amber als Schrift/Rahmen immer im dunkleren Ton — das helle #E9A227 ist auf
+     hellem Grund ausschliesslich Fläche oder Hover (Regel von werkora.ch).
+
+     #9A6716 statt der #A9711A der Website, und das ist Absicht: der Wert steht
+     hier vor allem als SCHRIFT auf .btn-fingerprint (dem Anmelden-Knopf),
+     14 px / 500 auf weissem Grund. #A9711A erreicht dort 4,15:1 und verfehlt
+     die 4,5:1, die WCAG AA für normalen Text verlangt; #9A6716 schafft 4,85:1.
+     Auf der Website trifft die Regel Fliesstext-Links, hier den wichtigsten
+     Knopf der App — auf einer Baustelle bei Sonnenlicht gelesen. Der Unterschied
+     ist mit blossem Auge nicht zu sehen. Als FLÄCHE bleibt #E9A227 unverändert.
+
+     --accent-blue-dim ist hier ein deckender Ton, nicht rgba: der Amber-Tint. */
+  --accent-blue:      #9A6716;
+  --accent-blue-dim:  #FDF3DF;
+  --accent-blue-20:   rgba(154,103,22,0.18);
+  --accent-blue-25:   rgba(154,103,22,0.22);
+  --accent-blue-40:   rgba(154,103,22,0.40);
+  --on-accent:        #FFFFFF;   /* auf #9A6716 als Fläche: 4,85:1 */
+  --brand-ink:        #12161D;
   --accent-green:     #16A34A;
   --accent-green-dim: rgba(22,163,74,0.10);
   --accent-amber:     #D97706;
@@ -49,7 +81,10 @@
   --accent-red-dim:   rgba(220,38,38,0.08);
   --accent-purple:    #7C3AED;
   --accent-purple-dim: rgba(124,58,237,0.10);
-  --app-bg:           #F1F5F9;
+  /* Muss mit --bg gleichziehen: html/body tragen --app-bg, .auth-screen trägt
+     --bg und ist auf 480 px begrenzt. Liefen die beiden auseinander, stünde auf
+     dem Desktop eine hellere Spalte auf andersfarbigem Grund. */
+  --app-bg:           #F6F7F9;
 }
 
 html, body, #root {
@@ -86,14 +121,15 @@ input, textarea { font-family: var(--font); color: var(--text); }
   background: var(--bg);
   gap: 12px;
 }
+/* Wie .auth-logo frei stehend — es ist dieselbe Marke im selben Moment des
+   App-Starts, und zwei verschiedene Fassungen davon wären sichtbar, weil der
+   Ladescreen direkt in den Anmeldescreen übergeht. */
 .loading-logo {
-  width: 64px; height: 64px;
-  border-radius: 18px;
-  background: var(--accent-blue-dim);
-  border: 1px solid var(--accent-blue-25);
+  width: 52px; height: 52px;
   display: flex; align-items: center; justify-content: center;
+  color: var(--brand-ink);   /* der Ring der Marke nimmt currentColor */
 }
-.loading-logo svg { width: 28px; height: 28px; }
+.loading-logo svg { width: 100%; height: 100%; }
 .loading-text { font-size: 13px; color: var(--muted); }
 
 /* ── AUTH SCREENS ───────────────────────────────── */
@@ -109,15 +145,18 @@ input, textarea { font-family: var(--font); color: var(--text); }
   margin: 0 auto;
 }
 
+/* Die Marke steht frei, ohne getönte Kachel — so wie auf werkora.ch und so wie
+   das Mandantenlogo daneben (.auth-logo-img hat auch keinen Rahmen).
+   Die Kachel stammt aus der Zeit, als hier ein generisches Sechseck als
+   Platzhalter stand: 30 px Motiv in einer 64-px-Fläche fast ohne Kontrast liess
+   die Stoppuhr wie einen Platzhalter aussehen statt wie ein Logo. */
 .auth-logo {
-  width: 64px; height: 64px;
-  border-radius: 18px;
-  background: var(--accent-blue-dim);
-  border: 1px solid var(--accent-blue-25);
+  width: 56px; height: 56px;
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 28px;
+  color: var(--brand-ink);   /* der Ring der Marke nimmt currentColor */
 }
-.auth-logo svg { width: 28px; height: 28px; }
+.auth-logo svg { width: 100%; height: 100%; }
 
 .auth-logo-img {
   max-width: 180px;
@@ -131,9 +170,16 @@ input, textarea { font-family: var(--font); color: var(--text); }
   object-position: left center;
 }
 
+/* Bitter ist auf werkora.ch die Titelschrift und dort als SERIFENschrift
+   gesetzt — der Fallback gehört deshalb auf serif, nicht auf sans-serif,
+   sonst springt der Titel beim Laden der Webschrift auf eine völlig andere
+   Anmutung. Die Tinte bleibt hier lokal statt in --text: global gesetzt
+   färbte sie die ganze eingeloggte App mit. */
 .auth-title {
+  font-family: 'Bitter', serif;
   font-size: 26px; font-weight: 600; line-height: 1.2;
   margin-bottom: 6px;
+  color: var(--brand-ink);
 }
 .auth-sub { font-size: 14px; color: var(--muted); margin-bottom: 36px; }
 
@@ -165,10 +211,15 @@ input, textarea { font-family: var(--font); color: var(--text); }
   font-size: 22px;
 }
 
+/* Schrift auf dem Akzent: --on-accent, nicht fest #fff. Vor dem Login liegt
+   der Knopf auf Werkora-Amber, wo Weiss nur ~2,2:1 erreicht — dort gehört
+   Tinte hin. Nach dem Login setzt applyTenantBranding() den Wert nach der
+   Helligkeit der Mandantenfarbe; helle Mandantenfarben bekommen dadurch
+   nebenbei erstmals lesbare Knopfschrift. */
 .btn-primary {
   width: 100%; padding: 14px;
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--on-accent);
   border: none; border-radius: var(--radius-sm);
   font-size: 15px; font-weight: 500;
   cursor: pointer;
@@ -1448,147 +1499,6 @@ input, textarea { font-family: var(--font); color: var(--text); }
   border-color: var(--accent-amber-dim);
 }
 
-/* Zeitstrahl-Ansicht */
-.projekte-timeline {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.projekte-timeline-scroll {
-  overflow-x: auto;
-  overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-}
-.projekte-timeline-inner {
-  position: relative;
-}
-.projekte-timeline-header {
-  display: flex;
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  z-index: 2;
-}
-.projekte-timeline-day {
-  flex-shrink: 0;
-  text-align: center;
-  padding: 6px 0 8px;
-  border-right: 1px solid var(--border);
-  position: relative;
-  color: var(--muted);
-}
-.projekte-timeline-day.weekend {
-  background: rgba(0, 0, 0, 0.04);
-}
-.projekte-timeline-day.today {
-  background: var(--accent-blue-20, rgba(59, 130, 246, 0.15));
-  color: var(--accent-blue);
-}
-.projekte-timeline-day-wd {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.75;
-}
-.projekte-timeline-day-num {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1.2;
-}
-.projekte-timeline-day.today .projekte-timeline-day-num {
-  color: var(--accent-blue);
-}
-.projekte-timeline-day-month {
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent-amber);
-  font-weight: 600;
-  margin-top: 1px;
-}
-.projekte-timeline-body {
-  position: relative;
-  padding: 6px 0 10px;
-}
-.projekte-timeline-today-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent-blue);
-  opacity: 0.35;
-  z-index: 0;
-  pointer-events: none;
-}
-.projekte-timeline-row {
-  position: relative;
-  height: 36px;
-  margin-bottom: 4px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.projekte-timeline-row:active .projekte-timeline-bar {
-  transform: scale(0.98);
-}
-.projekte-timeline-row-grid {
-  display: flex;
-  height: 100%;
-}
-.projekte-timeline-cell {
-  flex-shrink: 0;
-  height: 100%;
-  border-right: 1px dashed var(--border);
-}
-.projekte-timeline-cell.weekend {
-  background: rgba(0, 0, 0, 0.03);
-}
-.projekte-timeline-bar {
-  position: absolute;
-  top: 4px;
-  height: 28px;
-  background: linear-gradient(90deg, var(--accent-amber-dim), var(--accent-amber-dim));
-  border: 1px solid var(--accent-amber);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  overflow: hidden;
-  z-index: 1;
-  transition: transform 0.1s;
-}
-.projekte-timeline-bar-empty {
-  background: var(--surface2);
-  border-color: var(--border);
-}
-.projekte-timeline-bar-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-amber);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  position: sticky;
-  left: 10px;
-}
-.projekte-timeline-bar-empty .projekte-timeline-bar-label {
-  color: var(--muted);
-  font-weight: 500;
-}
-.projekte-timeline-bar-dot {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-amber);
-  border: 2px solid var(--surface);
-  pointer-events: none;
-}
-
 .projekte-grid-scroll {
   flex: 1;
   overflow-y: auto;
@@ -2101,4 +2011,243 @@ input, textarea { font-family: var(--font); color: var(--text); }
   #root select {
     font-size: 16px;
   }
+}
+
+/* ── Wochenplan (Mitarbeiter-PWA) ────────────────────────────────
+   Ein Tag pro Bildschirm, gewischt wird die Woche. Die Tagesleiste bleibt oben
+   stehen, gescrollt wird nur die Einsatzliste — sonst verliert man beim Blättern
+   durch einen vollen Tag die Orientierung, in welchem Tag man überhaupt ist. */
+.wplan-weekbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 24px 10px;
+  flex-shrink: 0;
+}
+.wplan-week-label {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.wplan-nav-btn {
+  width: 36px; height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.wplan-nav-btn:active { background: var(--surface2); }
+.wplan-nav-btn svg { width: 16px; height: 16px; }
+
+.wplan-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  padding: 0 24px 12px;
+  flex-shrink: 0;
+}
+.wplan-strip-day {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 0 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.wplan-strip-day.weekend { opacity: 0.7; }
+.wplan-strip-day.today { border-color: var(--accent-blue-40); }
+.wplan-strip-day.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+  opacity: 1;
+}
+.wplan-strip-dow { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.wplan-strip-num { font-size: 15px; font-weight: 700; line-height: 1; }
+/* Der Punkt zeigt an, dass an diesem Tag etwas ansteht. Er ist immer im Layout —
+   sonst hüpfen die Kacheln, sobald eine Woche geladen ist. */
+.wplan-strip-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: transparent;
+}
+.wplan-strip-dot.filled { background: var(--accent-amber); }
+.wplan-strip-day.active .wplan-strip-dot.filled { background: #fff; }
+
+.wplan-dayhead {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 24px 10px;
+  flex-shrink: 0;
+}
+.wplan-dayhead-text { flex: 1; text-align: center; min-width: 0; }
+.wplan-dayhead-weekday {
+  font-size: 16px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.wplan-dayhead-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.wplan-today-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+.wplan-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 16px;
+  /* Waagrechtes Wischen soll die Geste bleiben, nicht die Seite zurückblättern
+     (iOS-Swipe-Back am Rand). */
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+}
+.wplan-list { display: flex; flex-direction: column; gap: 10px; }
+.wplan-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent-amber);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0;
+}
+.wplan-card-time { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+.wplan-card-title {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  line-height: 1.3; word-break: break-word;
+  display: flex; align-items: center; gap: 8px;
+}
+/* Antippbar ist eine Karte nur, wenn der Einsatz einer Projektzeile der
+   Kachelansicht entspricht — interne Einsätze und ausgeblendete Projekte tragen
+   weder Pfeil noch Zeigefinger, damit der Tipp nicht ins Leere geht. */
+.wplan-card--open { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.wplan-card--open:active { transform: scale(0.99); }
+.wplan-card-arrow {
+  margin-left: auto;
+  opacity: 0.3;
+  flex-shrink: 0;
+  display: flex;
+}
+.wplan-card-arrow svg { width: 16px; height: 16px; display: block; }
+.wplan-card-kind { font-size: 12px; font-weight: 600; }
+.wplan-card-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.wplan-card-link {
+  font-size: 12px;
+  color: var(--accent-blue);
+  text-decoration: none;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.wplan-card-team { font-size: 12px; color: var(--muted); }
+/* Der Hinweis der Disposition — er trägt oft das Entscheidende (Schlüssel,
+   Zufahrt), deshalb abgesetzt statt als weitere graue Zeile. */
+.wplan-card-note {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-top: 4px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.wplan-today-row {
+  display: flex; justify-content: center;
+  padding: 0 24px 10px;
+  flex-shrink: 0;
+}
+.wplan-today-btn {
+  background: var(--surface);
+  border: 1px solid var(--accent-blue-40);
+  color: var(--accent-blue);
+  border-radius: 20px;
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.wplan-today-btn:active { background: var(--surface2); }
+
+
+/* ── UMZUGS-HINWEIS (nur im Build der alten Origin) ────────────────────
+   Erscheint nur, wenn VITE_MIGRATION_NOTICE gesetzt ist. Bewusst in
+   Werkora-Farben und NICHT in der Mandantenfarbe: der Hinweis kommt vom
+   Produkt, nicht von der Firma des Nutzers — und er soll sich vom Rest der
+   Oberfläche abheben, sonst wird er zur Tapete.
+   Siehe docs/specs/werkora-domain-app-einstieg.md, P5/P9. */
+.migration-streifen {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px;
+  height: 46px;
+  z-index: 10000;              /* über allen anderen Bannern */
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+  background: #E9A227; color: #1B2028;   /* Amber als Fläche → Tinte-Schrift */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.migration-streifen-link {
+  flex: 1;
+  color: #1B2028;
+  font-size: 0.85rem; font-weight: 600; line-height: 1.25;
+  text-decoration: none;
+  text-align: center;
+}
+/* Ab 'dringend' der dunklere Amber mit weisser Schrift: deutlich ernster,
+   und Weiss auf #A9711A erreicht 4,2:1 — bei 0.85rem/600 als fette Schrift
+   ausreichend, waehrend Weiss auf dem hellen #E9A227 nur 2,2:1 haette. */
+.migration-streifen-dringend { background: #A9711A; color: #fff; }
+.migration-streifen-dringend .migration-streifen-link { color: #fff; }
+.migration-streifen-zu {
+  background: none; border: none; cursor: pointer;
+  color: inherit; font-size: 22px; line-height: 1;
+  padding: 0 4px; opacity: 0.7;
+}
+
+.migration-vorschalt {
+  position: fixed; inset: 0; z-index: 10001;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.migration-vorschalt-inner {
+  max-width: 380px; width: 100%;
+  display: flex; flex-direction: column; align-items: flex-start;
+}
+.migration-vorschalt-mark {
+  width: 56px; height: 56px; margin-bottom: 24px;
+  color: var(--brand-ink);
+}
+.migration-vorschalt-mark svg { width: 100%; height: 100%; }
+.migration-vorschalt-titel {
+  font-family: 'Bitter', serif;
+  font-size: 26px; font-weight: 600; line-height: 1.2;
+  color: var(--brand-ink);
+  margin-bottom: 10px;
+}
+.migration-vorschalt-text {
+  font-size: 14px; color: var(--muted); line-height: 1.5;
+  margin-bottom: 28px;
+}
+.migration-vorschalt-btn {
+  width: 100%; padding: 14px;
+  background: #E9A227; color: #1B2028;
+  border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600;
+  text-align: center; text-decoration: none;
+}
+.migration-vorschalt-skip {
+  width: 100%; padding: 12px; margin-top: 8px;
+  background: none; border: none;
+  color: var(--muted); font-size: 13px;
+  text-decoration: underline; cursor: pointer;
 }

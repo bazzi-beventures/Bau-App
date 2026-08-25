@@ -15,6 +15,8 @@ import OffertenScreen from './screens/OffertenScreen'
 import ProjektEntwurfScreen from './screens/ProjektEntwurfScreen'
 import AbsenzenScreen from './screens/AbsenzenScreen'
 import AdminApp from './admin/AdminApp'
+import { WerkoraMark } from './brand/WerkoraMark'
+import { MigrationBanner, MIGRATION_STREIFEN_HOEHE, aktuelleMigrationStufe } from './shared/MigrationBanner'
 import HelpBubble from './shared/HelpBubble'
 import { consumeBack, consumeScreenBack } from './shared/backButton'
 import { advance, retreat } from './shared/navHistory'
@@ -44,10 +46,27 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
+// Schrift, die auf der Akzentfläche lesbar bleibt: Weiss oder Tinte, je nach
+// Helligkeit der Fläche (WCAG-Relativluminanz). Vorher stand auf .btn-primary
+// fest #fff — bei hellen Mandantenfarben ist das nicht lesbar, und mit dem
+// Werkora-Amber vor dem Login erst recht nicht (~2,2:1).
+export function onAccentColor(hex: string): string {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return '#fff'
+  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  const [r, g, b] = [0, 2, 4].map(i => lin(parseInt(h.slice(i, i + 2), 16) / 255))
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  const INK_L = 0.01419   // Relativluminanz von #1B2028
+  const vsWhite = 1.05 / (L + 0.05)
+  const vsInk = (L + 0.05) / (INK_L + 0.05)
+  return vsInk > vsWhite ? '#1B2028' : '#fff'
+}
+
 function applyTenantBranding(info: TenantInfo) {
   const root = document.documentElement
   const c = info.brand_color
   const d = info.brand_color_dark || c
+  root.style.setProperty('--on-accent', onAccentColor(c))
   root.style.setProperty('--accent-blue', c)
   root.style.setProperty('--accent-blue-dim', hexToRgba(c, 0.18))
   root.style.setProperty('--accent-blue-20', hexToRgba(c, 0.25))
@@ -57,17 +76,10 @@ function applyTenantBranding(info: TenantInfo) {
   console.log('[Branding] applied:', c, d)
 }
 
-// Generic fallback logo
-function LogoSvg() {
-  return (
-    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M14 3L25 9v10L14 25 3 19V9z"/>
-      <path d="M14 8v12M9 11l5 3 5-3"/>
-    </svg>
-  )
-}
-
-// Tenant-aware logo: shows company logo if available, else geometric fallback
+// Tenant-aware logo: shows company logo if available, else the Werkora mark.
+// Der Rückfall ist kein Platzhalter mehr, sondern die Produktmarke: auf
+// app.werkora.ch ist genau das der erste Eindruck, bevor der Mandant bekannt
+// ist (siehe docs/specs/werkora-domain-app-einstieg.md, P4).
 export function TenantLogo({ logoUrl }: { logoUrl: string }) {
   const [imgError, setImgError] = useState(false)
   if (logoUrl && !imgError) {
@@ -79,7 +91,7 @@ export function TenantLogo({ logoUrl }: { logoUrl: string }) {
   }
   return (
     <div className="auth-logo" style={{ marginBottom: 28 }}>
-      <LogoSvg />
+      <WerkoraMark title="Werkora" />
     </div>
   )
 }
@@ -370,9 +382,18 @@ export default function App() {
     })
   }, [])
 
+  // Der Umzugsstreifen sitzt zuoberst und schiebt die anderen Banner nach
+  // unten. Er ist im normalen Build nicht vorhanden (Flag leer), dann ist der
+  // Versatz 0 und alles steht wie bisher.
+  const migrationStufe = aktuelleMigrationStufe()
+  const migrationVersatz =
+    migrationStufe === 'hinweis' || migrationStufe === 'dringend'
+      ? MIGRATION_STREIFEN_HOEHE
+      : 0
+
   const offlineBanner = isOffline ? (
     <div style={{
-      position: 'fixed', top: 'env(safe-area-inset-top, 0px)', left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', top: `calc(${migrationVersatz}px + env(safe-area-inset-top, 0px))`, left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 480, zIndex: 9999,
       background: '#f59e0b', color: '#1a1a1a',
       textAlign: 'center', padding: '6px 12px',
@@ -385,7 +406,7 @@ export default function App() {
   const authExpiredBanner = authExpiredAt !== null ? (
     <div style={{
       position: 'fixed',
-      top: `calc(${isOffline ? 32 : 0}px + env(safe-area-inset-top, 0px))`,
+      top: `calc(${migrationVersatz + (isOffline ? 32 : 0)}px + env(safe-area-inset-top, 0px))`,
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 480, zIndex: 9999,
       background: 'var(--accent-blue, #1e3a5f)', color: '#fff',
@@ -468,12 +489,13 @@ export default function App() {
   if (screen === 'loading') {
     return (
       <>
+        <MigrationBanner />
         {offlineBanner}
         {authExpiredBanner}
         {pushBanner}
         <div className="loading-screen">
           <div className="loading-logo">
-            <LogoSvg />
+            <WerkoraMark title="Werkora" />
           </div>
           <p className="loading-text">Laden…</p>
         </div>
@@ -487,6 +509,7 @@ export default function App() {
     inner = (
       <PinScreen
         logoUrl={effectiveLogo}
+        tenantName={tenantName}
         onLoggedIn={() => {
           resetSessionExpiredFlag()
           setAuthExpiredAt(null)
@@ -685,6 +708,7 @@ export default function App() {
 
   return (
     <>
+      <MigrationBanner />
       {offlineBanner}
       {authExpiredBanner}
       {pushBanner}

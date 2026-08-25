@@ -4,7 +4,12 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { createHash } from 'node:crypto'
 
-// Custom-Domain-Setup (app.beventures.ch / app-staging.beventures.ch) → App auf Root.
+// Custom-Domain-Setup → App auf Root. Drei Ziele, jedes mit eigener Domain und
+// eigenem VITE_API_URL, gebaut im jeweiligen Pages-Repo:
+//   app.werkora.ch          (Repo Werkora-App)     — Prod, neu
+//   app.beventures.ch       (Repo Bau-App)         — Prod, alt; laeuft bis zur
+//                                                    Abschaltung der alten Origin
+//   app-staging.beventures.ch (Repo Bau-App-Staging)
 // Falls je wieder ein Build ohne Custom Domain gefahren wird, --base im CI-Workflow setzen.
 const BASE_PATH = '/'
 
@@ -108,5 +113,21 @@ export default defineConfig(({ command }) => ({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: false,
+    env: {
+      // Zeitzone festnageln, und zwar auf die des Produkts — nicht auf UTC.
+      //
+      // Grund: Die CI läuft auf ubuntu-latest, also unter UTC. Jeder Entwickler
+      // hier sitzt in der Schweiz. Ein Datumsfehler, der nur bei positivem
+      // UTC-Versatz auftritt, ist damit in der CI unsichtbar und lokal rot —
+      // genau umgekehrt zu dem, was ein Testlauf leisten soll. Passiert am
+      // 2026-08-25 mit Wochenplan.test.tsx: zwölf Tests grün in der CI, alle
+      // zwölf rot in Europe/Zurich.
+      //
+      // Europe/Zurich statt UTC, weil die App nur dort läuft: Zeiterfassung,
+      // Wochenplan und ArG-Prüfungen rechnen in Schweizer Zeit. Ein Test unter
+      // UTC prüft eine Umgebung, die es nicht gibt — inklusive Sommerzeit, die
+      // UTC gar nicht kennt.
+      TZ: 'Europe/Zurich',
+    },
   },
 }))
