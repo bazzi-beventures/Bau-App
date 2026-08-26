@@ -27,6 +27,19 @@ jobs:
         run: npm run build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          # Umzugs-Hinweis — NUR in diesem Repo gesetzt, nie in Werkora-App.
+          # Dort stuende sonst "Werkora ist umgezogen" auf genau der Seite, auf
+          # die umgezogen wurde. Der Streifen erscheint ueber allen Screens,
+          # auch im eingeloggten Zustand: der Session-Cookie haelt 30 Tage, wer
+          # angemeldet ist sieht sonst im ganzen Parallelbetrieb kein Signal.
+          #
+          # Die Eskalationsstufen (dezent → Countdown → Vorschaltseite) schalten
+          # sich anhand der DEADLINE von selbst, ohne weiteren Deploy.
+          # Verschiebt sich der Stichtag, braucht es hier einen neuen Build —
+          # der Wert ist in das Bundle eingebacken, nicht zur Laufzeit gelesen.
+          # docs/specs/werkora-domain-app-einstieg.md, P5/P9
+          VITE_MIGRATION_NOTICE: https://app.werkora.ch
+          VITE_MIGRATION_DEADLINE: '2026-09-11'
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
