@@ -1,1 +1,48 @@
-if(!self.define){let e,s={};const n=(n,i)=>(n=new URL(n+".js",i).href,s[n]||new Promise(s=>{if("document"in self){const e=document.createElement("script");e.src=n,e.onload=s,document.head.appendChild(e)}else e=n,importScripts(n),s()}).then(()=>{let e=s[n];if(!e)throw new Error(`Module ${n} didn’t register its module`);return e}));self.define=(i,o)=>{const r=e||("document"in self?document.currentScript.src:"")||location.href;if(s[r])return;let c={};const l=e=>n(e,r),a={module:{uri:r},exports:c,require:l};s[r]=Promise.all(i.map(e=>a[e]||l(e))).then(e=>(o(...e),c))}}define(["./workbox-9504f110"],function(e){"use strict";importScripts("push-sw.js"),self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"push-sw.js",revision:"717da34ba954fe2594702fc407eff1dd"},{url:"index.html",revision:"74cba818ff1a258e9dd101335fdd5db1"},{url:"logos/werkora_logo_white.png",revision:"2bafc9135bf1933cf82b40ead6f83992"},{url:"logos/werkora_logo.png",revision:"2469440edacc39f4c093a9cb7848b97c"},{url:"logos/gehlhaar_logo_white_final.png",revision:"a3804b7754c17dedb33cd46e28260a50"},{url:"icons/icon-512.png",revision:"b990f28cc40b2016c0f868a8bad14153"},{url:"icons/icon-512-maskable.png",revision:"b990f28cc40b2016c0f868a8bad14153"},{url:"icons/icon-192.png",revision:"c02c82b7fe3c99ea8796e31c7d20517a"},{url:"icons/apple-touch-icon.png",revision:"a9d757d5b686e5630ee3173986c6e6a7"},{url:"icons/admin/icon-512.png",revision:"2462c1053ec936c1881a4e789233fbfc"},{url:"icons/admin/icon-512-maskable.png",revision:"2462c1053ec936c1881a4e789233fbfc"},{url:"icons/admin/icon-192.png",revision:"f4a9ba8445cb53d0cb3d17a1ba7a6ce1"},{url:"icons/admin/apple-touch-icon.png",revision:"75d414f4dce1739784e75c478a3063e7"},{url:"fonts/dm-sans-latin.woff2",revision:"7c87a648293fbb5b2924aafaa59e8aea"},{url:"fonts/dm-sans-latin-ext.woff2",revision:"49935c4b623536eb645c61103b8e6cae"},{url:"fonts/dm-mono-500-latin.woff2",revision:"c4598219c4b8a5667e824d99b06100b4"},{url:"fonts/dm-mono-500-latin-ext.woff2",revision:"b438d33927f31974a4cfdc1d086d056b"},{url:"fonts/dm-mono-400-latin.woff2",revision:"e1ed461ac183567c761537bf3eb4a574"},{url:"fonts/dm-mono-400-latin-ext.woff2",revision:"c33164c06d338823dffc50e02012d2ca"},{url:"fonts/bitter-latin.woff2",revision:"aab75682166502dd3a3d2b8e953886b4"},{url:"fonts/bitter-latin-ext.woff2",revision:"c4abae92aff3f093bf5b779865cf4611"},{url:"assets/workbox-window.prod.es5-Bd17z0YL.js",revision:null},{url:"assets/reminderLogic-C3E_v2eL.js",revision:null},{url:"assets/jsx-runtime-CPXiwyg2.js",revision:null},{url:"assets/index-Ds7TjToM.js",revision:null},{url:"assets/index-DNDxM0hn.css",revision:null},{url:"assets/calendarHelpers-jiN-ANgX.js",revision:null},{url:"assets/ReminderPanel-D5pIig8f.js",revision:null},{url:"assets/ProjectScheduleMap-gTmsCToR.js",revision:null},{url:"assets/ProjectScheduleMap-B8-mEBLf.css",revision:null},{url:"assets/MyReminders-CKpQuiI1.js",revision:null},{url:"assets/CustomersScreen-Dc62ajCf.js",revision:null},{url:"assets/AdminProfileScreen-DXp9WnDU.js",revision:null}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html"))),e.registerRoute(({url:e})=>e.pathname.startsWith("/pwa/"),new e.NetworkFirst({cacheName:"api-cache",networkTimeoutSeconds:10,plugins:[new e.CacheableResponsePlugin({statuses:[200]}),new e.ExpirationPlugin({maxEntries:200,maxAgeSeconds:604800})]}),"GET")});
+// Killer-Service-Worker fuer eine abgeschaltete PWA-Origin.
+//
+// Aktuell: app.beventures.ch → app.werkora.ch (P6 in
+// docs/specs/werkora-domain-app-einstieg.md, abgeschaltet 2026-10-07).
+// Davor schon einmal eingesetzt fuer bazzi-beventures.github.io/Bau-App/ →
+// app.beventures.ch: dort hingen installierte PWAs auf der alten Origin fest —
+// ihr alter Workbox-SW lieferte weiter den gecachten App-Shell mit alter
+// VITE_API_URL. Folge: 50% der Nutzer in der Offline-Queue, weil das Backend
+// ihren alten Origin per CORS blockte.
+//
+// Dieser SW ersetzt den alten Workbox-SW (beide unter /sw.js) und tut drei Dinge:
+//   1) alle Caches loeschen (damit nichts mehr die alte App-Shell ausliefert),
+//   2) sich selbst abmelden,
+//   3) jedes offene Fenster neu laden — auf DIESER Origin, nicht direkt auf der
+//      neuen. Der Reload holt die Fallback-index.html (Nachbardatei) vom Netz,
+//      und erst die leitet weiter. Grund: ein Service Worker kann localStorage
+//      nicht lesen, die Seite schon. Liegen noch nicht uebertragene Stempel in
+//      der Offline-Queue, zeigt die Seite sie an, statt sie mit einem
+//      Origin-Wechsel unsichtbar zu machen (Spec §4.3).
+//
+// Bewusst KEIN fetch-Handler: nach dem Abmelden geht jede Anfrage ans Netz, und
+// dort liegt fuer jeden Pfad die Fallback-Seite (index.html + 404.html).
+//
+// Deploy: in den gh-pages-Branch des alten Pages-Repos (heute
+// bazzi-beventures/Bau-App) als /sw.js, dazu index.html, dieselbe Datei als
+// 404.html, CNAME und .nojekyll — sonst nichts. Der alte Workbox-SW hat
+// skipWaiting + clientsClaim, und die App ruft bei jeder Rueckkehr
+// registration.update() — dieser hier zieht also beim naechsten App-Start nach.
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    } catch (_) { /* ignore */ }
+    try { await self.registration.unregister(); } catch (_) { /* ignore */ }
+    try {
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of all) {
+        try { await client.navigate(self.registration.scope); } catch (_) { /* ignore */ }
+      }
+    } catch (_) { /* ignore */ }
+  })());
+});
